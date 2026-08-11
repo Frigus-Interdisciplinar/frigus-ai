@@ -12,30 +12,49 @@ criação de uma API sem duplicar essa lógica — exatamente o problema que o p
 refactor (ainda sem MCP/A2A implementados lá também, mas o resto — camada de serviço, tests, CI,
 observabilidade — está mais maduro que aqui).
 
+Também vira **pacote `src/`**, igual assessor-ai: toda a lógica agentica (`agents/`, `graph/`,
+`tools/`, e o novo módulo de serviço abaixo) migra para dentro de `src/frigus_ai/` (nome do pacote
+com underscore, já que `pyproject.toml` usa `name = "frigus-ai"` com hífen — mesma convenção do
+assessor-ai: `name = "assessor-ai"` → pacote `src/assessor_ai`). `config/` e as interfaces
+(`ui/` → `interfaces/`) continuam soltos no root, fora de `src/` — só o "cérebro" entra no pacote.
+
 Estrutura alvo (nome exato do módulo de serviço é o de menor prioridade — decidir na hora, seguindo
 o motivo documentado no TODO do assessor-ai: evitar colidir com `graph/` já sendo o "flow" do
 LangGraph e `agents/` já sendo "agent"):
 
 ```text
-chat/ (ou nome equivalente)
-├── models.py          # contrato de mensagem interno, independente do schema do Mongo
-├── repositories.py    # acesso a tools/mongo/{chats,users} e tools/postgres/*
-├── runner.py          # invoca fluxo_agentes.invoke (graph/builder.py), extrai a resposta
-└── service.py          # create_chat(), send_message(), get_history(), encerrar_sessao()
+src/frigus_ai/
+├── agents/             # o que hoje é agents/ no root
+├── graph/              # o que hoje é graph/ no root
+├── tools/              # o que hoje é tools/ no root
+└── chat/ (ou nome equivalente)
+    ├── models.py          # contrato de mensagem interno, independente do schema do Mongo
+    ├── repositories.py    # acesso a tools/mongo/{chats,users} e tools/postgres/*
+    ├── runner.py          # invoca fluxo_agentes.invoke (graph/builder.py), extrai a resposta
+    └── service.py          # create_chat(), send_message(), get_history(), encerrar_sessao()
 
-ui/ -> interfaces/terminal/
+interfaces/terminal/    # ui/ migra pra cá, fora de src/
 ├── app.py              # loop de input() do terminal, usando chat.service
 └── display.py          # o que hoje é ui/terminal.py
+
+config/                 # continua no root, fora de src/ (mesmo lugar do assessor-ai)
 ```
 
+- [ ] Criar `src/frigus_ai/` e mover `agents/`, `graph/`, `tools/` pra dentro (ajustar imports:
+      `graph.builder` → `frigus_ai.graph.builder`, etc.) — confirmar se o pacote fica instalável via
+      `hatchling` (`[tool.hatch.build.targets.wheel] packages = ["config", "interfaces",
+      "src/frigus_ai"]`, mesmo bloco do assessor-ai) ou se `pip install -e .`/`uv sync` já resolve
+      sem esse passo extra
 - [ ] Extrair `executar_fluxo_frigus`, `montar_mensagem_humana`, `salvar_mensagens`,
-      `_extrair_resposta` de `main.py` para o módulo de serviço
+      `_extrair_resposta` de `main.py` para `src/frigus_ai/chat/` (ou nome equivalente)
 - [ ] `main.py` vira dispatcher fino (hoje só tem uma interface — terminal — mas deixa o gancho
       pronto pra quando a API existir, seguindo o padrão `python main.py <interface>` do assessor-ai)
-- [ ] `ui/terminal.py` migra para `interfaces/terminal/` (ou equivalente), sem lógica de negócio
-- [ ] Nenhuma interface deve chamar `graph/builder.py`, `tools/mongo/*` ou `tools/postgres/*`
-      diretamente — sempre via o módulo de serviço. É esse limite que permite a API existir sem
-      duplicar a lógica de montar estado, invocar o grafo e persistir histórico
+- [ ] `ui/terminal.py` migra para `interfaces/terminal/` (ou equivalente), sem lógica de negócio,
+      fora de `src/`
+- [ ] Nenhuma interface deve chamar `frigus_ai.graph.builder`, `frigus_ai.tools.mongo.*` ou
+      `frigus_ai.tools.postgres.*` diretamente — sempre via o módulo de serviço. É esse limite que
+      permite a API existir sem duplicar a lógica de montar estado, invocar o grafo e persistir
+      histórico
 
 ## API (FastAPI/Flask) — requisito da disciplina, localização pendente
 

@@ -78,6 +78,12 @@ Padrão de cada domínio de tool: `schemas.py` (Pydantic) + `core.py` (as tools 
 `connection.py`/`context.py`/`helpers.py` compartilhados em `tools/postgres/`. Siga esse padrão para
 qualquer tool nova (redis, qdrant, etc).
 
+**Estrutura alvo (planejada, ver TODO.md):** igual ao assessor-ai, toda a lógica agentica
+(`agents/`, `graph/`, `tools/`, e o futuro `chat/`) migra para dentro de `src/frigus_ai/` (pacote
+Python instalável via `hatchling`, layout `src/`). `config/` e as interfaces (`ui/` → `interfaces/`)
+continuam no root, fora de `src/` — só o "cérebro" do assistente vira pacote. Não criar `src/`
+ad-hoc antes desse refactor sair do papel.
+
 ## Convenções
 
 - Código de domínio (nomes de função, variáveis, docstrings de tool, mensagens ao usuário) é em
