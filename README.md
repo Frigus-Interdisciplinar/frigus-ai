@@ -81,52 +81,59 @@ reprovado (loga um aviso), para nunca travar o usuário.
 
 ```
 frigus-ai/
-├── main.py                          # Ponto de entrada — loop de conversa no terminal
+├── main.py                          # Dispatcher — `python main.py <interface>`
 ├── pyproject.toml
 ├── docker-compose.yml               # Postgres + Mongo
 │
-├── agents/
-│   ├── prompts/                     # Prompts de cada agente
-│   │   ├── base.py                  # GenericAgent: persona, contexto temporal, shots
-│   │   ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py
-│   │   ├── orquestrador.py
-│   │   ├── juiz.py                  # critérios de avaliação + formato de veredito
-│   │   ├── guardrail.py             # classificador + revisão de segurança alimentar/PII
-│   │   └── resumidor.py
-│   └── nodes/                       # Funções de nó do grafo LangGraph
-│       ├── names.py
-│       ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py / orquestrador.py
-│       ├── juiz.py
-│       └── guardrail/{entrada,saida,schemas}.py
-│
-├── graph/
-│   ├── state.py                     # Estado e Route StrEnum
-│   ├── llm.py                       # build_llm e instâncias de LLM
-│   ├── agents.py                    # Agentes compilados (create_agent por especialista)
-│   └── builder.py                   # Grafo, incluindo o ciclo de retentativa do Juiz
-│
-├── tools/
-│   ├── postgres/
-│   │   ├── connection.py            # Pool psycopg2 com search_path=dataload
-│   │   ├── context.py               # contextvars: current_user_id / current_stock_id
-│   │   ├── helpers.py               # resolve_stock_id, next_id, normalize_enum, semáforo
-│   │   ├── estoque/{schemas,core}.py
-│   │   ├── compras/{schemas,core}.py
-│   │   ├── receitas/{schemas,core}.py
-│   │   └── financeiro/{schemas,core}.py
-│   ├── mongo/                       # agent_chats (histórico) + user_profiles (perfil de IA)
-│   ├── redis/                       # placeholder — não implementado (ver "Próximos passos")
-│   ├── qdrant/                      # placeholder — não implementado (ver "Próximos passos")
-│   └── faq_tools.py                 # RAG (FAISS) sobre Frigus-Documentacao.pdf
-│
-├── mcp_server/                      # placeholder — não implementado (ver "Próximos passos")
-├── a2a_server/                      # placeholder — não implementado (ver "Próximos passos")
+├── interfaces/terminal/             # app.py (loop de input) + display.py (Rich + pyfiglet)
 ├── config/                          # settings, models (LLM), logging, docker (compose up/down)
-├── ui/terminal.py                   # Interface Rich + pyfiglet
-└── data/
-    ├── Frigus-Documentacao.pdf
-    └── sql/schema.sql               # DDL fornecido (schema `dataload`, 20 tabelas + 9 enums)
+├── data/
+│   ├── Frigus-Documentacao.pdf
+│   └── sql/schema.sql               # DDL fornecido (schema `dataload`, 20 tabelas + 9 enums)
+│
+└── src/frigus_ai/                   # Pacote instalável com o "cérebro" do assistente
+    │
+    ├── chat/                        # Camada de serviço — usada por toda interface
+    │   ├── models.py                # ChatMessage/Role — contrato próprio, independente do Mongo
+    │   ├── repositories.py          # Acesso a tools/mongo/{chats,users}
+    │   ├── runner.py                # Invoca o grafo e extrai a resposta
+    │   └── service.py               # send_message, get_history, iniciar/encerrar_sessao
+    │
+    ├── agents/
+    │   ├── prompts/                 # Prompts de cada agente
+    │   │   ├── base.py              # GenericAgent: persona, contexto temporal, shots
+    │   │   ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py
+    │   │   ├── orquestrador.py
+    │   │   ├── juiz.py              # critérios de avaliação + formato de veredito
+    │   │   ├── guardrail.py         # classificador + revisão de segurança alimentar/PII
+    │   │   └── resumidor.py
+    │   └── nodes/                   # Funções de nó do grafo LangGraph
+    │       ├── names.py
+    │       ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py / orquestrador.py
+    │       ├── juiz.py
+    │       └── guardrail/{entrada,saida,schemas}.py
+    │
+    ├── graph/
+    │   ├── state.py                 # Estado e Route StrEnum
+    │   ├── llm.py                   # build_llm e instâncias de LLM
+    │   ├── agents.py                # Agentes compilados (create_agent por especialista)
+    │   └── builder.py               # Grafo (ciclo de retentativa do Juiz) + checkpointer Mongo
+    │
+    └── tools/
+        ├── postgres/
+        │   ├── connection.py        # Pool psycopg2 com search_path=dataload
+        │   ├── context.py           # contextvars: current_user_id / current_stock_id
+        │   ├── helpers.py           # resolve_stock_id, next_id, normalize_enum, semáforo
+        │   ├── estoque/{schemas,core}.py
+        │   ├── compras/{schemas,core}.py
+        │   ├── receitas/{schemas,core}.py
+        │   └── financeiro/{schemas,core}.py
+        ├── mongo/                   # agent_chats + user_profiles + checkpoints do grafo
+        └── faq_tools.py             # RAG (FAISS) sobre Frigus-Documentacao.pdf
 ```
+
+`api/`, `mcp_server/`, `a2a_server/`, `tools/redis/` e `tools/qdrant/` foram removidos — eram
+placeholders vazios. Serão recriados quando cada trabalho começar (ver "Próximos passos").
 
 ---
 
@@ -137,7 +144,7 @@ frigus-ai/
 | **Estoque, compras, receitas, financeiro** | PostgreSQL (schema `dataload`) | Dados de domínio do app Frigus |
 | **Histórico de conversa do assistente** | MongoDB (`agent_chats`) | Mensagens por sessão do chatbot (distinto do chat social do app, que já existe em `conversations`/`messages` no Postgres) |
 | **Perfil comportamental** | MongoDB (`user_profiles`) | Resumo de hábitos gerado pela IA, chaveado por `users.id` |
-| **Checkpointing do grafo** | LangGraph `MemorySaver` | Estado interno do grafo entre turnos (em memória, como no assessor-ai) |
+| **Checkpointing do grafo** | LangGraph `MongoDBSaver` (`graph_checkpoints`/`graph_checkpoint_writes`) | Estado interno do grafo entre turnos, chaveado por `thread_id` (= `session_id`) — sobrevive a restart do processo |
 | **Busca vetorial (RAG do FAQ)** | FAISS (local, em memória) | Índice do `Frigus-Documentacao.pdf` |
 
 Note que `users`, `groups`, `stocks` etc. no Postgres usam `INTEGER PRIMARY KEY` sem `SERIAL` (o DDL foi

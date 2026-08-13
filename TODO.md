@@ -103,17 +103,33 @@ de request/response). Rotas chamam só o módulo de serviço, nunca o grafo ou a
       terminal) — ver item "Checkpointer persistente" abaixo, é pré-requisito
 - [ ] Rate limiting básico (por IP e/ou por usuário)
 
-## Checkpointer persistente (controle de sessão)
+## Checkpointer persistente (controle de sessão) — concluído
 
-`graph/builder.py` usa `MemorySaver` — estado do LangGraph some a cada restart do processo. Pra
-"controle de sessões por usuário" valer de verdade (requisito da disciplina) e pra sessão sobreviver
-a redeploy da API, trocar por um checkpointer persistente.
+`graph/builder.py` usava `MemorySaver` — estado do LangGraph sumia a cada restart do processo. Agora
+usa `MongoDBSaver`, então a sessão sobrevive a restart/redeploy (requisito "controle de sessões por
+usuário" da disciplina).
 
-- [ ] Avaliar `MongoDBSaver` (`langgraph-checkpoint-mongodb`) — já tem Mongo no projeto, evita
-      adicionar infra nova. Ver achado do assessor-ai sobre pin de versão do `pymongo` incompatível
-      com a lib antes de instalar
-- [ ] Confirmar que `thread_id` (hoje `session_id` gerado por `uuid4()` em `main.py`) continua sendo
-      a chave certa quando existir usuário autenticado de verdade (via API)
+- [x] `MongoDBSaver` (`langgraph-checkpoint-mongodb>=0.4`) — reusa o Mongo que o projeto já tem, sem
+      infra nova. Coleções nomeadas à parte (`graph_checkpoints`/`graph_checkpoint_writes`) pra não
+      colidir com os defaults da lib nem com `agent_chats`/`user_profiles`. Recebe o `MongoClient` via
+      `banco.client` (`tools/mongo/connection.py`), sem abrir conexão nova nem mexer nesse módulo.
+      **Achado 1 (o mesmo do assessor-ai, confirmado aqui):** a lib trava `pymongo<4.17` e o projeto
+      pinava `pymongo>=4.17` — relaxado pra `>=4.12,<4.17` (instalou 4.16.0). **Achado 2:** o `uv`
+      também exigiu `requires-python = ">=3.13,<3.14"` (antes era só `>=3.13`) — sem o teto, a
+      resolução falha pro split de Python 3.14, onde não existe versão compatível da lib. **Achado 3:**
+      o módulo importável é `langgraph.checkpoint.mongodb` (namespace do langgraph), não
+      `langgraph_checkpoint_mongodb` (nome do dist)
+- [x] `fluxo_agentes` deixou de ser variável de módulo (compilava o grafo no import) e virou função
+      com `@functools.cache` — necessário porque o `MongoDBSaver` toca o Mongo, e a convenção do
+      projeto é nenhuma conexão no import. Call site (`chat/runner.py`) virou `fluxo_agentes().invoke(...)`
+- [ ] Confirmar que `thread_id` (hoje `session_id` gerado por `uuid4()` em `interfaces/terminal/app.py`)
+      continua sendo a chave certa quando existir usuário autenticado de verdade (via API)
+
+**Verificado:** o grafo compila com o `MongoDBSaver` apontando pro db `frigus_ai` e as coleções
+certas, e o `functools.cache` devolve a mesma instância entre chamadas. **Não verificado nesta
+sessão:** gravar/recuperar estado contra um Mongo real (Docker não estava rodando no ambiente) —
+rodar `python main.py terminal`, matar o processo e reabrir com o mesmo `session_id` pra confirmar
+que o estado do grafo sobrevive, antes de dar merge.
 
 ## MCP e A2A
 

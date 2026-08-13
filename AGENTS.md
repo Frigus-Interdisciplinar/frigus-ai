@@ -28,7 +28,7 @@ ficar desatualizado.
 | Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`agents/nodes/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
-| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph (`main.py`) + histórico em Mongo (`tools/mongo/chats`), mas checkpointer é `MemorySaver` **em memória** — estado do grafo não sobrevive a restart. Sem API ainda, não existe sessão HTTP de fato |
+| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph + histórico em Mongo (`tools/mongo/chats`). Checkpointer agora é `MongoDBSaver` (`graph/builder.py`) — estado sobrevive a restart. Falta só sessão HTTP de verdade, que depende da API |
 | Memória de longo prazo | ⚠️ Parcial | `tools/mongo/users` — perfil comportamental (resumo de hábitos) por `user_id`, persistente no Mongo. Avaliar se cobre o requisito ou se precisa de algo além do resumo (ex. memória vetorial) |
 | MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | `mcp_server/` e `a2a_server/` só têm `__init__.py` — ver TODO.md |
 | RAG com fonte externa indicada | ✅ Feito | `tools/faq_tools.py` — FAISS sobre `data/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
@@ -54,35 +54,38 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
   (`claude-haiku-4-5`, `claude-sonnet-4-6`) mapeados em `config/models.py`
 - PostgreSQL (via Docker, auto start/stop em `config/docker.py`) para estoque/compras/receitas/
   financeiro, acessado via `psycopg2` cru (schema `dataload`, DDL fornecido em `data/sql/schema.sql`)
-- MongoDB para histórico de conversa (`tools/mongo/chats`) e perfil comportamental
-  (`tools/mongo/users`)
+- MongoDB para histórico de conversa (`tools/mongo/chats`), perfil comportamental
+  (`tools/mongo/users`) e checkpoint do LangGraph (`MongoDBSaver`, coleções `graph_checkpoints`/
+  `graph_checkpoint_writes`)
 - FAISS para RAG do FAQ sobre `data/Frigus-Documentacao.pdf`
-- Redis e Qdrant estão como pastas placeholder (`tools/redis/`, `tools/qdrant/`) — **nenhuma tool
-  implementada ainda** (ver TODO.md)
+- Redis e Qdrant **não existem no repo** — nenhuma tool implementada ainda (ver TODO.md)
 
 ## Estrutura
 
-```
-agents/     prompts (agents/prompts) e nós de grafo (agents/nodes) — um arquivo por agente/domínio
-graph/      state.py (estado + Route), llm.py (builders), agents.py (agentes compilados), builder.py (grafo)
-tools/      integrações externas: tools/postgres/{estoque,compras,receitas,financeiro}, tools/mongo/{chats,users}, faq_tools.py
-config/     settings.py (env vars via pydantic-settings), models.py (Model enum + providers), docker.py, logging.py
-ui/         terminal.py — Rich + pyfiglet (única interface hoje)
-data/       Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
-api/        placeholder — não implementado (ver TODO.md)
-mcp_server/ placeholder — não implementado (ver TODO.md)
-a2a_server/ placeholder — não implementado (ver TODO.md)
+```text
+src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchling, layout src/)
+├── agents/             prompts (agents/prompts) e nós de grafo (agents/nodes) — um arquivo por agente/domínio
+├── graph/              state.py (estado + Route), llm.py (builders), agents.py (agentes compilados), builder.py (grafo)
+├── tools/              integrações externas: tools/postgres/{estoque,compras,receitas,financeiro}, tools/mongo/{chats,users}, faq_tools.py
+└── chat/               models.py (contrato de mensagem), repositories.py (Mongo), runner.py (invoca o grafo), service.py (casos de uso)
+
+interfaces/terminal/    app.py (loop de input) + display.py (Rich + pyfiglet) — única interface hoje
+config/                 settings.py (env vars via pydantic-settings), models.py (Model enum + providers), docker.py, logging.py
+data/                   Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
+main.py                 dispatcher fino — `python main.py <interface>`
 ```
 
 Padrão de cada domínio de tool: `schemas.py` (Pydantic) + `core.py` (as tools em si), com
 `connection.py`/`context.py`/`helpers.py` compartilhados em `tools/postgres/`. Siga esse padrão para
 qualquer tool nova (redis, qdrant, etc).
 
-**Estrutura alvo (planejada, ver TODO.md):** igual ao assessor-ai, toda a lógica agentica
-(`agents/`, `graph/`, `tools/`, e o futuro `chat/`) migra para dentro de `src/frigus_ai/` (pacote
-Python instalável via `hatchling`, layout `src/`). `config/` e as interfaces (`ui/` → `interfaces/`)
-continuam no root, fora de `src/` — só o "cérebro" do assistente vira pacote. Não criar `src/`
-ad-hoc antes desse refactor sair do papel.
+Nenhuma interface (`interfaces/*`) deve chamar `frigus_ai.graph.builder`, `frigus_ai.tools.mongo.*`
+ou `frigus_ai.tools.postgres.*` diretamente — sempre via `frigus_ai.chat.service`. É esse limite que
+permite API/TUI existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir
+histórico.
+
+`api/`, `mcp_server/` e `a2a_server/` foram removidos (eram placeholders vazios) — recriar quando o
+trabalho de cada um começar (ver TODO.md).
 
 ## Convenções
 
@@ -96,7 +99,7 @@ ad-hoc antes desse refactor sair do papel.
 - **Tools do LLM nunca recebem `user_id`/`stock_id` como argumento.** Args de tool são escolhidos
   pelo LLM via tool-calling — qualquer dado de escopo/permissão não pode vir por ali. O padrão é um
   `contextvars.ContextVar` setado uma vez por request (`tools/postgres/context.py:session_context`,
-  chamado em `main.py:executar_fluxo_frigus`) e lido dentro da tool. Ver uso em
+  chamado em `chat/runner.py:executar`) e lido dentro da tool. Ver uso em
   `tools/postgres/{estoque,compras,receitas,financeiro}/core.py`.
 - Não commitar `.env`; usar `.env.example` como referência de variáveis novas.
 - **Simplicidade acima de tudo.** Projeto de disciplina em estágio inicial — prefira a solução direta
