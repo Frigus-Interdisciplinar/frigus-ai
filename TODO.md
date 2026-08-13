@@ -3,7 +3,7 @@
 Próximos passos planejados. Contexto do projeto e checklist de requisitos da disciplina em
 [AGENTS.md](AGENTS.md).
 
-## Refatoração de estrutura — alinhar com o assessor-ai
+## Refatoração de estrutura — alinhar com o assessor-ai — concluída
 
 `main.py` hoje mistura três coisas: o loop de terminal, a lógica de montar/persistir mensagens e a
 invocação do grafo (`executar_fluxo_frigus`, `_extrair_resposta`, `salvar_mensagens`). Isso trava a
@@ -40,21 +40,47 @@ interfaces/terminal/    # ui/ migra pra cá, fora de src/
 config/                 # continua no root, fora de src/ (mesmo lugar do assessor-ai)
 ```
 
-- [ ] Criar `src/frigus_ai/` e mover `agents/`, `graph/`, `tools/` pra dentro (ajustar imports:
-      `graph.builder` → `frigus_ai.graph.builder`, etc.) — confirmar se o pacote fica instalável via
-      `hatchling` (`[tool.hatch.build.targets.wheel] packages = ["config", "interfaces",
-      "src/frigus_ai"]`, mesmo bloco do assessor-ai) ou se `pip install -e .`/`uv sync` já resolve
-      sem esse passo extra
-- [ ] Extrair `executar_fluxo_frigus`, `montar_mensagem_humana`, `salvar_mensagens`,
-      `_extrair_resposta` de `main.py` para `src/frigus_ai/chat/` (ou nome equivalente)
-- [ ] `main.py` vira dispatcher fino (hoje só tem uma interface — terminal — mas deixa o gancho
-      pronto pra quando a API existir, seguindo o padrão `python main.py <interface>` do assessor-ai)
-- [ ] `ui/terminal.py` migra para `interfaces/terminal/` (ou equivalente), sem lógica de negócio,
-      fora de `src/`
-- [ ] Nenhuma interface deve chamar `frigus_ai.graph.builder`, `frigus_ai.tools.mongo.*` ou
-      `frigus_ai.tools.postgres.*` diretamente — sempre via o módulo de serviço. É esse limite que
-      permite a API existir sem duplicar a lógica de montar estado, invocar o grafo e persistir
-      histórico
+- [x] Criar `src/frigus_ai/` e mover `agents/`, `graph/`, `tools/` pra dentro (`git mv` + sed nos
+      imports `agents.`/`graph.`/`tools.` → `frigus_ai.agents.`/etc., incluindo a string
+      `LANGGRAPH_ALLOWED_MSGPACK_MODULES` em `graph/builder.py`, que também referenciava esses
+      caminhos). Pacote instalável via `hatchling` — `pyproject.toml` **não tinha `[build-system]`
+      nenhum** (achado: só existia `[tool.setuptools.packages.find]`, sem cobrir `main.py`/`api`/
+      `mcp_server`/`a2a_server`) — adicionado `[build-system]` + `[tool.hatch.build.targets.wheel]
+      packages = ["config", "interfaces", "src/frigus_ai"]`, mesmo bloco do assessor-ai. Verificado:
+      `uv sync` builda o pacote com sucesso
+- [x] Extraído pra `src/frigus_ai/chat/`: `models.py` (`ChatMessage`/`Role`, contrato próprio,
+      convertido de/para `tools.mongo.chats.schemas.Mensagem` em `repositories.py`),
+      `repositories.py` (wrappers sobre `tools/mongo/{chats,users}/core.py`), `runner.py`
+      (`executar_fluxo_frigus` + `_extrair_resposta` de `main.py`), `service.py` (`send_message`,
+      `get_history`, `encerrar_sessao`, `iniciar_sessao` — bootstrap do usuário demo movido de
+      `main.py` pra cá, pra não violar a regra de interface não tocar `tools.postgres.*` direto).
+      **Simplificação deliberada:** sem `create_chat()` — nada usa hoje (o terminal cria o doc do
+      chat de forma preguiçosa dentro de `salvar_mensagens`, igual já fazia o `main.py` antigo);
+      adicionar quando a API precisar de um chat pré-criado pra checar ownership antes da primeira
+      mensagem (mesmo motivo que levou o assessor-ai a criar essa função)
+- [x] `main.py` virou dispatcher fino (`python main.py <interface>`, hoje só resolve `terminal`)
+- [x] `ui/terminal.py` migrou pra `interfaces/terminal/display.py` sem mudança de conteúdo;
+      `interfaces/terminal/app.py` (novo) é o loop de `input()`, usando só `chat.service`
+- [x] Nenhuma interface chama `frigus_ai.graph.builder`/`frigus_ai.tools.*` direto — só
+      `frigus_ai.chat.service`
+
+**Verificado:** `uv sync` builda o pacote sem erro; smoke test de import (`frigus_ai.chat.service`,
+`frigus_ai.graph.builder`, `main`) com env vars dummy resolve a cadeia inteira (agents/prompts/
+tools/graph, todos os 10 nós) sem `ModuleNotFoundError`. **Não verificado nesta sessão:** rodar
+`python main.py terminal` ponta a ponta contra Postgres/Mongo reais — não havia `.env` nem Docker
+disponíveis neste ambiente. Rodar localmente antes de dar merge.
+
+## Seleção interativa de interface (questionary) — avaliado, adiado
+
+`main.py` hoje só resolve `terminal` (`python main.py terminal`). Ideia: quando existir mais de uma
+interface real (`tui`, `api`, eventualmente frontend), usar `questionary.select(...)` pra menu de
+seta em vez de exigir o nome exato como argumento — reduz fricção pra quem não decorou os comandos.
+
+- [ ] Adicionar `questionary` como dependência **só quando o segundo modo existir de verdade** (hoje
+      só tem 1 opção, não há o que selecionar — YAGNI). Desenho: `python main.py <interface>` continua
+      funcionando direto (scriptável, usado por CI/automação); `python main.py` sem argumento cai no
+      menu interativo do `questionary` como atalho amigável — as duas formas convivem, não é
+      substituição
 
 ## API (FastAPI/Flask) — requisito da disciplina, localização pendente
 
@@ -91,7 +117,9 @@ a redeploy da API, trocar por um checkpointer persistente.
 
 ## MCP e A2A
 
-Requisito explícito da disciplina. `mcp_server/` e `a2a_server/` só têm `__init__.py` hoje.
+Requisito explícito da disciplina. `mcp_server/`, `a2a_server/` e `api/` foram **removidos do repo**
+(eram só `__init__.py` vazio, sem implementação nenhuma — recriar quando o trabalho de cada um
+começar de verdade, não versionar pasta placeholder sem uso).
 
 - [ ] **MCP**: expor as tools do Frigus.AI (estoque, compras, receitas, financeiro, faq) como
       servidor MCP, pra hosts MCP externos (Claude Desktop etc.) conseguirem consumir o domínio do
@@ -101,6 +129,17 @@ Requisito explícito da disciplina. `mcp_server/` e `a2a_server/` só têm `__in
       agente externo
 - [ ] Decidir se os dois vivem só neste repo ou se algum consome a API (depende da decisão de
       localização da API acima)
+- [ ] **Em discussão:** usar o A2A como *cliente* também, não só servidor — trocar o agente
+      `financeiro` local por uma chamada A2A pro domínio financeiro do assessor-ai, já que os dois
+      projetos são irmãos. **Ressalva a resolver antes de decidir:** o `financeiro` do Frigus
+      (`tools/postgres/financeiro/core.py`, `MesArgs`/`EvolucaoDesperdicioArgs`) parece ser sobre
+      gasto/desperdício de alimentos cruzado com o estoque, não finanças pessoais genéricas — é um
+      domínio diferente do `financeiro` do assessor-ai (transações/eventos genéricos, schema Postgres
+      separado, `user_id` desacoplado do Frigus). Antes de substituir, confirmar se faz sentido
+      semântico (não só técnico) chamar um agente externo pra um dado que hoje é local e correlacionado
+      com `estoque`/`compras`. Se o objetivo é só ter uma demonstração real de A2A como cliente (além
+      de servidor), talvez `agenda`/calendário do assessor-ai seja um alvo melhor que `financeiro`, por
+      não sobrepor um domínio que o Frigus já possui nativamente
 
 ## Observabilidade / SRE — requisito da disciplina
 
@@ -125,27 +164,46 @@ tokens ou erro por nó. Precisa cobrir, no mínimo, os 5 pontos do enunciado:
       (tempo economizado do usuário, redução de desperdício de alimentos via MoneySaving) pra
       justificar o ROI — decisão de produto, não só técnica, discutir com o time antes de implementar
 
-## Redis e Qdrant — placeholders sem tool nenhuma
+## Redis e Qdrant
 
-`tools/redis/` e `tools/qdrant/` só têm `__init__.py`. Não são requisito obrigatório da disciplina,
+`tools/redis/` e `tools/qdrant/` foram removidos do repo (eram só `__init__.py` vazio — recriar
+quando a primeira tool de cada um existir de verdade). Não são requisito obrigatório da disciplina,
 mas somam pra "complexidade do projeto" (item extra) e resolvem gaps reais:
 
 - [ ] **Redis**: cache do perfil comportamental (`tools/mongo/users`, hoje sempre bate no Mongo) e/ou
       rate limit por usuário — mesmo padrão do assessor-ai (`tools/redis/{connection,perfil}.py`)
-- [ ] **Qdrant**: RAG do FAQ com banco vetorial de verdade em vez do FAISS local em memória, e
-      eventualmente busca semântica de receitas cruzando com o estoque do usuário
+- [ ] **Qdrant**: mesmo caso de uso do assessor-ai (RAG de um único PDF via tool) — trocar o FAISS
+      local em memória (`tools/faq_tools.py`, reconstrói o índice a cada start do processo) pelo
+      padrão já validado lá: `tools/qdrant/faq/{connection,core,ingest}.py` (client lazy, tool
+      `faq_retriever` fazendo `query_points`, script de ingestão separado da tool de busca). Baixo
+      custo incremental (mais um serviço no `docker-compose.yml`, código já pronto de referência);
+      o ganho real hoje é consistência com o assessor-ai, não performance — FAISS já é rápido pro
+      tamanho atual do PDF. Eventualmente: busca semântica de receitas cruzando com o estoque
+- [ ] **Em discussão:** remover o agente `faq` (`agents/nodes/faq.py` + `faq_app` em `graph/agents.py`)
+      e deixar só a tool — o Roteador identifica que é pergunta de FAQ e chama `faq_retriever` direto,
+      igual já acontece com `estoque`/`compras`/`financeiro` (nó chama a tool, `orquestrador` formata
+      em linguagem natural, `juiz` valida). Não faz sentido pagar uma chamada de LLM extra só pra
+      decidir usar a única tool que o agente FAQ tem — o Roteador já tomou essa decisão. Efeito
+      colateral: reduz de 10 pros 9 nós no grafo (ainda bem acima do mínimo de 5 agentes exigido)
 - [ ] Adicionar os dois serviços ao `docker-compose.yml` (hoje só tem `postgres`/`mongo`) quando a
       primeira tool de cada um existir — não subir infra sem uso
 
 ## Testes
 
-Não existe suíte de testes no projeto. Seguir o ponto de partida do assessor-ai: começar pelas
-funções puras, sem precisar mockar banco.
+Não existe suíte de testes nem workflow de CI no projeto (`.github/workflows/` não existe — não é
+"confirmar antes de recriar", é criar do zero). Seguir o ponto de partida do assessor-ai: começar
+pelas funções puras, sem precisar mockar banco.
 
 - [ ] `pytest` como dev dependency (`uv add --dev pytest`)
 - [ ] `tests/tools/` — `Response.ok`/`Response.error` (`tools/response.py`), helpers de
       `tools/postgres/helpers.py` (`normalize_enum`, cálculo de semáforo de validade, `next_id`) que
       não dependem de conexão real
 - [ ] Depois: `tests/agents/nodes/guardrail/` (bloqueio determinístico por regex, sem chamar LLM)
-- [ ] CI (GitHub Actions) rodando `ruff check .` + `pytest` — repo já tem `.github/`, confirmar se
-      workflow existe antes de recriar
+- [ ] `.github/workflows/ci.yml` rodando `ruff check .` + `pytest` (`ruff` também ainda não é
+      dependência do projeto — adicionar junto)
+- [ ] **Em discussão:** convenção de "toda feature nova vem com pelo menos um teste" — documentar em
+      `AGENTS.md` (seção "Fluxo de trabalho") como norma, não como gate de CI logo de cara. Faz
+      sentido como hábito daqui pra frente (evita o mesmo débito que o próprio assessor-ai acumulou —
+      vários módulos lá ainda sem teste); começar como convenção registrada e só promover pra check
+      obrigatório de PR depois que a suíte base (itens acima) existir — travar PR sem teste antes
+      disso é fricção sem rede de segurança nenhuma por trás
