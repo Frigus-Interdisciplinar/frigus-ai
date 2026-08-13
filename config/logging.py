@@ -1,6 +1,7 @@
 import logging
 from enum import StrEnum
 
+
 class Colors(StrEnum):
     GREEN  = "\033[92m"
     RED    = "\033[91m"

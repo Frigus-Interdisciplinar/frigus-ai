@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependências
+        run: uv sync --locked
+
+      # As env vars obrigatórias de config/settings.py vêm de tests/conftest.py
+      # (valores fake) — nenhum teste faz I/O real, então o CI não precisa de secret.
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Testes
+        run: uv run pytest

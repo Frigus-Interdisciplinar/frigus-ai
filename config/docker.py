@@ -1,9 +1,8 @@
-import subprocess
 import atexit
+import subprocess
 import time
 
 from config.logging import get_logger
-
 
 logger = get_logger("docker")
 
@@ -15,7 +14,8 @@ def _garantir_daemon():
 
     resultado = subprocess.run(
         ["docker", "info"],
-        capture_output=True
+        capture_output=True,
+        check=False,  # returncode != 0 é esperado (daemon desligado)
     )
 
     if resultado.returncode == 0:
@@ -27,7 +27,7 @@ def _garantir_daemon():
     for _ in range(30):
         time.sleep(3)
 
-        check = subprocess.run(["docker", "info"], capture_output=True)
+        check = subprocess.run(["docker", "info"], capture_output=True, check=False)
         if check.returncode == 0:
             logger.info("Docker Desktop pronto.")
             return
@@ -53,7 +53,8 @@ def garantir_banco() -> None:
     resultado = subprocess.run(
         ["docker", "compose", "-f", COMPOSE_FILE, "ps", "--status", "running", "--services"],
         capture_output=True,
-        text=True
+        text=True,
+        check=False,  # a saída é inspecionada abaixo, não o returncode
     )
 
     servicos_rodando = set(resultado.stdout.split())
