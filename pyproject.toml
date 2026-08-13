@@ -37,3 +37,21 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["config", "interfaces", "src/frigus_ai"]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+# BLE001: cada tool precisa capturar Exception genérica e devolver Response.error —
+#   deixar a exception escapar quebra o turno inteiro (ver AGENTS.md).
+# SIM117: `with get_conn() as conn:` + `with conn.cursor() as cur:` aninhados são
+#   mais legíveis que a forma combinada, e é o padrão em todo tools/postgres.
+# DTZ011: `date.today()` é intencional — as datas de validade/estoque são locais,
+#   sem hora, e o semáforo compara dia a dia (ver TODO.md sobre revisar timezone).
+ignore = ["BLE001", "SIM117", "DTZ011"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.2",
+]

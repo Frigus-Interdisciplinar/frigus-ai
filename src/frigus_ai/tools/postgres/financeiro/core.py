@@ -1,19 +1,18 @@
 from datetime import date, timedelta
-from typing import Optional
+
 from langchain.tools import tool
 
 from config.decorators import log_tool
 from config.logging import get_logger
-
-from frigus_ai.tools.response import Response
 from frigus_ai.tools.postgres.connection import get_conn
 from frigus_ai.tools.postgres.context import current_stock_id
-from frigus_ai.tools.postgres.financeiro.schemas import MesArgs, EvolucaoDesperdicioArgs
+from frigus_ai.tools.postgres.financeiro.schemas import EvolucaoDesperdicioArgs, MesArgs
+from frigus_ai.tools.response import Response
 
 logger = get_logger("pg_financeiro")
 
 
-def _mes_ou_atual(mes: Optional[str]) -> str:
+def _mes_ou_atual(mes: str | None) -> str:
     return mes or date.today().strftime("%Y-%m")
 
 
@@ -53,7 +52,7 @@ def _valor_descartado_do_mes(cur, stock_id: int, mes: str) -> float:
 
 @tool("gastos_mensais", args_schema=MesArgs)
 @log_tool
-def gastos_mensais(mes: Optional[str] = None) -> dict:
+def gastos_mensais(mes: str | None = None) -> dict:
     """
     Retorna o total gasto em compras de produtos (Entradas em stock_movements)
     no mês informado (YYYY-MM). Sem mês informado, usa o mês atual.
@@ -115,7 +114,7 @@ def comparacao_mensal() -> dict:
 
 @tool("valor_descartado", args_schema=MesArgs)
 @log_tool
-def valor_descartado(mes: Optional[str] = None) -> dict:
+def valor_descartado(mes: str | None = None) -> dict:
     """
     Retorna o valor estimado dos alimentos descartados (vencidos/estragados)
     no mês informado (YYYY-MM). Sem mês informado, usa o mês atual.
@@ -176,8 +175,8 @@ def evolucao_desperdicio(meses: int = 6) -> dict:
 
 
 __all__ = [
-    "gastos_mensais",
     "comparacao_mensal",
-    "valor_descartado",
     "evolucao_desperdicio",
+    "gastos_mensais",
+    "valor_descartado",
 ]

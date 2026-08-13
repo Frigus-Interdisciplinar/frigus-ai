@@ -1,6 +1,6 @@
-from frigus_ai.graph.state import Estado
-from frigus_ai.graph.agents import financeiro_app
 from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.graph.agents import financeiro_app
+from frigus_ai.graph.state import Estado
 
 
 def no_financeiro(estado: Estado) -> dict:

@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-_agora = datetime.now(timezone.utc).astimezone()
+_agora = datetime.now(UTC).astimezone()
 _data_hora_fmt = _agora.strftime("%A, %d de %B de %Y — %H:%M:%S %Z")
 
 

@@ -1,5 +1,5 @@
-from typing import Required, TypedDict
 from enum import StrEnum
+from typing import Required, TypedDict
 
 
 class ResultadoGuardrail(TypedDict, total=False):

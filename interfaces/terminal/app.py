@@ -3,10 +3,14 @@ import os
 import warnings
 from uuid import uuid4
 
-from frigus_ai.chat import service
-
 from config.docker import garantir_banco
-from interfaces.terminal.display import console, exibir_assistente, exibir_titulo, exibir_usuario
+from frigus_ai.chat import service
+from interfaces.terminal.display import (
+    console,
+    exibir_assistente,
+    exibir_titulo,
+    exibir_usuario,
+)
 
 # --------------------- FIX WARNING ---------------------
 warnings.filterwarnings("ignore", message="Deserializing unregistered type")

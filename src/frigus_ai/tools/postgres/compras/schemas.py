@@ -1,4 +1,5 @@
-from typing import Optional, Literal
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 Category = Literal[
@@ -17,12 +18,12 @@ class AddShoppingListProductArgs(BaseModel):
 
 
 class QueryShoppingListArgs(BaseModel):
-    status: Optional[ItemStatus] = Field(default=None, description="Filtra itens por status. Sem filtro, retorna Pendente e Comprado.")
+    status: ItemStatus | None = Field(default=None, description="Filtra itens por status. Sem filtro, retorna Pendente e Comprado.")
 
 
 class MarkPurchasedArgs(BaseModel):
-    shopping_list_product_id: Optional[int] = Field(default=None, description="ID direto do item na lista, se conhecido.")
-    product_name: Optional[str] = Field(default=None, description="Nome (ou parte) do produto, usado se o ID não for informado.")
+    shopping_list_product_id: int | None = Field(default=None, description="ID direto do item na lista, se conhecido.")
+    product_name: str | None = Field(default=None, description="Nome (ou parte) do produto, usado se o ID não for informado.")
     status: ItemStatus = Field(default="Comprado", description="Novo status do item: Comprado ou Removido.")
 
 

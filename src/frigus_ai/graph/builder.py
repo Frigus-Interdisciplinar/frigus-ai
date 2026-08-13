@@ -1,29 +1,29 @@
 import os
+
 os.environ["LANGGRAPH_ALLOWED_MSGPACK_MODULES"] = (
     "frigus_ai.agents.nodes.names,frigus_ai.graph.state"
 )
 
 import functools
 
-from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.mongodb import MongoDBSaver
+from langgraph.graph import END, StateGraph
 
-from frigus_ai.graph.state import Estado, Route
-from frigus_ai.tools.mongo.connection import banco
-
-from frigus_ai.agents.nodes.names import NodeName
 from frigus_ai.agents.nodes import (
-    no_roteador,
-    no_estoque,
     no_compras,
-    no_receitas,
+    no_estoque,
     no_faq,
     no_financeiro,
-    no_orquestrador,
-    no_juiz,
     no_guardrail_entrada,
     no_guardrail_saida,
+    no_juiz,
+    no_orquestrador,
+    no_receitas,
+    no_roteador,
 )
+from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.graph.state import Estado, Route
+from frigus_ai.tools.mongo.connection import banco
 
 
 def decidir_apos_guardrail_entrada(estado: Estado) -> str:

@@ -1,29 +1,28 @@
-from .postgres.estoque.core import (
-    add_stock_product,
-    query_stock,
-    update_stock_quantity,
-    discard_product,
-)
+from .faq_tools import faq_retriever
 from .postgres.compras.core import (
-    create_shopping_list,
     add_shopping_list_product,
-    query_shopping_list,
-    mark_purchased,
+    create_shopping_list,
     generate_shopping_list_from_low_stock,
+    mark_purchased,
+    query_shopping_list,
     register_purchase_from_nfe,
 )
-from .postgres.receitas.core import (
-    match_recipes_to_stock,
-    get_recipe_details,
+from .postgres.estoque.core import (
+    add_stock_product,
+    discard_product,
+    query_stock,
+    update_stock_quantity,
 )
 from .postgres.financeiro.core import (
-    gastos_mensais,
     comparacao_mensal,
-    valor_descartado,
     evolucao_desperdicio,
+    gastos_mensais,
+    valor_descartado,
 )
-
-from .faq_tools import faq_retriever
+from .postgres.receitas.core import (
+    get_recipe_details,
+    match_recipes_to_stock,
+)
 
 ESTOQUE_TOOLS = [add_stock_product, query_stock, update_stock_quantity, discard_product]
 COMPRAS_TOOLS = [
@@ -39,9 +38,9 @@ FAQ_TOOLS = [faq_retriever]
 FINANCEIRO_TOOLS = [gastos_mensais, comparacao_mensal, valor_descartado, evolucao_desperdicio]
 
 __all__ = [
-    "ESTOQUE_TOOLS",
     "COMPRAS_TOOLS",
-    "RECEITAS_TOOLS",
+    "ESTOQUE_TOOLS",
     "FAQ_TOOLS",
     "FINANCEIRO_TOOLS",
+    "RECEITAS_TOOLS",
 ]

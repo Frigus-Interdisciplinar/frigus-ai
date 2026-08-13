@@ -1,6 +1,6 @@
-from frigus_ai.graph.llm import llm_rapido
-from frigus_ai.agents.prompts.resumidor import ResumidorPrompt, PerfilPrompt
 from config.logging import get_logger
+from frigus_ai.agents.prompts.resumidor import PerfilPrompt, ResumidorPrompt
+from frigus_ai.graph.llm import llm_rapido
 
 log = get_logger(__name__)
 

@@ -1,6 +1,7 @@
-import psycopg2
-from psycopg2 import pool
 from contextlib import contextmanager
+
+from psycopg2 import pool
+
 from config.settings import settings
 
 # Todo o DDL (data/sql/schema.sql) mora no schema `dataload`, não em `public`.

@@ -1,26 +1,23 @@
 from langchain.agents import create_agent
 
-from frigus_ai.agents.prompts.router import RouterPrompts
-from frigus_ai.agents.prompts.estoque import EstoquePrompts
 from frigus_ai.agents.prompts.compras import ComprasPrompts
-from frigus_ai.agents.prompts.receitas import ReceitasPrompts
+from frigus_ai.agents.prompts.estoque import EstoquePrompts
 from frigus_ai.agents.prompts.faq import FaqPrompts
 from frigus_ai.agents.prompts.financeiro import FinanceiroPrompts
 from frigus_ai.agents.prompts.orquestrador import OrquestradorPrompts
-
+from frigus_ai.agents.prompts.receitas import ReceitasPrompts
+from frigus_ai.agents.prompts.router import RouterPrompts
 from frigus_ai.graph.llm import (
-    llm_rapido,
     llm_especialista,
+    llm_rapido,
 )
-
 from frigus_ai.tools import (
-    ESTOQUE_TOOLS,
     COMPRAS_TOOLS,
-    RECEITAS_TOOLS,
+    ESTOQUE_TOOLS,
     FAQ_TOOLS,
     FINANCEIRO_TOOLS,
+    RECEITAS_TOOLS,
 )
-
 
 router_app = create_agent(
     model=llm_rapido,
@@ -64,11 +61,11 @@ orquestrador_app = create_agent(
 
 
 __all__ = [
-    "router_app",
-    "estoque_app",
     "compras_app",
-    "receitas_app",
+    "estoque_app",
     "faq_app",
     "financeiro_app",
     "orquestrador_app",
+    "receitas_app",
+    "router_app",
 ]

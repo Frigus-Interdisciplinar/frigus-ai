@@ -1,10 +1,10 @@
 import re
 
-from frigus_ai.graph.state import Estado
+from config.logging import get_logger
 from frigus_ai.agents.nodes.names import NodeName
 from frigus_ai.agents.prompts.juiz import JuizPrompts
 from frigus_ai.graph.llm import llm_juiz
-from config.logging import get_logger
+from frigus_ai.graph.state import Estado
 
 logger = get_logger(__name__)
 
@@ -63,4 +63,4 @@ def no_juiz(estado: Estado) -> dict:
     }
 
 
-__all__ = ["no_juiz", "MAX_TENTATIVAS"]
+__all__ = ["MAX_TENTATIVAS", "no_juiz"]

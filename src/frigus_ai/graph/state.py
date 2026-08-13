@@ -1,7 +1,8 @@
 import operator
-from typing import Annotated, Optional
-from langgraph.graph import MessagesState
 from enum import StrEnum
+from typing import Annotated
+
+from langgraph.graph import MessagesState
 
 
 class Route(StrEnum):
@@ -25,7 +26,7 @@ class Estado(MessagesState):
     mapa_pii:              dict
     mensagem_bloqueada:    str
     perfil_usuario:        str
-    stock_id:              Optional[int]
+    stock_id:              int | None
 
     # Juiz (LLM-as-judge)
     tentativas_juiz:  int

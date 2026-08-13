@@ -1,15 +1,15 @@
-from typing import Optional
+
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 
-from config.models import Model, PROVIDER_MAP, BUILDERS, API_KEYS
+from config.models import API_KEYS, BUILDERS, PROVIDER_MAP, Model
 
 
 def build_llm(
     temperature: float,
-    top_p: Optional[float] = None,
-    model: Optional[str] = None
+    top_p: float | None = None,
+    model: str | None = None
 ) -> ChatGoogleGenerativeAI | ChatGroq | ChatAnthropic:
     """
     Cria uma LLM com base no modelo informado.
@@ -21,11 +21,11 @@ def build_llm(
     if provider is None:
         raise ValueError(f"Modelo desconhecido: {model}")
 
-    kwargs = dict(
-        model=model,
-        temperature=temperature,
-        api_key=API_KEYS.get(provider),
-    )
+    kwargs = {
+        "model": model,
+        "temperature": temperature,
+        "api_key": API_KEYS.get(provider),
+    }
 
     # se fizer somente if top_p e valor dele seja 0.0, o python interpreta como False (mto legal)
     if top_p is not None and provider == "gemini":
@@ -43,10 +43,10 @@ llm_especialista = llm_gemini.with_fallbacks([llm_groq])
 
 
 __all__ = [
+    "llm_especialista",
     "llm_gemini",
     "llm_groq",
-    "llm_rapido",
-    "llm_especialista",
     "llm_guardrail",
     "llm_juiz",
+    "llm_rapido",
 ]

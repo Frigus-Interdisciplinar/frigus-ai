@@ -1,25 +1,24 @@
-from langchain_core.messages import HumanMessage
 import re
 import uuid
 
+from langchain_core.messages import HumanMessage
+
+from config.logging import get_logger
 from frigus_ai.agents.nodes.names import NodeName
 from frigus_ai.agents.prompts.guardrail import GuardrailPrompts
-from frigus_ai.graph.state import Estado
 from frigus_ai.graph.llm import llm_guardrail
-from config.logging import get_logger
+from frigus_ai.graph.state import Estado
 
 logger = get_logger(__name__)
 
 from frigus_ai.agents.nodes.guardrail.schemas import (
-    PII,
-    _PADROES_INJECAO,
     _KEYWORDS_DADOS_INTERNOS,
+    _PADROES_INJECAO,
     _RESPOSTAS_BLOQUEIO,
+    PII,
     Categoria,
     ResultadoGuardrail,
 )
-
-
 
 
 def _bloquear(motivo: str, mensagem: str) -> ResultadoGuardrail:

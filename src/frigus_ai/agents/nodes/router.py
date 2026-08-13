@@ -1,9 +1,9 @@
 import re
 
-from frigus_ai.graph.state import Route, Estado
-from frigus_ai.graph.agents import router_app
-from frigus_ai.agents.nodes.names import NodeName
 from config.logging import get_logger
+from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.graph.agents import router_app
+from frigus_ai.graph.state import Estado, Route
 
 log = get_logger(__name__)
 

@@ -1,24 +1,23 @@
 from datetime import date
-from typing import Optional
+
 from langchain.tools import tool
 
 from config.decorators import log_tool
 from config.logging import get_logger
-
-from frigus_ai.tools.response import Response
 from frigus_ai.tools.postgres.connection import get_conn
 from frigus_ai.tools.postgres.context import current_stock_id, current_user_id
-from frigus_ai.tools.postgres.helpers import (
-    next_id,
-    compute_product_status,
-    expiring_date_threshold,
-)
 from frigus_ai.tools.postgres.estoque.schemas import (
     AddStockProductArgs,
+    DiscardProductArgs,
     QueryStockArgs,
     UpdateStockQuantityArgs,
-    DiscardProductArgs,
 )
+from frigus_ai.tools.postgres.helpers import (
+    compute_product_status,
+    expiring_date_threshold,
+    next_id,
+)
+from frigus_ai.tools.response import Response
 
 logger = get_logger("pg_estoque")
 
@@ -43,7 +42,7 @@ def _find_or_create_product(cur, name: str, category: str, storage_place: str, u
     return product_id
 
 
-def _find_stock_product(cur, stock_id: int, stock_product_id: Optional[int], product_name: Optional[str]):
+def _find_stock_product(cur, stock_id: int, stock_product_id: int | None, product_name: str | None):
     if stock_product_id is not None:
         cur.execute(
             """
@@ -81,7 +80,7 @@ def add_stock_product(
     quantity: int,
     expire_date: str,
     unit_price: float = 0.0,
-    minimal_quantity: Optional[int] = None,
+    minimal_quantity: int | None = None,
 ) -> dict:
     """
     Adiciona um produto ao estoque do usuário (geladeira, freezer, despensa, armário ou prateleira).
@@ -128,11 +127,11 @@ def add_stock_product(
 @tool("query_stock", args_schema=QueryStockArgs)
 @log_tool
 def query_stock(
-    storage_place: Optional[str] = None,
-    category: Optional[str] = None,
-    product_status: Optional[str] = None,
-    vencendo_em_dias: Optional[int] = None,
-    product_name: Optional[str] = None,
+    storage_place: str | None = None,
+    category: str | None = None,
+    product_status: str | None = None,
+    vencendo_em_dias: int | None = None,
+    product_name: str | None = None,
 ) -> dict:
     """
     Consulta os itens do estoque do usuário com filtros opcionais.
@@ -207,10 +206,10 @@ def query_stock(
 @tool("update_stock_quantity", args_schema=UpdateStockQuantityArgs)
 @log_tool
 def update_stock_quantity(
-    stock_product_id: Optional[int] = None,
-    product_name: Optional[str] = None,
-    delta: Optional[int] = None,
-    novo_valor: Optional[int] = None,
+    stock_product_id: int | None = None,
+    product_name: str | None = None,
+    delta: int | None = None,
+    novo_valor: int | None = None,
 ) -> dict:
     """
     Atualiza a quantidade de um item do estoque (consumo parcial/total ou reposição).
@@ -277,8 +276,8 @@ def update_stock_quantity(
 @tool("discard_product", args_schema=DiscardProductArgs)
 @log_tool
 def discard_product(
-    stock_product_id: Optional[int] = None,
-    product_name: Optional[str] = None,
+    stock_product_id: int | None = None,
+    product_name: str | None = None,
     reason: str = "Vencido",
 ) -> dict:
     """
@@ -339,7 +338,7 @@ def discard_product(
 
 __all__ = [
     "add_stock_product",
+    "discard_product",
     "query_stock",
     "update_stock_quantity",
-    "discard_product",
 ]

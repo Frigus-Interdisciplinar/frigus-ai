@@ -1,20 +1,19 @@
-from typing import Optional
+
 from langchain.tools import tool
 
 from config.decorators import log_tool
 from config.logging import get_logger
-
-from frigus_ai.tools.response import Response
+from frigus_ai.tools.postgres.compras.schemas import (
+    AddShoppingListProductArgs,
+    GenerateShoppingListFromLowStockArgs,
+    MarkPurchasedArgs,
+    QueryShoppingListArgs,
+    RegisterPurchaseFromNfeArgs,
+)
 from frigus_ai.tools.postgres.connection import get_conn
 from frigus_ai.tools.postgres.context import current_stock_id
 from frigus_ai.tools.postgres.helpers import next_id
-from frigus_ai.tools.postgres.compras.schemas import (
-    AddShoppingListProductArgs,
-    QueryShoppingListArgs,
-    MarkPurchasedArgs,
-    GenerateShoppingListFromLowStockArgs,
-    RegisterPurchaseFromNfeArgs,
-)
+from frigus_ai.tools.response import Response
 
 logger = get_logger("pg_compras")
 
@@ -36,7 +35,7 @@ def _get_or_create_open_list(cur, stock_id: int) -> int:
     return list_id
 
 
-def _find_or_create_product(cur, name: str, category: Optional[str], storage_place: Optional[str]) -> Optional[int]:
+def _find_or_create_product(cur, name: str, category: str | None, storage_place: str | None) -> int | None:
     cur.execute("SELECT id FROM products WHERE LOWER(name) = LOWER(%s) LIMIT 1;", (name,))
     row = cur.fetchone()
     if row:
@@ -127,7 +126,7 @@ def add_shopping_list_product(
 
 @tool("query_shopping_list", args_schema=QueryShoppingListArgs)
 @log_tool
-def query_shopping_list(status: Optional[str] = None) -> dict:
+def query_shopping_list(status: str | None = None) -> dict:
     """
     Consulta os itens da lista de compras aberta do usuário.
 
@@ -180,8 +179,8 @@ def query_shopping_list(status: Optional[str] = None) -> dict:
 @tool("mark_purchased", args_schema=MarkPurchasedArgs)
 @log_tool
 def mark_purchased(
-    shopping_list_product_id: Optional[int] = None,
-    product_name: Optional[str] = None,
+    shopping_list_product_id: int | None = None,
+    product_name: str | None = None,
     status: str = "Comprado",
 ) -> dict:
     """
@@ -318,10 +317,10 @@ def register_purchase_from_nfe(nfe_key_or_url: str) -> dict:
 
 
 __all__ = [
-    "create_shopping_list",
     "add_shopping_list_product",
-    "query_shopping_list",
-    "mark_purchased",
+    "create_shopping_list",
     "generate_shopping_list_from_low_stock",
+    "mark_purchased",
+    "query_shopping_list",
     "register_purchase_from_nfe",
 ]

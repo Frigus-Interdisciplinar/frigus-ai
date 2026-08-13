@@ -33,8 +33,8 @@ def exibir_assistente(mensagem: str) -> None:
 
 
 __all__ = [
-    "exibir_titulo",
-    "exibir_usuario",
+    "console",
     "exibir_assistente",
-    "console"
+    "exibir_titulo",
+    "exibir_usuario"
 ]

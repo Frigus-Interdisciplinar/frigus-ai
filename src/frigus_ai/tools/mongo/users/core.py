@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from frigus_ai.tools.mongo.connection import banco
 from config.logging import get_logger
+from frigus_ai.tools.mongo.connection import banco
 
 logger = get_logger(__name__)
 
@@ -20,7 +20,7 @@ def atualizar_perfil(user_id: int, perfil: str) -> None:
 
     collection.update_one(
         {"user_id": user_id},
-        {"$set": {"profile": perfil, "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {"profile": perfil, "updated_at": datetime.now(UTC)}},
         upsert=True,
     )
 
@@ -31,7 +31,7 @@ def garantir_perfil(user_id: int) -> None:
         {"$setOnInsert": {
             "user_id": user_id,
             "profile": "",
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }},
         upsert=True,
     )

@@ -1,5 +1,6 @@
-import time
 import functools
+import time
+
 from config.logging import get_logger
 
 logger = get_logger("pg_tools")

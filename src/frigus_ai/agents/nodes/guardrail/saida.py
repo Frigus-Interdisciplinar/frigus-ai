@@ -1,11 +1,15 @@
 import re
 
-from frigus_ai.agents.nodes.guardrail.schemas import PII, PII_USUARIO, ResultadoGuardrail
+from config.logging import get_logger
+from frigus_ai.agents.nodes.guardrail.schemas import (
+    PII,
+    PII_USUARIO,
+    ResultadoGuardrail,
+)
 from frigus_ai.agents.nodes.names import NodeName
 from frigus_ai.agents.prompts.guardrail import GuardrailPrompts
 from frigus_ai.graph.llm import llm_rapido
 from frigus_ai.graph.state import Estado
-from config.logging import get_logger
 
 logger = get_logger(__name__)
 

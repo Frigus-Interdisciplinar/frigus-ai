@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-from typing import Optional
 
 # Valores exatos dos enums do schema (data/sql/schema.sql) — usados para
 # normalizar entradas em linguagem natural do LLM (ex.: "geladeira" -> "Geladeira").
@@ -17,7 +16,7 @@ DIAS_ATENCAO = 7   # amarelo
 DIAS_CRITICO = 2   # vermelho
 
 
-def normalize_enum(value: Optional[str], allowed: list[str]) -> Optional[str]:
+def normalize_enum(value: str | None, allowed: list[str]) -> str | None:
     """
     Resolve um valor livre (ex.: vindo do LLM) para o valor exato do enum,
     comparando sem acento/case. Retorna None se não encontrar correspondência.
@@ -38,7 +37,7 @@ def normalize_enum(value: Optional[str], allowed: list[str]) -> Optional[str]:
     return None
 
 
-def compute_product_status(expire_date: date, hoje: Optional[date] = None) -> str:
+def compute_product_status(expire_date: date, hoje: date | None = None) -> str:
     """
     Calcula o semáforo (Fresco | Próximo do vencimento | Vencido) a partir da
     data de validade, com os mesmos limiares usados nas queries de estoque.
@@ -54,7 +53,7 @@ def compute_product_status(expire_date: date, hoje: Optional[date] = None) -> st
     return "Fresco"
 
 
-def resolve_stock_id(cur, user_id: int) -> Optional[int]:
+def resolve_stock_id(cur, user_id: int) -> int | None:
     """
     Resolve o stock_id do usuário: users -> user_groups -> groups -> stocks.
     Se o usuário pertencer a mais de um grupo, usa o primeiro vínculo (ORDER BY user_groups.id).
@@ -94,13 +93,13 @@ def next_id(cur, table: str) -> int:
 
 __all__ = [
     "CATEGORY_VALUES",
-    "STORAGE_PLACE_VALUES",
-    "PRODUCT_STATUS_VALUES",
     "DIAS_ATENCAO",
     "DIAS_CRITICO",
-    "normalize_enum",
+    "PRODUCT_STATUS_VALUES",
+    "STORAGE_PLACE_VALUES",
     "compute_product_status",
-    "resolve_stock_id",
     "expiring_date_threshold",
     "next_id",
+    "normalize_enum",
+    "resolve_stock_id",
 ]

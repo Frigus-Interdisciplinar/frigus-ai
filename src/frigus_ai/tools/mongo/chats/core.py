@@ -1,12 +1,11 @@
 from dataclasses import asdict
-from datetime import datetime, timezone
-
-from frigus_ai.tools.mongo.helpers import _gerar_resumo, _gerar_perfil
-from frigus_ai.tools.mongo.connection import banco
-from frigus_ai.tools.mongo.chats.schemas import ChatDocument, Mensagem
-from config.logging import get_logger
+from datetime import UTC, datetime
 
 import frigus_ai.tools.mongo.users.core as perfis
+from config.logging import get_logger
+from frigus_ai.tools.mongo.chats.schemas import ChatDocument, Mensagem
+from frigus_ai.tools.mongo.connection import banco
+from frigus_ai.tools.mongo.helpers import _gerar_perfil, _gerar_resumo
 
 logger = get_logger(__name__)
 
@@ -40,7 +39,7 @@ def atualizar_mensagens(session_id: str, mensagens_novas: list[Mensagem]) -> Non
         {"session_id": session_id},
         {
             "$push": {"messages": {"$each": [m.para_dict() for m in mensagens_novas]}},
-            "$set":  {"updated_at": datetime.now(timezone.utc)},
+            "$set":  {"updated_at": datetime.now(UTC)},
         }
     )
 
