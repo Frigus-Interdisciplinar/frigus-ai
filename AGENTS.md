@@ -31,7 +31,7 @@ ficar desatualizado.
 | Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph + histórico em Mongo (`tools/mongo/chats`). Checkpointer agora é `MongoDBSaver` (`graph/builder.py`) — estado sobrevive a restart. Falta só sessão HTTP de verdade, que depende da API |
 | Memória de longo prazo | ⚠️ Parcial | `tools/mongo/users` — perfil comportamental (resumo de hábitos) por `user_id`, persistente no Mongo. Avaliar se cobre o requisito ou se precisa de algo além do resumo (ex. memória vetorial) |
 | MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | `mcp_server/` e `a2a_server/` só têm `__init__.py` — ver TODO.md |
-| RAG com fonte externa indicada | ✅ Feito | `tools/faq_tools.py` — FAISS sobre `data/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
+| RAG com fonte externa indicada | ✅ Feito | `tools/faq_tools.py` — FAISS sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `agents/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
 | Guardrail | ✅ Feito | `agents/nodes/guardrail/{entrada,saida}.py` |
 | Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ❌ Pendente | ver TODO.md |
@@ -57,8 +57,10 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
 - MongoDB para histórico de conversa (`tools/mongo/chats`), perfil comportamental
   (`tools/mongo/users`) e checkpoint do LangGraph (`MongoDBSaver`, coleções `graph_checkpoints`/
   `graph_checkpoint_writes`)
-- FAISS para RAG do FAQ sobre `data/Frigus-Documentacao.pdf`
+- FAISS para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf`
 - Redis e Qdrant **não existem no repo** — nenhuma tool implementada ainda (ver TODO.md)
+- `pytest` (`tests/`, espelhando a estrutura do pacote) + `ruff` (lint) + CI no GitHub Actions
+  (`.github/workflows/ci.yml`)
 
 ## Estrutura
 
@@ -71,7 +73,7 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 
 interfaces/terminal/    app.py (loop de input) + display.py (Rich + pyfiglet) — única interface hoje
 config/                 settings.py (env vars via pydantic-settings), models.py (Model enum + providers), docker.py, logging.py
-data/                   Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
+data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
 main.py                 dispatcher fino — `python main.py <interface>`
 ```
 
@@ -117,6 +119,11 @@ trabalho de cada um começar (ver TODO.md).
   `git log` para exemplos reais.
 - Mudança termina em **Pull Request** para `main` — mantém o histórico navegável e dá um ponto de
   review antes do merge.
+- **Toda feature nova vem com pelo menos um teste.** Não é gate automático de CI (ainda) — é norma
+  de review: se o PR adiciona comportamento e não tem teste nenhum, o teste vem junto ou o PR
+  explica por que não dá. Alvo é a lógica de decisão (branch, parser, cálculo, regra de negócio),
+  não getter/wrapper trivial. Se a coisa só é testável com banco/LLM real, mocke a fronteira (ver
+  `tests/agents/nodes/guardrail/test_entrada.py`, que cobre só os caminhos determinísticos).
 
 ## Padrões de organização e clean code
 
@@ -137,10 +144,13 @@ trabalho de cada um começar (ver TODO.md).
 
 ```bash
 uv venv && uv sync   # instalar dependências
-python main.py       # rodar o assistente no terminal (sobe Postgres/Mongo via Docker automaticamente)
+just run             # rodar no terminal (sobe Postgres/Mongo via Docker automaticamente)
+just test            # suíte de testes (não precisa de .env nem banco)
+just check           # lint (roda no CI em push/PR pra main); `just fix` aplica o que dá
 ```
 
-Não há suíte de testes no projeto ainda (ver TODO.md).
+`just run` chama o console script `frigus-ai` (`[project.scripts]`), que é o mesmo
+`python main.py terminal`. Ver `justfile` para as demais receitas.
 
 ## Ao adicionar uma tool nova
 

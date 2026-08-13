@@ -70,6 +70,47 @@ tools/graph, todos os 10 nós) sem `ModuleNotFoundError`. **Não verificado nest
 `python main.py terminal` ponta a ponta contra Postgres/Mongo reais — não havia `.env` nem Docker
 disponíveis neste ambiente. Rodar localmente antes de dar merge.
 
+## Env vars — estado atual e gestão remota (Infisical)
+
+`.env.example` bate 1:1 com `config/settings.py:Settings` hoje (`GEMINI_API_KEY`, `GROQ_API_KEY`,
+`ANTHROPIC_API_KEY`, `DATABASE_URI`, `MONGODB_URI`) — nenhum campo faltando. O que falta é o env
+**final**, que só fica completo conforme as features pendentes entrarem. Já documentado como
+comentário no `.env.example` pra não virar surpresa:
+
+- [ ] `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` — entram com a seção de
+      Observabilidade
+- [ ] `REDIS_URL` — entra com a primeira tool de Redis
+- [ ] `QDRANT_URL` / `QDRANT_API_KEY` / `QDRANT_COLLECTION_NAME` — entram com a migração do FAQ
+- [ ] Se a API sair deste repo, o que ela precisar de auth (ex.: um secret de signup, como o
+      `SIGNUP_SECRET` do assessor-ai)
+
+**Regra:** não adicionar campo ao `Settings` antes da feature existir. `Settings()` é instanciado no
+import de `config/settings.py`, então campo obrigatório sem uso quebra o projeto inteiro pra quem
+não tiver a var — foi exatamente o que obrigou o `tests/conftest.py` a existir.
+
+### Infisical para env remota — viável, mesmo caminho do assessor-ai
+
+O assessor-ai já usa (`.infisical.json` + `just dev` = `infisical run -- <cmd>`), então é caminho
+testado no projeto irmão, não aposta. O mecanismo é simples: o CLI busca os segredos do workspace e
+injeta no ambiente do processo filho — o código não muda nada (continua lendo via `pydantic-settings`),
+e `.env` local segue funcionando pra quem não quiser usar.
+
+Vantagem concreta pro trabalho em grupo: hoje cada pessoa mantém o próprio `.env` na mão, e chave
+nova (as pendentes acima) vira mensagem no grupo. Com Infisical, é um `infisical run` e todo mundo
+tem a mesma versão.
+
+- [ ] Confirmar que o tier gratuito cobre o tamanho do time e os ambientes necessários — **verificar
+      antes de adotar**, não assumir (mesma cautela da seção de Observabilidade: a escola não paga
+      ferramenta)
+- [ ] Criar o workspace, subir os segredos e commitar `.infisical.json` (só tem `workspaceId` e
+      mapeamento de ambiente — não carrega segredo nenhum, pode ir pro repo)
+- [ ] Adicionar a receita `dev` ao `justfile` (`infisical run -- {{cmd}} {{mode}}`), mantendo `run`
+      como está pra quem usa `.env` local
+- [ ] Documentar no README qual dos dois caminhos usar
+
+**Não bloqueia nada.** O `.env` local resolve hoje; isso é conveniência de time e higiene de segredo
+(evita chave circulando por chat/pendrive), não pré-requisito de nenhuma feature.
+
 ## Seleção interativa de interface (questionary) — avaliado, adiado
 
 `main.py` hoje só resolve `terminal` (`python main.py terminal`). Ideia: quando existir mais de uma
@@ -204,22 +245,44 @@ mas somam pra "complexidade do projeto" (item extra) e resolvem gaps reais:
 - [ ] Adicionar os dois serviços ao `docker-compose.yml` (hoje só tem `postgres`/`mongo`) quando a
       primeira tool de cada um existir — não subir infra sem uso
 
-## Testes
+## Testes — suíte base + CI concluídos
 
-Não existe suíte de testes nem workflow de CI no projeto (`.github/workflows/` não existe — não é
-"confirmar antes de recriar", é criar do zero). Seguir o ponto de partida do assessor-ai: começar
-pelas funções puras, sem precisar mockar banco.
+`tests/` espelha a estrutura do pacote (mesmo corte do assessor-ai). 48 testes, rodam em ~4s, sem
+tocar banco nem LLM.
 
-- [ ] `pytest` como dev dependency (`uv add --dev pytest`)
-- [ ] `tests/tools/` — `Response.ok`/`Response.error` (`tools/response.py`), helpers de
-      `tools/postgres/helpers.py` (`normalize_enum`, cálculo de semáforo de validade, `next_id`) que
-      não dependem de conexão real
-- [ ] Depois: `tests/agents/nodes/guardrail/` (bloqueio determinístico por regex, sem chamar LLM)
-- [ ] `.github/workflows/ci.yml` rodando `ruff check .` + `pytest` (`ruff` também ainda não é
-      dependência do projeto — adicionar junto)
-- [ ] **Em discussão:** convenção de "toda feature nova vem com pelo menos um teste" — documentar em
-      `AGENTS.md` (seção "Fluxo de trabalho") como norma, não como gate de CI logo de cara. Faz
-      sentido como hábito daqui pra frente (evita o mesmo débito que o próprio assessor-ai acumulou —
-      vários módulos lá ainda sem teste); começar como convenção registrada e só promover pra check
-      obrigatório de PR depois que a suíte base (itens acima) existir — travar PR sem teste antes
-      disso é fricção sem rede de segurança nenhuma por trás
+- [x] `pytest` e `ruff` como dev dependencies (`[dependency-groups] dev`)
+- [x] `tests/tools/test_response.py` — `Response.ok`/`Response.error` (incl. `Exception` virando str)
+- [x] `tests/tools/postgres/test_helpers.py` — `normalize_enum` (case/acento/espaço, sem
+      correspondência, valor vazio), `compute_product_status` (limites exatos do semáforo:
+      vencido / vence hoje / `DIAS_ATENCAO` / primeiro dia fresco) e `expiring_date_threshold`.
+      `next_id`/`resolve_stock_id` ficaram de fora — precisam de cursor real, são teste de integração
+- [x] `tests/agents/nodes/guardrail/test_entrada.py` — caminhos determinísticos do guardrail, sem
+      LLM: `_detectar_injecao`, `_detectar_acesso_interno`, precedência entre os dois,
+      `anonimizar_entrada` (CPF/email/telefone/senha, reversibilidade pelo mapa, texto sem PII) e
+      `_extrair_categoria` (incl. o fallback deliberado pra `APROVADO` quando o LLM foge do formato)
+- [x] `tests/conftest.py` com env vars fake. **Achado (o mesmo do assessor-ai):**
+      `frigus_ai/tools/__init__.py` importa os cores das tools, que puxam a cadeia até
+      `config/settings.py:Settings()` — validado no import. Ou seja, até um teste de função pura
+      quebrava na *coleção* sem `GEMINI_API_KEY`/`GROQ_API_KEY`/`DATABASE_URI`. Resolvido no
+      `conftest.py` (com `setdefault`, pra não atropelar `.env` local) em vez de espalhar valores
+      dummy no YAML do CI — assim a suíte roda sem `.env` em qualquer lugar
+- [x] `.github/workflows/ci.yml` — push/PR pra `main`: `uv sync --locked` → `ruff check .` → `pytest`
+- [x] `[tool.ruff]` no `pyproject.toml`. **Achado:** sem config própria, o ruff subia a árvore de
+      diretórios e herdava regras de fora do repo — resultado não reprodutível entre máquinas/CI.
+      Fixado `target-version = "py313"` + `ignore = ["BLE001", "SIM117", "DTZ011"]` (cada um com o
+      motivo comentado no arquivo). Os 128 achados restantes foram corrigidos (`ruff check --fix`
+      pros automáticos; `check=False` explícito nos `subprocess.run` de `config/docker.py`, que
+      inspecionam `returncode`/stdout de propósito, e `dict()` → literal em `graph/llm.py`).
+      `ruff check .` passa limpo hoje
+
+- [ ] **Ainda sem teste:** `chat/` (service/runner com o grafo mockado — o assessor-ai tem esse
+      padrão pronto em `tests/chat/`), `tools/mongo/`, `tools/postgres/{estoque,compras,receitas,
+      financeiro}/core.py`, e os nós além do guardrail de entrada (`router`, `juiz`, `orquestrador`,
+      `graph/builder.py`). Priorizar `chat/` e `juiz` — são os que concentram lógica de decisão
+- [ ] Decidir separação `tests/unit/` vs. `tests/integration/` antes da suíte crescer, ou manter
+      achatado enquanto for pequena
+- [x] **Convenção adotada:** "toda feature nova vem com pelo menos um teste", registrada em
+      `AGENTS.md` (seção "Fluxo de trabalho") como norma de PR, **não** como gate automático de CI.
+      Motivo: agora que a suíte base existe, a convenção tem no que se apoiar — mas travar PR por
+      cobertura antes de `chat/` e os nós estarem cobertos seria fricção sem rede de segurança
+      proporcional. Promover a gate obrigatório quando os itens acima saírem

@@ -31,7 +31,7 @@ despensa). Ele atua em cinco domínios:
 **Financeiro (MoneySaving)** — gastos mensais, comparação entre meses, valor estimado de alimentos
 descartados e evolução do desperdício ao longo do tempo.
 
-**FAQ** — dúvidas sobre o funcionamento do app Frigus, via RAG (FAISS) sobre `data/Frigus-Documentacao.pdf`.
+**FAQ** — dúvidas sobre o funcionamento do app Frigus, via RAG (FAISS) sobre `data/pdf/Frigus-Documentacao.pdf`.
 
 Para tudo fora desses domínios (small talk, perguntas fora de escopo), o próprio roteador responde
 diretamente ao usuário.
@@ -88,7 +88,7 @@ frigus-ai/
 ├── interfaces/terminal/             # app.py (loop de input) + display.py (Rich + pyfiglet)
 ├── config/                          # settings, models (LLM), logging, docker (compose up/down)
 ├── data/
-│   ├── Frigus-Documentacao.pdf
+│   ├── pdf/Frigus-Documentacao.pdf
 │   └── sql/schema.sql               # DDL fornecido (schema `dataload`, 20 tabelas + 9 enums)
 │
 └── src/frigus_ai/                   # Pacote instalável com o "cérebro" do assistente
@@ -208,7 +208,15 @@ docker compose up -d
 ### Execução
 
 ```bash
-python main.py
+just run          # equivalente a `python main.py terminal`
+```
+
+### Desenvolvimento
+
+```bash
+just test         # pytest (não precisa de .env nem banco)
+just check        # ruff check — mesmo lint que roda no CI
+just fix          # ruff check --fix
 ```
 
 Digite `/exit` para encerrar.
