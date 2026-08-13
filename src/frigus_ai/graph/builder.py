@@ -3,10 +3,13 @@ os.environ["LANGGRAPH_ALLOWED_MSGPACK_MODULES"] = (
     "frigus_ai.agents.nodes.names,frigus_ai.graph.state"
 )
 
+import functools
+
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.mongodb import MongoDBSaver
 
 from frigus_ai.graph.state import Estado, Route
+from frigus_ai.tools.mongo.connection import banco
 
 from frigus_ai.agents.nodes.names import NodeName
 from frigus_ai.agents.nodes import (
@@ -113,7 +116,20 @@ grafo.add_conditional_edges(
 grafo.add_edge(NodeName.GUARDRAIL_SAIDA, END)
 
 
-memory = MemorySaver()
-fluxo_agentes = grafo.compile(checkpointer=memory)
+@functools.cache
+def fluxo_agentes():
+    """
+    Compila o grafo sob demanda. Lazy porque o MongoDBSaver abre conexão com o
+    Mongo — nada de I/O no import do módulo (mesma regra das demais conexões).
+    """
+
+    checkpointer = MongoDBSaver(
+        banco.client,
+        db_name=banco.name,
+        checkpoint_collection_name="graph_checkpoints",
+        writes_collection_name="graph_checkpoint_writes",
+    )
+    return grafo.compile(checkpointer=checkpointer)
+
 
 __all__ = ["fluxo_agentes"]

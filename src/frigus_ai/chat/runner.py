@@ -29,7 +29,7 @@ def executar(
     # stock_id/user_id ficam disponíveis via contextvars para as tools de
     # Postgres (tools/postgres/context.py) durante toda a invocação do grafo.
     with session_context(user_id=user_id, stock_id=stock_id):
-        estado_final = fluxo_agentes.invoke(
+        estado_final = fluxo_agentes().invoke(
             estado_inicial,
             config={"configurable": {"thread_id": session_id}},
         )
