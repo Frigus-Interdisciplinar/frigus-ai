@@ -1,18 +1,19 @@
 from pathlib import Path
+
 from langchain.tools import tool
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from config.settings import settings
-from config.models import Model
 from config.logging import get_logger
+from config.models import Model
+from config.settings import settings
 
 log = get_logger(__name__)
 
 
-_PDF_PATH      = Path("data/Frigus-Documentacao.pdf")
+_PDF_PATH      = Path("data/pdf/Frigus-Documentacao.pdf")
 _CHUNK_SIZE    = 700
 _CHUNK_OVERLAP = 150
 _K_NUMBER      = 5
