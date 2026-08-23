@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings
 
 
@@ -6,8 +8,14 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str
     ANTHROPIC_API_KEY: str = ""
 
-    DATABASE_URI: str
+    POSTGRES_URI: str
     MONGODB_URI: str = "mongodb://localhost:27017"
+
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = "frigus-ai"
+
+    SPOONACULAR_API_KEY: str = ""
 
     model_config = {
         "env_file": ".env",
@@ -18,3 +26,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# O SDK do LangSmith lê os.environ direto (dentro do langchain-core) — o objeto
+# Settings acima não é o suficiente pra ativar o tracing.
+if settings.LANGSMITH_TRACING:
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY
+    os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT
