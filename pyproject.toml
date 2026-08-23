@@ -18,10 +18,14 @@ dependencies = [
     "langchain-text-splitters>=1.1",
     "langgraph>=1.1",
     "langgraph-checkpoint-mongodb>=0.4",
+    "langsmith>=0.10",
 
     # RAG (FAQ)
     "faiss-cpu>=1.14",
     "pypdf>=6.0",
+
+    # Integrações externas (HTTP)
+    "httpx>=0.28",
 
     # Persistência
     "psycopg2-binary>=2.9",
