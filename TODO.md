@@ -73,12 +73,11 @@ disponíveis neste ambiente. Rodar localmente antes de dar merge.
 ## Env vars — estado atual e gestão remota (Infisical)
 
 `.env.example` bate 1:1 com `config/settings.py:Settings` hoje (`GEMINI_API_KEY`, `GROQ_API_KEY`,
-`ANTHROPIC_API_KEY`, `DATABASE_URI`, `MONGODB_URI`) — nenhum campo faltando. O que falta é o env
-**final**, que só fica completo conforme as features pendentes entrarem. Já documentado como
-comentário no `.env.example` pra não virar surpresa:
+`ANTHROPIC_API_KEY`, `POSTGRES_URI`, `MONGODB_URI`, `LANGSMITH_TRACING`/`LANGSMITH_API_KEY`/
+`LANGSMITH_PROJECT`) — nenhum campo faltando. O que falta é o env **final**, que só fica completo
+conforme as features pendentes entrarem. Já documentado como comentário no `.env.example` pra não
+virar surpresa:
 
-- [ ] `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` — entram com a seção de
-      Observabilidade
 - [ ] `REDIS_URL` — entra com a primeira tool de Redis
 - [ ] `QDRANT_URL` / `QDRANT_API_KEY` / `QDRANT_COLLECTION_NAME` — entram com a migração do FAQ
 - [ ] Se a API sair deste repo, o que ela precisar de auth (ex.: um secret de signup, como o
@@ -123,22 +122,15 @@ seta em vez de exigir o nome exato como argumento — reduz fricção pra quem n
       menu interativo do `questionary` como atalho amigável — as duas formas convivem, não é
       substituição
 
-## API (FastAPI/Flask) — requisito da disciplina, localização pendente
+## API (FastAPI/Flask) — requisito da disciplina
 
-**Decisão em aberto:** a API fica neste mesmo repositório (`api/` já existe como placeholder) ou
-vira um repositório separado que consome este projeto como dependência/serviço? Não implementar
-nada em `api/` antes dessa decisão — avaliar com o time:
+**Localização decidida: mesmo repositório** (ver "Decisão: API no mesmo repo ou separado?" abaixo).
 
-- Mesmo repo: mais simples de desenvolver e entregar pra disciplina, reusa `chat/service.py`
-  (refactor acima) direto, sem versionar/publicar nada
-- Repo separado: força a API a ser um cliente de verdade do domínio (via lib publicada ou HTTP
-  interno), mais "arquitetura de produção", mas overhead desnecessário pro prazo da disciplina
+Seguir o padrão do assessor-ai (`interfaces/api/`): `main.py` (app FastAPI), `auth.py` (se precisar
+de API key), `routes/` por recurso (`chats`, `health`), `schemas/` (Pydantic de request/response).
+Rotas chamam só o módulo de serviço, nunca o grafo ou as tools direto. Ver
+`.agents/skills/fastapi.md` antes de mexer em `interfaces/api/`.
 
-Depois da decisão, seguir o padrão do assessor-ai (`interfaces/api/`): `main.py` (app FastAPI),
-`auth.py` (se precisar de API key), `routes/` por recurso (`chats`, `health`), `schemas/` (Pydantic
-de request/response). Rotas chamam só o módulo de serviço, nunca o grafo ou as tools direto.
-
-- [ ] Decidir localização (mesmo repo vs. repo separado)
 - [ ] Esqueleto de rotas: `POST /chats`, `POST /chats/{id}/messages`, `GET /chats/{id}/messages`
 - [ ] Controle de sessão por usuário de verdade (hoje é só `thread_id` gerado em memória no
       terminal) — ver item "Checkpointer persistente" abaixo, é pré-requisito
@@ -184,8 +176,8 @@ começar de verdade, não versionar pasta placeholder sem uso).
 - [ ] **A2A**: expor `fluxo_agentes` (ou o módulo de serviço, pós-refactor) como agente
       Agent-to-Agent, pra outro sistema multiagente conseguir conversar com o Frigus.AI como um
       agente externo
-- [ ] Decidir se os dois vivem só neste repo ou se algum consome a API (depende da decisão de
-      localização da API acima)
+- [ ] Decidir se os dois vivem só neste repo ou se algum consome a API (API fica neste repo —
+      decidido, ver seção "API (FastAPI/Flask)" acima)
 - [ ] **Em discussão:** usar o A2A como *cliente* também, não só servidor — trocar o agente
       `financeiro` local por uma chamada A2A pro domínio financeiro do assessor-ai, já que os dois
       projetos são irmãos. **Ressalva a resolver antes de decidir:** o `financeiro` do Frigus
@@ -200,15 +192,20 @@ começar de verdade, não versionar pasta placeholder sem uso).
 
 ## Observabilidade / SRE — requisito da disciplina
 
-Hoje não existe nenhuma instrumentação de tracing sobre o grafo — sem visibilidade de latência,
-tokens ou erro por nó. Precisa cobrir, no mínimo, os 5 pontos do enunciado:
+Precisa cobrir, no mínimo, os 5 pontos do enunciado:
 
-- [ ] **Tracing por nó** — avaliar LangSmith (mesmo caminho que o assessor-ai já percorreu: variáveis
-      em `config/settings.py`, propagar pro `os.environ`, tags/metadata com `user_id`/`session_id`
-      no `.invoke()`) ou alternativa gratuita equivalente, dado que a escola não paga API de LLM nem
-      de observabilidade — confirmar tier gratuito antes de adotar
-- [ ] **Latência interagentes e tempo total de resposta** — depende do tracing acima, ou logging
-      manual de timestamp por nó (`config/logging.py`) se o tracing de terceiro não for viável
+- [x] **Tracing por nó** — LangSmith, mesmo caminho do assessor-ai: `LANGSMITH_TRACING`/
+      `LANGSMITH_API_KEY`/`LANGSMITH_PROJECT` em `config/settings.py` (com default `False`/vazio pra
+      não quebrar quem não tiver `.env`), propagadas pro `os.environ` logo após `settings = Settings()`
+      (o SDK lê `os.environ` direto, `pydantic-settings` não é suficiente); tags/metadata
+      (`user_id`/`session_id`) no `.invoke()` de `chat/runner.py`; `@traceable` em
+      `chat/repositories.py` (`buscar_perfil`, `buscar_historico`, `salvar_mensagens`) pra cobrir a
+      latência de Mongo que o auto-tracing do LangChain não pega, redigindo PII via
+      `agents/nodes/guardrail/entrada.py:anonimizar_entrada` (mesmo `process_inputs`/`process_outputs`
+      do assessor-ai) antes de mandar pro LangSmith Cloud. **Mesmo gap do assessor-ai:** o input cru do
+      `guardrail_entrada_node` (auto-rastreado) ainda não passa pela redação — só o output
+- [ ] **Latência interagentes e tempo total de resposta** — já disponível no dashboard do LangSmith
+      (tracing acima cobre), falta só confirmar/consultar
 - [ ] **Índice de erros** — contabilizar falhas de tool (`Response.error`), bloqueios de guardrail e
       reprovações do juiz que esgotam tentativas, como uma taxa sobre o total de turnos
 - [ ] **Custo estimado para 100 e 1000 usuários/semana** — modelo simples: (tokens médios de
@@ -245,6 +242,59 @@ mas somam pra "complexidade do projeto" (item extra) e resolvem gaps reais:
 - [ ] Adicionar os dois serviços ao `docker-compose.yml` (hoje só tem `postgres`/`mongo`) quando a
       primeira tool de cada um existir — não subir infra sem uso
 
+## Spoonacular — client + tabela de lookup de ingredientes
+
+Ver `.agents/skills/spoonacular.md` pros 6 endpoints que vamos consumir (Ingredient Search, Get
+Ingredient Information, Search Recipes by Ingredients/Nutrients, Get Recipe/Similar Information) e o
+motivo de cache ser obrigatório (tier gratuito: 50 pontos/dia). Tabela de lookup fica em Mongo, não
+Postgres — schema `dataload` é fornecido pela disciplina e compartilhado com outras apps do projeto,
+não faz sentido criar tabela lá pra algo que só o frigus-ai usa; o dado (`spoonacular_id ↔
+estoque_item_id`) também não tem relação nenhuma pra justificar relacional.
+
+### ODM (MongoEngine/Beanie) — avaliado, descartado
+
+`tools/mongo/{chats,users}` já usam `@dataclass` + `asdict()` puro contra `pymongo`, sem ODM — é o
+padrão estabelecido, duas vezes. Motivo de não trocar: Pydantic aqui é reservado pra schema de tool
+exposta ao agente (`args_schema=` do `@tool`, ver `tools/postgres/*/schemas.py`); `chats`/`users` não
+são tool, são storage interno, e `@dataclass` marca essa diferença. A tabela de lookup é o mesmo
+caso — ninguém expõe ela pro agente.
+
+Se algum dia justificar adotar um ODM de verdade (mais domínios Mongo, dor real de mapear dict à
+mão): **MongoEngine**, não Beanie. Beanie é async, construído em cima do `motor` — trocaria o driver
+síncrono (`pymongo`) que todo o resto do projeto usa por design (I/O é síncrono de propósito, ver
+`.agents/skills/fastapi.md`). MongoEngine é síncrono, plugaria ao lado do `pymongo` que já existe
+sem duplicar driver.
+
+### Plano de implementação
+
+- [x] `uv add httpx` — client HTTP, nenhum ainda existia no projeto (ver `other-tools.md`).
+      `.venv` criado (`py -3.13 -m venv`, mesmo padrão do `justfile`), `uv sync` rodado — `uv.lock`
+      atualizado de verdade, `ruff check` limpo, `pytest` 48 passed
+- [x] `SPOONACULAR_API_KEY` em `config/settings.py` + `.env.example`, com default `""` (mesmo padrão
+      de `LANGSMITH_API_KEY`/`ANTHROPIC_API_KEY`) — não quebra quem não tiver a var enquanto os
+      passos abaixo não terminam
+- [x] `tools/spoonacular/connection.py` — client `httpx` configurado uma vez (base URL, `apiKey`
+      como default param, mesclado em toda chamada). Eager no import (mesmo padrão de
+      `tools/mongo/connection.py`) porque `httpx.Client()` não abre socket no construtor — diferente
+      de `tools/postgres/connection.py`, onde o `ThreadedConnectionPool` abre conexão de verdade e
+      por isso precisa do getter lazy com `global _pool`
+- [x] `tools/spoonacular/schemas.py` — Pydantic (`args_schema` de tool, essas sim chamadas pelo
+      agente), uma classe por endpoint do `spoonacular.md`. **Simplificação deliberada:** cortou
+      `sort`/`sortDirection`/`offset` de `SearchIngredientsArgs` e `addWinePairing`/`addTasteData`
+      de `GetRecipeInformationArgs` — não servem o caso de uso "receita com o que tem no estoque",
+      YAGNI. **Default diferente do documentado na API:** `ranking=2` (minimiza faltando, não 1) e
+      `ignore_pantry=True` (não `False`) em `FindRecipesByIngredientsArgs` — o default da API é
+      genérico, o do produto é "o que dá pra fazer com o que já tenho"
+- [ ] `tools/spoonacular/core.py` — funções decoradas `@tool` + `@log_tool` chamando os endpoints
+- [ ] `tools/mongo/spoonacular/schemas.py` — `IngredienteMatchDocument` (`@dataclass`, ver sketch já
+      discutido no chat)
+- [ ] `tools/mongo/spoonacular/core.py` — `buscar_match(spoonacular_id)` / `salvar_match(...)`; toda
+      tool acima que resolve ingrediente passa por aqui antes de gastar ponto de API
+- [ ] Registrar a(s) tool(s) no agente `receitas` (`agents/nodes/receitas.py` / `graph/agents.py`)
+- [ ] Atualizar tabela de tools no README.md
+- [ ] Pelo menos um teste (`tests/tools/spoonacular/` ou equivalente) — mocka a chamada HTTP, cobre
+      a lógica de decisão (cache hit vs. miss em `buscar_match`), não o client em si
+
 ## Testes — suíte base + CI concluídos
 
 `tests/` espelha a estrutura do pacote (mesmo corte do assessor-ai). 48 testes, rodam em ~4s, sem
@@ -263,7 +313,7 @@ tocar banco nem LLM.
 - [x] `tests/conftest.py` com env vars fake. **Achado (o mesmo do assessor-ai):**
       `frigus_ai/tools/__init__.py` importa os cores das tools, que puxam a cadeia até
       `config/settings.py:Settings()` — validado no import. Ou seja, até um teste de função pura
-      quebrava na *coleção* sem `GEMINI_API_KEY`/`GROQ_API_KEY`/`DATABASE_URI`. Resolvido no
+      quebrava na *coleção* sem `GEMINI_API_KEY`/`GROQ_API_KEY`/`POSTGRES_URI`. Resolvido no
       `conftest.py` (com `setdefault`, pra não atropelar `.env` local) em vez de espalhar valores
       dummy no YAML do CI — assim a suíte roda sem `.env` em qualquer lugar
 - [x] `.github/workflows/ci.yml` — push/PR pra `main`: `uv sync --locked` → `ruff check .` → `pytest`
@@ -289,8 +339,8 @@ tocar banco nem LLM.
 # TODO — frigus.ai
 
 Baseado no estado real do repo (`README.md` em `main`, commit atual: 7 commits). Este documento separa o que já
-está implementado do que falta, e documenta as duas decisões em aberto: integração com o `assessor-ai` e
-localização da API.
+está implementado do que falta, e documenta a decisão em aberto restante: integração com o `assessor-ai`
+(localização da API já decidida — mesmo repo, ver seção abaixo).
 
 ---
 
@@ -470,8 +520,7 @@ vez pra rota 2.
 
 ## Decisão: API no mesmo repo ou separado?
 
-**Resposta: mesmo repo.** Já existe uma pasta `api/` no repo do Frigus — então essa decisão já foi tomada
-na prática, só falta confirmar se o conteúdo de lá está funcional. Motivos pra manter assim:
+**Resposta: mesmo repo — confirmado.** Motivos:
 
 - Projeto acadêmico, escopo pequeno, provavelmente mantido por poucas pessoas
 - API, grafo e tools compartilham o mesmo ciclo de vida e o mesmo deploy
@@ -479,9 +528,9 @@ na prática, só falta confirmar se o conteúdo de lá está funcional. Motivos 
   nenhum ganho real nesse estágio
 
 Só valeria separar se a API precisasse de deploy/versionamento independente do grafo, ou se times diferentes
-fossem mexer em cada parte — nenhum dos dois parece ser o caso aqui.
-
-- [ ] Verificar o que já existe dentro de `api/` (rotas, se usa FastAPI, se tá conectado ao grafo)
+fossem mexer em cada parte — nenhum dos dois parece ser o caso aqui. Implementação vai em
+`interfaces/api/` (pasta `api/` do root não existe mais desde o refactor pra `src/`), seguindo o
+padrão do assessor-ai — ver seção "API (FastAPI/Flask)" acima.
 
 ---
 

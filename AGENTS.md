@@ -24,7 +24,7 @@ ficar desatualizado.
 
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ❌ Pendente | `api/` só tem `__init__.py`. **Decisão em aberto:** ver TODO.md — API fica neste repo ou vira repo separado |
+| API FastAPI/Flask | ❌ Pendente | `api/` só tem `__init__.py`. **Localização decidida:** mesmo repo (ver TODO.md) — falta implementar |
 | Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`agents/nodes/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
@@ -35,7 +35,7 @@ ficar desatualizado.
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `agents/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
 | Guardrail | ✅ Feito | `agents/nodes/guardrail/{entrada,saida}.py` |
 | Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ❌ Pendente | ver TODO.md |
-| Observabilidade/SRE — latência interagentes e tempo total de resposta | ❌ Pendente | sem tracing hoje (nem LangSmith nem logging estruturado de latência) |
+| Observabilidade/SRE — latência interagentes e tempo total de resposta | ⚠️ Parcial | Tracing via LangSmith ligado (`config/settings.py`, `chat/runner.py`, `chat/repositories.py`) — dado já disponível no dashboard, falta só consultar/reportar |
 | Observabilidade/SRE — índice de erros | ❌ Pendente | |
 | Observabilidade/SRE — custo/ROI | ❌ Pendente | |
 | Observabilidade/SRE — custo por resolução | ❌ Pendente | |
@@ -124,6 +124,7 @@ trabalho de cada um começar (ver TODO.md).
   explica por que não dá. Alvo é a lógica de decisão (branch, parser, cálculo, regra de negócio),
   não getter/wrapper trivial. Se a coisa só é testável com banco/LLM real, mocke a fronteira (ver
   `tests/agents/nodes/guardrail/test_entrada.py`, que cobre só os caminhos determinísticos).
+- Pegadinha nova de lib vira entrada em `.agents/skills/<lib>.md`.
 
 ## Padrões de organização e clean code
 
@@ -162,6 +163,18 @@ just check           # lint (roda no CI em push/PR pra main); `just fix` aplica 
    `tools/postgres/context.py` — nunca adicionar `user_id`/`stock_id` ao schema da tool.
 5. Registrar a tool no agente correspondente em `agents/nodes/`.
 6. Atualizar a tabela de estrutura no README.md.
+
+## Skills por biblioteca
+
+`.agents/skills/` guarda convenções e pegadinhas específicas de cada lib/serviço externo usada no
+projeto (pydantic, fastapi, mongo, langchain, spoonacular — um arquivo por lib, regra + exemplo do
+que fazer e do que não fazer).
+`dependencies.md`, `responses.md`, `streaming.md`, `path-operations.md` e `other-tools.md` são
+material de referência do skill oficial do FastAPI, linkados a partir de `fastapi.md`. São achados
+reais deste repo ou do assessor-ai (repo irmão, mesmo stack de Mongo/LangChain — sinalizado quando o
+achado é de lá), não tutorial genérico. Consulte antes de escrever código novo que toque uma dessas
+libs; adicione uma entrada nova quando encontrar uma pegadinha não óbvia que provavelmente vai se
+repetir.
 
 ## Próximos passos
 
