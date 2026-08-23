@@ -9,6 +9,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      LANGSMITH_TRACING: "false"
+      LANGSMITH_API_KEY: dummy
+      LANGSMITH_PROJECT: frigus-ai
 
     steps:
       - uses: actions/checkout@v4

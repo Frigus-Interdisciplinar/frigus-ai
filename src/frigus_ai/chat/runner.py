@@ -31,7 +31,11 @@ def executar(
     with session_context(user_id=user_id, stock_id=stock_id):
         estado_final = fluxo_agentes().invoke(
             estado_inicial,
-            config={"configurable": {"thread_id": session_id}},
+            config={
+                "configurable": {"thread_id": session_id},
+                "tags": ["chat"],
+                "metadata": {"user_id": user_id, "session_id": session_id},
+            },
         )
 
     return _extrair_resposta(estado_final)

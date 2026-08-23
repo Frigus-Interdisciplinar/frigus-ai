@@ -19,7 +19,7 @@ def _get_pool() -> pool.ThreadedConnectionPool:
         _pool = pool.ThreadedConnectionPool(
             minconn=1,
             maxconn=10,
-            dsn=settings.DATABASE_URI,
+            dsn=settings.POSTGRES_URI,
             options=f"-c search_path={_SEARCH_PATH}",
         )
 

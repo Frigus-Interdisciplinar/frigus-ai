@@ -11,9 +11,9 @@ ItemStatus = Literal["Pendente", "Comprado", "Removido"]
 
 
 class AddShoppingListProductArgs(BaseModel):
-    product_name: str = Field(..., description="Nome do produto a adicionar na lista de compras.")
-    category: Category = Field(..., description="Categoria do produto (necessária se ele ainda não existir no catálogo).")
-    storage_place: StoragePlace = Field(..., description="Local onde o produto costuma ser guardado (necessário se ele ainda não existir no catálogo).")
+    product_name: str = Field(description="Nome do produto a adicionar na lista de compras.")
+    category: Category = Field(description="Categoria do produto (necessária se ele ainda não existir no catálogo).")
+    storage_place: StoragePlace = Field(description="Local onde o produto costuma ser guardado (necessário se ele ainda não existir no catálogo).")
     quantity: int = Field(default=1, description="Quantidade desejada.")
 
 
@@ -32,4 +32,4 @@ class GenerateShoppingListFromLowStockArgs(BaseModel):
 
 
 class RegisterPurchaseFromNfeArgs(BaseModel):
-    nfe_key_or_url: str = Field(..., description="Chave de acesso ou URL do QR Code da NF-e (formato SEFAZ-SP).")
+    nfe_key_or_url: str = Field(description="Chave de acesso ou URL do QR Code da NF-e (formato SEFAZ-SP).")
