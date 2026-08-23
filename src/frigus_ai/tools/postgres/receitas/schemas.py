@@ -6,4 +6,4 @@ class MatchRecipesToStockArgs(BaseModel):
 
 
 class GetRecipeDetailsArgs(BaseModel):
-    recipe_id: int = Field(..., description="ID da receita retornado por match_recipes_to_stock.")
+    recipe_id: int = Field(description="ID da receita retornado por match_recipes_to_stock.")
