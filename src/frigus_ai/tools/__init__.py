@@ -1,4 +1,3 @@
-from .faq_tools import faq_retriever
 from .postgres.compras.core import (
     add_shopping_list_product,
     create_shopping_list,
@@ -23,6 +22,7 @@ from .postgres.receitas.core import (
     get_recipe_details,
     match_recipes_to_stock,
 )
+from .qdrant.faq.core import faq_retriever
 
 ESTOQUE_TOOLS = [add_stock_product, query_stock, update_stock_quantity, discard_product]
 COMPRAS_TOOLS = [

@@ -17,6 +17,12 @@ class Settings(BaseSettings):
 
     SPOONACULAR_API_KEY: str = ""
 
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_API_KEY: str = ""
+    QDRANT_COLLECTION_NAME: str = "faq"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
