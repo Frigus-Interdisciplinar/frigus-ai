@@ -7,11 +7,13 @@ from frigus_ai.agents.nodes.guardrail.schemas import (
     ResultadoGuardrail,
 )
 from frigus_ai.agents.nodes.names import Node
-from frigus_ai.agents.prompts.guardrail import GuardrailPrompts
+from frigus_ai.agents.prompts.loader import load_sections
 from frigus_ai.graph.llm import llm_rapido
 from frigus_ai.graph.state import Estado
 
 logger = get_logger(__name__)
+
+_COMPLIANCE = load_sections("guardrail.md")["compliance"]
 
 
 def _saida_ok(conteudo: str) -> ResultadoGuardrail:
@@ -62,7 +64,7 @@ def guardrail_saida(
     resposta = desanonimizar_saida(resposta, mapa_pii, restaurar=restaurar_pii)
 
     saida = llm_rapido.invoke(
-        GuardrailPrompts.COMPLIANCE.format(resposta=resposta)
+        _COMPLIANCE.format(resposta=resposta)
     ).content.strip()
 
     if "RESPOSTA:" not in saida:

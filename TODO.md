@@ -3,6 +3,33 @@
 Próximos passos planejados. Contexto do projeto e checklist de requisitos da disciplina em
 [AGENTS.md](AGENTS.md).
 
+## CONTEXTO_TEMPORAL congela na data do import — bug pré-existente, achado durante o refactor de prompts
+
+`.agents/skills/langchain.md` já documenta esse anti-padrão com um exemplo que é literalmente
+`GenericAgent.CONTEXTO_TEMPORAL = f"Data atual: {datetime.now()}"` — e cita que o mesmo erro já
+aconteceu de verdade no assessor-ai (data interpretada como a do deploy, não a de agora). O código
+daqui tinha exatamente esse padrão desde antes do refactor de prompts pra `.md` (preservado por
+fidelidade ao converter — não é regressão nova, é um bug que já existia). Hoje:
+
+- `agents/prompts/loader.py` computa `_data_hora_fmt = datetime.now(UTC).astimezone()...` uma vez,
+  no import do módulo.
+- `graph/agents.py` chama `load_prompt("estoque")` etc. também uma vez, no import do módulo, e o
+  resultado (já com a data embutida) fica congelado dentro de `create_agent(system_prompt=...)`
+  pelo resto da vida do processo.
+
+Ou seja: num processo de vida longa (API rodando, TUI aberta durante a virada do dia), o agente
+segue respondendo com a data/hora de quando o processo subiu, não a de agora — pode gerar respostas
+erradas em perguntas tipo "o que vence hoje" perto da meia-noite.
+
+- [ ] Mover CONTEXTO_TEMPORAL pra fora do `system_prompt` (que só monta uma vez) e para uma mensagem
+      de sistema por turno, no `.invoke()` — mesma correção que o skill já recomenda (`Do this` em
+      `.agents/skills/langchain.md`): `mensagens = [{"role": "system", "content": contexto_do_turno(...)},
+      *estado["messages"]]`. Precisa checar a ressalva de providers no mesmo skill (Gemini funde
+      system messages extras só se já houver uma no índice 0 — hoje há, via `system_prompt`, então
+      é seguro; confirmar que continua sendo depois da mudança)
+- [ ] Decidir se isso afeta só os agentes que usam `create_agent` (7, via `graph/agents.py`) ou
+      também Juiz/Resumidor/Perfil, que montam o prompt uma vez em import de módulo do mesmo jeito
+
 ## Refatoração de estrutura — alinhar com o assessor-ai — concluída
 
 `main.py` hoje mistura três coisas: o loop de terminal, a lógica de montar/persistir mensagens e a
@@ -110,17 +137,25 @@ tem a mesma versão.
 **Não bloqueia nada.** O `.env` local resolve hoje; isso é conveniência de time e higiene de segredo
 (evita chave circulando por chat/pendrive), não pré-requisito de nenhuma feature.
 
-## Seleção interativa de interface (questionary) — avaliado, adiado
+## Interfaces — terminal removido, TUI é a única interativa
 
-`main.py` hoje só resolve `terminal` (`python main.py terminal`). Ideia: quando existir mais de uma
-interface real (`tui`, `api`, eventualmente frontend), usar `questionary.select(...)` pra menu de
-seta em vez de exigir o nome exato como argumento — reduz fricção pra quem não decorou os comandos.
+`interfaces/terminal/` (o loop de `input()` original) foi removido — a TUI (Textual, portada do
+assessor-ai) cobre o mesmo caso de uso com uma experiência melhor, não fazia sentido manter as duas.
+`main.py` resolve `tui` (default) e `api` hoje (`python main.py <interface>`); `justfile`'s `run`
+já aponta pra `tui` por padrão.
 
-- [ ] Adicionar `questionary` como dependência **só quando o segundo modo existir de verdade** (hoje
-      só tem 1 opção, não há o que selecionar — YAGNI). Desenho: `python main.py <interface>` continua
-      funcionando direto (scriptável, usado por CI/automação); `python main.py` sem argumento cai no
-      menu interativo do `questionary` como atalho amigável — as duas formas convivem, não é
-      substituição
+- [ ] Se algum dia fizer falta um modo texto puro sem Textual (ex. rodar em CI/scripting), reavaliar
+      — não recriar só por precaução, sem caso de uso concreto ainda
+
+## Seleção interativa de interface (questionary) — avaliado, ainda adiado
+
+`main.py` resolve `tui` e `api` hoje — 2 modos, decorar o nome ainda é barato o suficiente pra não
+justificar a dependência nova. Reavaliar se um terceiro modo (frontend, MCP como modo próprio) aparecer.
+
+- [ ] Adicionar `questionary` como dependência quando compensar (2 opções ainda é pouco atrito).
+      Desenho: `python main.py <interface>` continua funcionando direto (scriptável, usado por
+      CI/automação); `python main.py` sem argumento cai no menu interativo do `questionary` como
+      atalho amigável — as duas formas convivem, não é substituição
 
 ## API (FastAPI/Flask) — requisito da disciplina
 
@@ -131,9 +166,18 @@ de API key), `routes/` por recurso (`chats`, `health`), `schemas/` (Pydantic de 
 Rotas chamam só o módulo de serviço, nunca o grafo ou as tools direto. Ver
 `.agents/skills/fastapi.md` antes de mexer em `interfaces/api/`.
 
-- [ ] Esqueleto de rotas: `POST /chats`, `POST /chats/{id}/messages`, `GET /chats/{id}/messages`
-- [ ] Controle de sessão por usuário de verdade (hoje é só `thread_id` gerado em memória no
-      terminal) — ver item "Checkpointer persistente" abaixo, é pré-requisito
+- [x] **Esqueleto de rotas**: `interfaces/api/{main,routes/{chats,health},schemas/{chat,health}}.py`
+      — `POST /chats`, `POST /chats/{id}/messages`, `GET /chats/{id}/messages`, `GET /health/{live,ready}`
+      (`/ready` checa Postgres/Mongo/Redis/Qdrant, 503 se algum estiver fora). Sem `auth.py`
+      nem rate limiting — não fazia sentido copiar isso do assessor-ai ainda (nenhum dos dois itens
+      abaixo está resolvido, então não tem o que autenticar/limitar por usuário de verdade).
+      **Simplificação deliberada, precisa de retrabalho quando os itens abaixo saírem:** `user_id`
+      hardcoded em `DEMO_USER_ID` em cada rota (mesmo bootstrap do terminal/TUI) e `stock_id`
+      reresolvido via `iniciar_sessao()` a cada request (idempotente, mas ineficiente sem sessão
+      persistente)
+- [ ] Controle de sessão por usuário de verdade (hoje é só `thread_id` gerado em memória na TUI) —
+      ver item "Checkpointer persistente" abaixo, é pré-requisito. Depois disso, trocar `DEMO_USER_ID`
+      hardcoded nas rotas por auth de verdade
 - [ ] Rate limiting básico (por IP e/ou por usuário)
 
 ## Checkpointer persistente (controle de sessão) — concluído
@@ -155,13 +199,13 @@ usuário" da disciplina).
 - [x] `fluxo_agentes` deixou de ser variável de módulo (compilava o grafo no import) e virou função
       com `@functools.cache` — necessário porque o `MongoDBSaver` toca o Mongo, e a convenção do
       projeto é nenhuma conexão no import. Call site (`chat/runner.py`) virou `fluxo_agentes().invoke(...)`
-- [ ] Confirmar que `thread_id` (hoje `session_id` gerado por `uuid4()` em `interfaces/terminal/app.py`)
+- [ ] Confirmar que `thread_id` (hoje `session_id` gerado por `uuid4()` em `interfaces/tui/app.py`)
       continua sendo a chave certa quando existir usuário autenticado de verdade (via API)
 
 **Verificado:** o grafo compila com o `MongoDBSaver` apontando pro db `frigus_ai` e as coleções
 certas, e o `functools.cache` devolve a mesma instância entre chamadas. **Não verificado nesta
 sessão:** gravar/recuperar estado contra um Mongo real (Docker não estava rodando no ambiente) —
-rodar `python main.py terminal`, matar o processo e reabrir com o mesmo `session_id` pra confirmar
+rodar `python main.py tui`, matar o processo e reabrir com o mesmo `session_id` pra confirmar
 que o estado do grafo sobrevive, antes de dar merge.
 
 ## MCP e A2A
@@ -172,7 +216,9 @@ começar de verdade, não versionar pasta placeholder sem uso).
 
 - [ ] **MCP**: expor as tools do Frigus.AI (estoque, compras, receitas, financeiro, faq) como
       servidor MCP, pra hosts MCP externos (Claude Desktop etc.) conseguirem consumir o domínio do
-      Frigus sem precisar do grafo inteiro
+      Frigus sem precisar do grafo inteiro. Quando `tools/spoonacular/core.py` existir (ver seção
+      "Spoonacular" abaixo), entra na mesma lista — é só mais um domínio de consulta, mesmo padrão
+      das demais
 - [ ] **A2A**: expor `fluxo_agentes` (ou o módulo de serviço, pós-refactor) como agente
       Agent-to-Agent, pra outro sistema multiagente conseguir conversar com o Frigus.AI como um
       agente externo
@@ -218,29 +264,70 @@ Precisa cobrir, no mínimo, os 5 pontos do enunciado:
       (tempo economizado do usuário, redução de desperdício de alimentos via MoneySaving) pra
       justificar o ROI — decisão de produto, não só técnica, discutir com o time antes de implementar
 
-## Redis e Qdrant
+## Redis e Qdrant — base implementada
 
-`tools/redis/` e `tools/qdrant/` foram removidos do repo (eram só `__init__.py` vazio — recriar
-quando a primeira tool de cada um existir de verdade). Não são requisito obrigatório da disciplina,
-mas somam pra "complexidade do projeto" (item extra) e resolvem gaps reais:
+Portado do assessor-ai (`tools/redis/{connection,schemas,perfil,chat}.py`,
+`tools/qdrant/faq/{connection,schemas,core,ingest}.py`), mesmo padrão: client lazy com `global`,
+funções simples sem classe. Não são requisito obrigatório da disciplina, mas somam pra "complexidade
+do projeto" (item extra) e resolvem gaps reais.
 
-- [ ] **Redis**: cache do perfil comportamental (`tools/mongo/users`, hoje sempre bate no Mongo) e/ou
-      rate limit por usuário — mesmo padrão do assessor-ai (`tools/redis/{connection,perfil}.py`)
-- [ ] **Qdrant**: mesmo caso de uso do assessor-ai (RAG de um único PDF via tool) — trocar o FAISS
-      local em memória (`tools/faq_tools.py`, reconstrói o índice a cada start do processo) pelo
-      padrão já validado lá: `tools/qdrant/faq/{connection,core,ingest}.py` (client lazy, tool
-      `faq_retriever` fazendo `query_points`, script de ingestão separado da tool de busca). Baixo
-      custo incremental (mais um serviço no `docker-compose.yml`, código já pronto de referência);
-      o ganho real hoje é consistência com o assessor-ai, não performance — FAISS já é rápido pro
-      tamanho atual do PDF. Eventualmente: busca semântica de receitas cruzando com o estoque
+- [x] **Redis — cache de perfil**: `tools/redis/perfil.py`, cache-aside sobre
+      `tools/mongo/users` — `chat/repositories.py:buscar_perfil` tenta o Redis antes do Mongo,
+      `encerrar_sessao` invalida a chave (perfil é reescrito nesse momento, ver
+      `tools/mongo/chats/core.py:encerrar_sessao` → `perfis.atualizar_perfil`)
+- [x] **Redis — rate limit de chat**: `tools/redis/chat.py:can_send_message`, mesmo limite do
+      assessor-ai (10 mensagens/60s por usuário) — `chat/service.py:send_message` levanta
+      `LimiteDeMensagensExcedido` quando estourado; `interfaces/tui/app.py:_processar` já tem
+      `except Exception` ao redor do `send_message`, cai lá sem tratamento novo
+- [x] **Qdrant — RAG do FAQ**: substituiu o FAISS local (`tools/faq_tools.py`, removido) por
+      `tools/qdrant/faq/core.py:faq_retriever`, registrado em `tools/__init__.py` no lugar do antigo.
+      **Divergência do assessor-ai:** `ingest.py` não fixa `_VECTOR_SIZE` (lá é `768`, hardcoded) —
+      aqui o tamanho da collection é lido do embedding real (`len(vetores[0])`) porque
+      `gemini-embedding-001` (mesmo modelo dos dois projetos) não documenta uma dimensão default
+      fixa; hardcoded arriscava criar a collection com o tamanho errado sem estourar erro até o
+      primeiro insert
+- [x] `docker-compose.yml` com os dois serviços (`redis:7-alpine`, `qdrant/qdrant:latest`) +
+      `config/docker.py` atualizado (`servicos_esperados`)
+- [ ] **Rodar a ingestão** — `python -m frigus_ai.tools.qdrant.faq.ingest` precisa rodar uma vez
+      contra o Qdrant local pra popular a collection `faq`; sem isso `faq_retriever` responde vazio.
+      Não verificado nesta sessão (sem Docker/`.env` disponíveis no ambiente)
+- [ ] **Fila de tasks (Redis) — pendente, não implementada.** Os dois usos acima (cache, rate limit)
+      são leitura/escrita síncrona simples, não uma fila de verdade. Se aparecer trabalho que faça
+      sentido tirar do caminho da requisição (ex. ingestão do Qdrant sob demanda, chamadas de MCP
+      longas), avaliar Redis Streams ou uma lib de fila (RQ/Celery) nessa hora — sem caso de uso
+      concreto ainda, não adiantar infra
+- [ ] **Cache do embedding de busca (Redis) — pendente, não implementada.** Hoje `faq_retriever`
+      chama `embeddings.embed_query(question)` (API do Gemini) toda vez, mesmo pra pergunta repetida
+      — nenhum cache entre a pergunta e o vetor. Cachear em Redis por hash da pergunta normalizada
+      (chave `faq:embedding:<hash>`, TTL similar ao `PROFILE_TTL_TIME`) evitaria a chamada de API
+      repetida no caso comum de FAQ (poucas perguntas frequentes). Mesmo raciocínio de custo já
+      aplicado à Spoonacular (ver seção acima) — decidir TTL/tamanho antes de implementar, não é
+      óbvio que compensa a complexidade pro volume atual de perguntas de FAQ
 - [ ] **Em discussão:** remover o agente `faq` (`agents/nodes/faq.py` + `faq_app` em `graph/agents.py`)
       e deixar só a tool — o Roteador identifica que é pergunta de FAQ e chama `faq_retriever` direto,
       igual já acontece com `estoque`/`compras`/`financeiro` (nó chama a tool, `orquestrador` formata
       em linguagem natural, `juiz` valida). Não faz sentido pagar uma chamada de LLM extra só pra
       decidir usar a única tool que o agente FAQ tem — o Roteador já tomou essa decisão. Efeito
       colateral: reduz de 10 pros 9 nós no grafo (ainda bem acima do mínimo de 5 agentes exigido)
-- [ ] Adicionar os dois serviços ao `docker-compose.yml` (hoje só tem `postgres`/`mongo`) quando a
-      primeira tool de cada um existir — não subir infra sem uso
+- [ ] Pelo menos um teste pro cache-aside de perfil (hit vs. miss, mockando `tools/redis/connection.py`)
+      — ainda sem teste de `chat/repositories.py` no geral (ver seção "Testes" abaixo)
+
+### Async — avaliado, não aplicado aqui
+
+Pedido explícito era portar a base do assessor-ai e "deixar o projeto o mais async possível". A base
+portada (Redis e Qdrant) usa os clients **síncronos** (`redis-py`, `qdrant-client`), igual ao
+assessor-ai — não `redis.asyncio`/`AsyncQdrantClient`. Motivo: `.agents/skills/fastapi.md` já
+documenta, com o mesmo raciocínio do assessor-ai, que o projeto é **sync por design** — psycopg2,
+pymongo e `fluxo_agentes().invoke` são todos síncronos, e a própria API planejada usa rota `def` (não
+`async def`) de propósito, pra rodar em threadpool sem travar o event loop. Um client async só nesses
+dois módulos não ajudaria nada: toda chamada ainda passa por código síncrono acima e abaixo, então só
+criaria overhead de `asyncio.run()` por chamada sem ganho de throughput real.
+
+- [ ] **Decisão pendente do time:** se o objetivo é mesmo tornar o projeto mais async, é uma mudança
+      de arquitetura maior que este item (Postgres/Mongo síncronos, grafo LangGraph síncrono) — não
+      dá pra fazer só nos clients novos sem contradizer a decisão já documentada. Se for isso mesmo,
+      abrir como item próprio pra discutir escopo (rotas SSE de streaming já são candidatas óbvias,
+      ver `.agents/skills/streaming.md`), não misturar com a base de Redis/Qdrant
 
 ## Spoonacular — client + tabela de lookup de ingredientes
 
@@ -294,6 +381,56 @@ sem duplicar driver.
 - [ ] Atualizar tabela de tools no README.md
 - [ ] Pelo menos um teste (`tests/tools/spoonacular/` ou equivalente) — mocka a chamada HTTP, cobre
       a lógica de decisão (cache hit vs. miss em `buscar_match`), não o client em si
+
+## Neo4j — grafo de recomendação de receitas (avaliado)
+
+Modelagem exploratória em `tools/neo4j/{nodes,edges,queries}.cypher` (`User`/`Ingredient`/`Recipe`,
+`PREFERS`/`DISLIKES`/`ALLERGIC_TO`/`REQUIRES`/`SIMILAR_TO`) — por enquanto é só script Cypher solto,
+sem `connection.py`/tool nenhuma. Responde a pergunta #3 de "Perguntas em aberto" mais abaixo: Neo4j
+segue no roadmap, mas o propósito mudou de "auditoria de chamadas agente-a-agente via Cypher" (nota
+antiga em "Faltando", mais abaixo) pra "grafo de preferência/recomendação de receita".
+
+- [ ] Avaliar <https://neo4j.com/labs/agent-memory/tutorials/first-agent-memory/> como base da
+      memória de longo prazo do agente (hoje ⚠️ parcial — só resumo de perfil em `tools/mongo/users`,
+      ver tabela de requisitos no AGENTS.md). O tutorial modela memória episódica/semântica como
+      grafo; se adotado, o grafo `User`-`Ingredient`-`Recipe` acima vira o mesmo grafo de memória, não
+      uma segunda base separada — `PREFERS`/`DISLIKES`/`ALLERGIC_TO` já são memória semântica de
+      usuário por natureza
+- [ ] Fecha com Spoonacular: hoje o grafo só tem as 2 receitas de exemplo do sketch; nós reais de
+      `Ingredient`/`Recipe` poderiam ser povoados a partir das respostas da API (Ingredient Search /
+      Get Recipe Information) em vez de só a tabela de lookup Mongo (ver seção "Spoonacular" acima) —
+      mas só decidir depois de `tools/spoonacular/core.py` estar rodando de verdade, não adiantar
+      infra nova sem dado real pra povoar
+- [ ] Decidir se compensa um banco a mais (Postgres + Mongo + Neo4j, além de Redis/Qdrant ainda
+      pendentes) só pra esse grafo, ou se dá pra modelar a mesma coisa em Mongo (documento com arrays
+      de preferência). Neo4j ganha em travessia tipo "receitas cujos ingredientes obrigatórios não
+      cruzam com o que o usuário é alérgico/não gosta" (última query de `queries.cypher`), que é
+      consulta recursiva cara em documento — vale confirmar se esse tipo de consulta é usado de
+      verdade antes de subir infra
+- [ ] Se seguir: novo serviço no `docker-compose.yml`, `tools/neo4j/connection.py` (driver oficial
+      `neo4j`, lazy igual às outras conexões) e `tools/neo4j/core.py` com as tools de fato
+
+## Alembic e ORM — avaliado, ainda não priorizado
+
+Postgres hoje é acessado via `psycopg2` cru (SQL inline em cada `core.py`, `next_id` calculando ID
+manualmente porque o schema fornecido não é serial — ver AGENTS.md "Stack"). O assessor-ai já resolveu
+isso com **SQLAlchemy + Alembic** (ver "Estado real do assessor-ai" mais abaixo) — migrations
+versionadas em vez de depender só do `data/sql/schema.sql` fornecido pronto pela disciplina.
+
+- [ ] Confirmar se compensa pro Frigus antes de começar: o schema `dataload` é fornecido pela
+      disciplina e compartilhado com outras apps do grupo — migrar pra Alembic significa este repo
+      passar a "dono" das migrations do schema, o que só faz sentido se o time concordar que é assim
+      daqui pra frente, não só consumidor de um schema pronto
+- [ ] Se seguir: models SQLAlchemy por domínio (`estoque`, `compras`, `receitas`, `financeiro`),
+      trocando as queries cruas de `tools/postgres/*/core.py` um domínio por vez — não precisa ser
+      reescrita atômica
+- [ ] `alembic init` + primeira migration como baseline do `data/sql/schema.sql` atual (gerar a partir
+      do schema existente e `alembic stamp head`, não recriar do zero)
+- [ ] Reavaliar `next_id` (`tools/postgres/helpers.py`) — com Alembic dá pra decidir se vale migrar as
+      PKs pra serial/identity de verdade, em vez de manter `MAX(id)+1` manual
+
+**Não bloqueia nada hoje.** SQL cru funciona; isso é redução de risco (menos SQL manual espalhado,
+histórico de schema versionado), não requisito da disciplina.
 
 ## Testes — suíte base + CI concluídos
 
@@ -378,8 +515,9 @@ está implementado do que falta, e documenta a decisão em aberto restante: inte
 - [ ] **`mcp_server/`** — expor as tools do Frigus para hosts MCP (Claude Desktop etc.).
 - [ ] **`a2a_server/`** — expor o grafo do Frigus como agente A2A para outros sistemas. (Ver seção abaixo —
       isso é sobre o Frigus **oferecer** um endpoint A2A, não sobre consumir o assessor-ai.)
-- [ ] **Neo4j** — não aparece em lugar nenhum do repo atual (nem README, nem estrutura de pastas). Se ainda é
-      plano (auditoria de chamadas agente-a-agente via Cypher), está em estágio de ideia, não de placeholder.
+- [x] **Neo4j** — atualizado: propósito mudou de auditoria de chamadas agente-a-agente pra grafo de
+      recomendação de receitas (preferência/alergia de usuário × ingrediente × receita). Modelagem
+      exploratória em `tools/neo4j/*.cypher`, avaliação completa na seção "Neo4j" acima.
 - [ ] **LangSmith** — mesma situação: não referenciado no repo. Se for pra observabilidade, é config de
       ambiente (`LANGCHAIN_TRACING_V2`, etc.), não exige mudança estrutural — mas precisa ser adicionado.
 - [ ] **Testes automatizados** — não há pasta `tests/` na estrutura listada. Nada de PromptBreaker/pytest
@@ -539,4 +677,6 @@ padrão do assessor-ai — ver seção "API (FastAPI/Flask)" acima.
 1. O domínio Financeiro do assessor-ai vai **substituir** o MoneySaving atual, ou os dois vão coexistir
    (MoneySaving fica, e o assessor-ai cobre um financeiro pessoal mais amplo)?
 2. Prioridade entre Redis (rate limit vs. cache vs. checkpointer) — qual entra primeiro?
-3. Neo4j e LangSmith ainda estão no roadmap ou foram descartados nessa fase do projeto?
+3. ~~Neo4j e LangSmith ainda estão no roadmap ou foram descartados nessa fase do projeto?~~ —
+   respondido: LangSmith já está ligado (ver "Observabilidade / SRE" acima); Neo4j segue no roadmap
+   com propósito atualizado (ver seção "Neo4j" acima)

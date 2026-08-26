@@ -1,12 +1,6 @@
 from langchain.agents import create_agent
 
-from frigus_ai.agents.prompts.compras import ComprasPrompts
-from frigus_ai.agents.prompts.estoque import EstoquePrompts
-from frigus_ai.agents.prompts.faq import FaqPrompts
-from frigus_ai.agents.prompts.financeiro import FinanceiroPrompts
-from frigus_ai.agents.prompts.orquestrador import OrquestradorPrompts
-from frigus_ai.agents.prompts.receitas import ReceitasPrompts
-from frigus_ai.agents.prompts.router import RouterPrompts
+from frigus_ai.agents.prompts.loader import load_prompt
 from frigus_ai.graph.llm import (
     llm_especialista,
     llm_rapido,
@@ -21,42 +15,42 @@ from frigus_ai.tools import (
 
 router_app = create_agent(
     model=llm_rapido,
-    system_prompt=RouterPrompts.system_prompt(),
+    system_prompt=load_prompt("router"),
 )
 
 estoque_app = create_agent(
     model=llm_especialista,
     tools=ESTOQUE_TOOLS,
-    system_prompt=EstoquePrompts.system_prompt(),
+    system_prompt=load_prompt("estoque"),
 )
 
 compras_app = create_agent(
     model=llm_especialista,
     tools=COMPRAS_TOOLS,
-    system_prompt=ComprasPrompts.system_prompt(),
+    system_prompt=load_prompt("compras"),
 )
 
 receitas_app = create_agent(
     model=llm_especialista,
     tools=RECEITAS_TOOLS,
-    system_prompt=ReceitasPrompts.system_prompt(),
+    system_prompt=load_prompt("receitas"),
 )
 
 faq_app = create_agent(
     model=llm_rapido,
     tools=FAQ_TOOLS,
-    system_prompt=FaqPrompts.system_prompt(),
+    system_prompt=load_prompt("faq"),
 )
 
 financeiro_app = create_agent(
     model=llm_especialista,
     tools=FINANCEIRO_TOOLS,
-    system_prompt=FinanceiroPrompts.system_prompt(),
+    system_prompt=load_prompt("financeiro"),
 )
 
 orquestrador_app = create_agent(
     model=llm_rapido,
-    system_prompt=OrquestradorPrompts.system_prompt(),
+    system_prompt=load_prompt("orquestrador"),
 )
 
 

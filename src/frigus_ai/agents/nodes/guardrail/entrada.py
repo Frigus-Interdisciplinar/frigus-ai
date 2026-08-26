@@ -5,11 +5,13 @@ from langchain_core.messages import HumanMessage
 
 from config.logging import get_logger
 from frigus_ai.agents.nodes.names import Node
-from frigus_ai.agents.prompts.guardrail import GuardrailPrompts
+from frigus_ai.agents.prompts.loader import load_sections
 from frigus_ai.graph.llm import llm_guardrail
 from frigus_ai.graph.state import Estado
 
 logger = get_logger(__name__)
+
+_CLASSIFICADOR = load_sections("guardrail.md")["classificador"]
 
 from frigus_ai.agents.nodes.guardrail.schemas import (
     _KEYWORDS_DADOS_INTERNOS,
@@ -89,7 +91,7 @@ def guardrail_entrada(mensagem_anonimizada: str) -> ResultadoGuardrail:
         return _bloquear("acesso_dados_internos", "Não tenho como compartilhar informações internas do sistema.")
 
     mensagem = llm_guardrail.invoke(
-                GuardrailPrompts.CLASSIFICADOR.format(mensagem=mensagem_anonimizada)
+                _CLASSIFICADOR.format(mensagem=mensagem_anonimizada)
             ).content
 
     categoria = _extrair_categoria(mensagem)
