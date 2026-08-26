@@ -7,14 +7,14 @@ repositório.
 
 Assistente conversacional multi-agente do app **Frigus** (gestão de alimentos em geladeira/freezer/
 despensa, compras, receitas e finanças domésticas). Construído com LangChain + LangGraph, RAG
-(FAISS) e um agente juiz (LLM-as-judge) para mitigar alucinação. Também é o **projeto da disciplina
+(Qdrant) e um agente juiz (LLM-as-judge) para mitigar alucinação. Também é o **projeto da disciplina
 de Sistemas Multiagentes** — ver seção "Requisitos da disciplina" abaixo para o que precisa ser
 entregue e o que já está feito.
 
-`main.py` hoje concentra loop de terminal + montagem de estado + persistência (ver TODO.md — vai ser
-quebrado numa camada de serviço compartilhada, no mesmo padrão do assessor-ai). Detalhes de
-arquitetura, fluxo de agentes e tools estão no [README.md](README.md) — leia-o antes de mexer em
-`agents/` ou `graph/`.
+`main.py` é um dispatcher fino (`python main.py <interface>`) — a lógica de montar estado, invocar o
+grafo e persistir histórico vive em `frigus_ai.chat.service`, compartilhada por todas as interfaces
+(`tui`, `api`). Detalhes de arquitetura, fluxo de agentes e tools estão no [README.md](README.md) —
+leia-o antes de mexer em `agents/` ou `graph/`.
 
 ## Requisitos da disciplina
 
@@ -24,14 +24,14 @@ ficar desatualizado.
 
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ❌ Pendente | `api/` só tem `__init__.py`. **Localização decidida:** mesmo repo (ver TODO.md) — falta implementar |
+| API FastAPI/Flask | ⚠️ Parcial | `interfaces/api/` — esqueleto de rotas (`/health`, `/chats`) rodando, sem autenticação/rate limiting ainda (ver TODO.md) |
 | Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`agents/nodes/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
 | Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph + histórico em Mongo (`tools/mongo/chats`). Checkpointer agora é `MongoDBSaver` (`graph/builder.py`) — estado sobrevive a restart. Falta só sessão HTTP de verdade, que depende da API |
 | Memória de longo prazo | ⚠️ Parcial | `tools/mongo/users` — perfil comportamental (resumo de hábitos) por `user_id`, persistente no Mongo. Avaliar se cobre o requisito ou se precisa de algo além do resumo (ex. memória vetorial) |
 | MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | `mcp_server/` e `a2a_server/` só têm `__init__.py` — ver TODO.md |
-| RAG com fonte externa indicada | ✅ Feito | `tools/faq_tools.py` — FAISS sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
+| RAG com fonte externa indicada | ✅ Feito | `tools/qdrant/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `agents/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
 | Guardrail | ✅ Feito | `agents/nodes/guardrail/{entrada,saida}.py` |
 | Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ❌ Pendente | ver TODO.md |
@@ -57,8 +57,9 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
 - MongoDB para histórico de conversa (`tools/mongo/chats`), perfil comportamental
   (`tools/mongo/users`) e checkpoint do LangGraph (`MongoDBSaver`, coleções `graph_checkpoints`/
   `graph_checkpoint_writes`)
-- FAISS para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf`
-- Redis e Qdrant **não existem no repo** — nenhuma tool implementada ainda (ver TODO.md)
+- Qdrant para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf` (`tools/qdrant/faq/`)
+- Redis para cache do perfil comportamental e rate limit de chat (`tools/redis/`) — fila de tasks
+  ainda não implementada, ver TODO.md
 - `pytest` (`tests/`, espelhando a estrutura do pacote) + `ruff` (lint) + CI no GitHub Actions
   (`.github/workflows/ci.yml`)
 
@@ -66,15 +67,20 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
 
 ```text
 src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchling, layout src/)
-├── agents/             prompts (agents/prompts) e nós de grafo (agents/nodes) — um arquivo por agente/domínio
-├── graph/              state.py (estado + Route), llm.py (builders), agents.py (agentes compilados), builder.py (grafo)
-├── tools/              integrações externas: tools/postgres/{estoque,compras,receitas,financeiro}, tools/mongo/{chats,users}, faq_tools.py
-└── chat/               models.py (contrato de mensagem), repositories.py (Mongo), runner.py (invoca o grafo), service.py (casos de uso)
+├── agents/
+│   ├── prompts/         só .md + loader.py — load_prompt()/load_sections() montam o system_prompt
+│   │                     a partir de frontmatter (metadados) + seções `## NOME` do corpo
+│   └── nodes/           nós de grafo — um arquivo por agente/domínio
+├── graph/               state.py (estado + Route), llm.py (builders), agents.py (agentes compilados), builder.py (grafo)
+├── tools/                integrações externas: tools/postgres/{estoque,compras,receitas,financeiro},
+│                         tools/mongo/{chats,users}, tools/qdrant/faq/, tools/redis/
+└── chat/                models.py (contrato de mensagem), repositories.py (Mongo), runner.py (invoca o grafo), service.py (casos de uso)
 
-interfaces/terminal/    app.py (loop de input) + display.py (Rich + pyfiglet) — única interface hoje
+interfaces/tui/         app.py (Textual) + display.py (Bubble/MessageRow) + app.tcss — única interface interativa
+interfaces/api/         main.py (FastAPI) + routes/{chats,health}.py + schemas/ — esqueleto, sem auth ainda
 config/                 settings.py (env vars via pydantic-settings), models.py (Model enum + providers), docker.py, logging.py
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
-main.py                 dispatcher fino — `python main.py <interface>`
+main.py                 dispatcher fino — `python main.py <interface>` (`tui` [default] ou `api`)
 ```
 
 Padrão de cada domínio de tool: `schemas.py` (Pydantic) + `core.py` (as tools em si), com
@@ -84,9 +90,11 @@ qualquer tool nova (redis, qdrant, etc).
 Nenhuma interface (`interfaces/*`) deve chamar `frigus_ai.graph.builder`, `frigus_ai.tools.mongo.*`
 ou `frigus_ai.tools.postgres.*` diretamente — sempre via `frigus_ai.chat.service`. É esse limite que
 permite API/TUI existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir
-histórico.
+histórico. `interfaces/api/routes/chats.py` segue essa regra hoje, mas ainda não tem autenticação —
+`user_id` é sempre `DEMO_USER_ID` (ver TODO.md).
 
-`api/`, `mcp_server/` e `a2a_server/` foram removidos (eram placeholders vazios) — recriar quando o
+`interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa agora.
+`mcp_server/` e `a2a_server/` continuam só placeholders vazios removidos do repo — recriar quando o
 trabalho de cada um começar (ver TODO.md).
 
 ## Convenções
@@ -94,7 +102,11 @@ trabalho de cada um começar (ver TODO.md).
 - Código de domínio (nomes de função, variáveis, docstrings de tool, mensagens ao usuário) é em
   **português**; nomes de classes/tipos de infraestrutura (`Settings`, `Model`, `Route`) em inglês.
   Siga o idioma já usado no arquivo que você está editando.
-- Enums de domínio usam `StrEnum` (ver `graph/state.py:Route`, `agents/nodes/names.py:NodeName`).
+- Enums de domínio usam `StrEnum` (ver `agents/nodes/guardrail/schemas.py:Categoria`,
+  `chat/models.py:Role`). **Exceção:** `graph/state.py:Route` e `agents/nodes/names.py:Node` são
+  `Literal` + classe de constantes (não `StrEnum`) — valores guardados em `Estado` (checkpointado
+  pelo `MongoDBSaver`) precisam ser `str` puro pro msgpack, sem allowlist extra
+  (`LANGGRAPH_ALLOWED_MSGPACK_MODULES` foi removido de `graph/builder.py` por causa disso).
 - Conexões com banco (Postgres, Mongo) são **lazy** — inicializadas só na primeira operação, nunca
   no import do módulo. Mantenha esse padrão para novas integrações (Redis, Qdrant, MCP, A2A).
 - Tools retornam a classe `Response` (`tools/response.py`) para padronizar sucesso/erro.
@@ -145,13 +157,14 @@ trabalho de cada um começar (ver TODO.md).
 
 ```bash
 uv venv && uv sync   # instalar dependências
-just run             # rodar no terminal (sobe Postgres/Mongo via Docker automaticamente)
+just run             # sobe a TUI (sobe Postgres/Mongo/Redis/Qdrant via Docker automaticamente)
+just run api          # sobe a API (FastAPI/uvicorn, localhost:8000)
 just test            # suíte de testes (não precisa de .env nem banco)
 just check           # lint (roda no CI em push/PR pra main); `just fix` aplica o que dá
 ```
 
 `just run` chama o console script `frigus-ai` (`[project.scripts]`), que é o mesmo
-`python main.py terminal`. Ver `justfile` para as demais receitas.
+`python main.py tui`. Ver `justfile` para as demais receitas.
 
 ## Ao adicionar uma tool nova
 
