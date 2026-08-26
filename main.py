@@ -2,10 +2,10 @@ import sys
 
 
 def main() -> None:
-    modo = sys.argv[1] if len(sys.argv) > 1 else "terminal"
+    modo = sys.argv[1] if len(sys.argv) > 1 else "tui"
 
-    if modo == "terminal":
-        from interfaces.terminal.app import run
+    if modo == "tui":
+        from interfaces.tui.app import run
 
         run()
     else:

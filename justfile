@@ -6,7 +6,7 @@ venv:
     @echo "Preparing python environment"
     python -m venv .venv
 
-run mode="terminal":
+run mode="tui":
     @echo "Running the application"
     {{cmd}} {{mode}}
 
