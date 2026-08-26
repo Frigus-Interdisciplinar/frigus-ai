@@ -2,7 +2,7 @@ import re
 
 from config.logging import get_logger
 from frigus_ai.agents.nodes.names import Node
-from frigus_ai.agents.prompts.juiz import JuizPrompts
+from frigus_ai.agents.prompts.loader import load_prompt, load_sections
 from frigus_ai.graph.llm import llm_juiz
 from frigus_ai.graph.state import Estado
 
@@ -11,6 +11,9 @@ logger = get_logger(__name__)
 # Quantas vezes o Juiz manda o especialista tentar de novo antes de deixar passar
 # mesmo reprovado (mesmo princípio do guardrail de saída: nunca trava o usuário).
 MAX_TENTATIVAS = 2
+
+_SYSTEM_PROMPT = load_prompt("juiz")
+_TEMPLATE = load_sections("juiz.md")["template"]
 
 
 def _extrair_veredito(texto: str) -> tuple[str, str]:
@@ -27,14 +30,14 @@ def no_juiz(estado: Estado) -> dict:
 
     tentativas = estado.get("tentativas_juiz", 0)
 
-    prompt = JuizPrompts.TEMPLATE.format(
+    prompt = _TEMPLATE.format(
         pergunta_original=estado.get("pergunta_original", ""),
         dados_disponiveis=estado.get("dados_especialista", ""),
         resposta_gerada=estado.get("resposta_especialista", ""),
     )
 
     saida = llm_juiz.invoke([
-        {"role": "system", "content": JuizPrompts.system_prompt()},
+        {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "human", "content": prompt},
     ]).content
 
