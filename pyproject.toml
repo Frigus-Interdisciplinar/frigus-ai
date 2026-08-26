@@ -19,24 +19,24 @@ dependencies = [
     "langgraph>=1.1",
     "langgraph-checkpoint-mongodb>=0.4",
     "langsmith>=0.10",
-
     # RAG (FAQ)
-    "faiss-cpu>=1.14",
     "pypdf>=6.0",
-
     # Integrações externas (HTTP)
     "httpx>=0.28",
-
     # Persistência
     "psycopg2-binary>=2.9",
     "pymongo>=4.12,<4.17",
-
     # Config / utilitários
     "pydantic>=2.13",
     "pydantic-settings>=2.14",
     "python-dotenv>=1.2",
     "rich>=15.0",
     "pyfiglet>=1.0.4",
+    "redis>=8.1.0",
+    "qdrant-client>=1.19.0",
+    "textual>=8.2.8",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.52.4",
 ]
 
 [project.scripts]

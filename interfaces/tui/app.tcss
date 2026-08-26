@@ -1,0 +1,85 @@
+/* Paleta do design system do Frigus (globals.css), variante dark — terminal é
+   sempre de fundo escuro, então usamos direto os tokens .dark em vez de montar
+   um sistema de tema claro/escuro que a TUI não usa hoje.
+
+   --bg-app dark           #0B1024
+   --bg-surface dark       #131C55  (== --color-frigus-navy)
+   --border-subtle dark    #1F5F97  (== --color-frigus-secondary)
+   --text-main dark        #F8F8F8
+   --text-muted dark       #C9DEF9  (== --color-frigus-ice)
+   --color-frigus-primary  #2552C8
+   --color-frigus-light-blue #70A2D7
+   --color-frigus-accent   #F9C968 */
+
+Screen {
+    align: center top;
+    background: #0B1024;
+}
+
+#banner {
+    width: 90%;
+    max-width: 120;
+    height: auto;
+    margin: 1 0 0 0;
+    content-align: center middle;
+}
+
+#historico {
+    width: 90%;
+    max-width: 120;
+    padding: 1 2;
+}
+
+Input {
+    width: 90%;
+    max-width: 120;
+    margin: 0 0 1 0;
+    border: round #2552C8;
+    background: #131C55;
+    color: #F8F8F8;
+}
+
+Input:focus {
+    border: round #F9C968;
+}
+
+MessageRow {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+MessageRow.usuario {
+    align-horizontal: right;
+}
+
+MessageRow.assistente {
+    align-horizontal: left;
+}
+
+Bubble {
+    width: auto;
+    max-width: 70%;
+}
+
+Pensando {
+    width: 20;
+    height: 3;
+    margin-bottom: 1;
+    border: round #1F5F97;
+}
+
+Pensando LoadingIndicator {
+    height: 1;
+    color: #F9C968;
+}
+
+#logs {
+    width: 90%;
+    max-width: 120;
+    height: 8;
+    border: round #1F5F97;
+    color: #C9DEF9;
+    background: #131C55;
+    padding: 0 1;
+}
