@@ -4,7 +4,7 @@ import uuid
 from langchain_core.messages import HumanMessage
 
 from config.logging import get_logger
-from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.agents.nodes.names import Node
 from frigus_ai.agents.prompts.guardrail import GuardrailPrompts
 from frigus_ai.graph.llm import llm_guardrail
 from frigus_ai.graph.state import Estado
@@ -111,7 +111,7 @@ def no_guardrail_entrada(estado: Estado) -> dict:
     if resultado["bloqueado"]:
         logger.warning(f"Mensagem bloqueada por guardrail: {resultado['motivo']} - {ultima_msg.content}")
         return {
-            "agentes_chamados":   [NodeName.GUARDRAIL_ENTRADA],
+            "agentes_chamados":   [Node.GUARDRAIL_ENTRADA],
             "mensagem_bloqueada": resultado["mensagem"],
             "messages": [
                 HumanMessage(id=ultima_msg.id, content="[mensagem bloqueada]"), # salva bloqueada
@@ -121,7 +121,7 @@ def no_guardrail_entrada(estado: Estado) -> dict:
 
     logger.info("Mensagem aprovada pelo guardrail de entrada.")
     return {
-        "agentes_chamados":   [NodeName.GUARDRAIL_ENTRADA],
+        "agentes_chamados":   [Node.GUARDRAIL_ENTRADA],
         "mapa_pii":           mapa_pii,
         "messages":           [HumanMessage(id=ultima_msg.id, content=texto_anonimizado)],
         "mensagem_bloqueada": None, # limpa mensagem bloqueada de turnos anteriores

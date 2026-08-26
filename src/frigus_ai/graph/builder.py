@@ -1,10 +1,4 @@
-import os
-
-os.environ["LANGGRAPH_ALLOWED_MSGPACK_MODULES"] = (
-    "frigus_ai.agents.nodes.names,frigus_ai.graph.state"
-)
-
-import functools
+from functools import cache
 
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, StateGraph
@@ -21,7 +15,7 @@ from frigus_ai.agents.nodes import (
     no_receitas,
     no_roteador,
 )
-from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.agents.nodes.names import Node
 from frigus_ai.graph.state import Estado, Route
 from frigus_ai.tools.mongo.connection import banco
 
@@ -29,7 +23,7 @@ from frigus_ai.tools.mongo.connection import banco
 def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     if estado.get("mensagem_bloqueada"):
         return Route.FIM
-    return NodeName.ROTEADOR
+    return Node.ROTEADOR
 
 
 def decidir_especialista(estado: Estado) -> str:
@@ -47,76 +41,76 @@ def decidir_apos_juiz(estado: Estado) -> str:
     """
 
     if estado.get("feedback_juiz"):
-        return estado.get("rota", NodeName.GUARDRAIL_SAIDA)
-    return NodeName.GUARDRAIL_SAIDA
+        return estado.get("rota", Node.GUARDRAIL_SAIDA)
+    return Node.GUARDRAIL_SAIDA
 
 
 grafo = StateGraph(Estado)
 
-grafo.add_node(NodeName.GUARDRAIL_ENTRADA, no_guardrail_entrada)
-grafo.add_node(NodeName.ROTEADOR,          no_roteador)
-grafo.add_node(NodeName.ESTOQUE,           no_estoque)
-grafo.add_node(NodeName.COMPRAS,           no_compras)
-grafo.add_node(NodeName.RECEITAS,          no_receitas)
-grafo.add_node(NodeName.FAQ,               no_faq)
-grafo.add_node(NodeName.FINANCEIRO,        no_financeiro)
-grafo.add_node(NodeName.ORQUESTRADOR,      no_orquestrador)
-grafo.add_node(NodeName.JUIZ,              no_juiz)
-grafo.add_node(NodeName.GUARDRAIL_SAIDA,   no_guardrail_saida)
+grafo.add_node(Node.GUARDRAIL_ENTRADA, no_guardrail_entrada)
+grafo.add_node(Node.ROTEADOR,          no_roteador)
+grafo.add_node(Node.ESTOQUE,           no_estoque)
+grafo.add_node(Node.COMPRAS,           no_compras)
+grafo.add_node(Node.RECEITAS,          no_receitas)
+grafo.add_node(Node.FAQ,               no_faq)
+grafo.add_node(Node.FINANCEIRO,        no_financeiro)
+grafo.add_node(Node.ORQUESTRADOR,      no_orquestrador)
+grafo.add_node(Node.JUIZ,              no_juiz)
+grafo.add_node(Node.GUARDRAIL_SAIDA,   no_guardrail_saida)
 
 
-grafo.set_entry_point(NodeName.GUARDRAIL_ENTRADA)
+grafo.set_entry_point(Node.GUARDRAIL_ENTRADA)
 
 grafo.add_conditional_edges(
-    source   = NodeName.GUARDRAIL_ENTRADA,
+    source   = Node.GUARDRAIL_ENTRADA,
     path     = decidir_apos_guardrail_entrada,
     path_map = {
         Route.FIM:         END,
-        NodeName.ROTEADOR: NodeName.ROTEADOR,
+        Node.ROTEADOR: Node.ROTEADOR,
     },
 )
 
 grafo.add_conditional_edges(
-    source   = NodeName.ROTEADOR,
+    source   = Node.ROTEADOR,
     path     = decidir_especialista,
     path_map = {
-        Route.ESTOQUE:    NodeName.ESTOQUE,
-        Route.COMPRAS:    NodeName.COMPRAS,
-        Route.RECEITAS:   NodeName.RECEITAS,
-        Route.FAQ:        NodeName.FAQ,
-        Route.FINANCEIRO: NodeName.FINANCEIRO,
+        Route.ESTOQUE:    Node.ESTOQUE,
+        Route.COMPRAS:    Node.COMPRAS,
+        Route.RECEITAS:   Node.RECEITAS,
+        Route.FAQ:        Node.FAQ,
+        Route.FINANCEIRO: Node.FINANCEIRO,
         Route.FIM:        END,
     },
 )
 
 # Estoque/Compras/Financeiro produzem JSON estruturado -> Orquestrador formata em linguagem natural
-grafo.add_edge(NodeName.ESTOQUE,    NodeName.ORQUESTRADOR)
-grafo.add_edge(NodeName.COMPRAS,    NodeName.ORQUESTRADOR)
-grafo.add_edge(NodeName.FINANCEIRO, NodeName.ORQUESTRADOR)
-grafo.add_edge(NodeName.ORQUESTRADOR, NodeName.JUIZ)
+grafo.add_edge(Node.ESTOQUE,    Node.ORQUESTRADOR)
+grafo.add_edge(Node.COMPRAS,    Node.ORQUESTRADOR)
+grafo.add_edge(Node.FINANCEIRO, Node.ORQUESTRADOR)
+grafo.add_edge(Node.ORQUESTRADOR, Node.JUIZ)
 
 # Receitas/FAQ já respondem em linguagem natural -> vão direto para o Juiz
-grafo.add_edge(NodeName.RECEITAS, NodeName.JUIZ)
-grafo.add_edge(NodeName.FAQ,      NodeName.JUIZ)
+grafo.add_edge(Node.RECEITAS, Node.JUIZ)
+grafo.add_edge(Node.FAQ,      Node.JUIZ)
 
 # Juiz: reprovado + tentativas disponíveis -> volta pro especialista de origem; caso contrário -> Guardrail de Saída
 grafo.add_conditional_edges(
-    source   = NodeName.JUIZ,
+    source   = Node.JUIZ,
     path     = decidir_apos_juiz,
     path_map = {
-        Route.ESTOQUE:              NodeName.ESTOQUE,
-        Route.COMPRAS:              NodeName.COMPRAS,
-        Route.RECEITAS:             NodeName.RECEITAS,
-        Route.FAQ:                  NodeName.FAQ,
-        Route.FINANCEIRO:           NodeName.FINANCEIRO,
-        NodeName.GUARDRAIL_SAIDA:   NodeName.GUARDRAIL_SAIDA,
+        Route.ESTOQUE:              Node.ESTOQUE,
+        Route.COMPRAS:              Node.COMPRAS,
+        Route.RECEITAS:             Node.RECEITAS,
+        Route.FAQ:                  Node.FAQ,
+        Route.FINANCEIRO:           Node.FINANCEIRO,
+        Node.GUARDRAIL_SAIDA:   Node.GUARDRAIL_SAIDA,
     },
 )
 
-grafo.add_edge(NodeName.GUARDRAIL_SAIDA, END)
+grafo.add_edge(Node.GUARDRAIL_SAIDA, END)
 
 
-@functools.cache
+@cache
 def fluxo_agentes():
     """
     Compila o grafo sob demanda. Lazy porque o MongoDBSaver abre conexão com o

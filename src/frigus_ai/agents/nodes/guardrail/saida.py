@@ -6,7 +6,7 @@ from frigus_ai.agents.nodes.guardrail.schemas import (
     PII_USUARIO,
     ResultadoGuardrail,
 )
-from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.agents.nodes.names import Node
 from frigus_ai.agents.prompts.guardrail import GuardrailPrompts
 from frigus_ai.graph.llm import llm_rapido
 from frigus_ai.graph.state import Estado
@@ -81,7 +81,7 @@ def no_guardrail_saida(estado: Estado) -> dict:
     )
 
     return {
-        "agentes_chamados": [NodeName.GUARDRAIL_SAIDA],
+        "agentes_chamados": [Node.GUARDRAIL_SAIDA],
         "messages":         [{"role": "assistant", "content": resultado["conteudo"]}],
     }
 

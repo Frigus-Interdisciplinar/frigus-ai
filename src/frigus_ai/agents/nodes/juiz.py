@@ -1,7 +1,7 @@
 import re
 
 from config.logging import get_logger
-from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.agents.nodes.names import Node
 from frigus_ai.agents.prompts.juiz import JuizPrompts
 from frigus_ai.graph.llm import llm_juiz
 from frigus_ai.graph.state import Estado
@@ -43,7 +43,7 @@ def no_juiz(estado: Estado) -> dict:
     if veredito == "REPROVADO" and tentativas < MAX_TENTATIVAS:
         logger.warning("Juiz REPROVOU (tentativa %s/%s): %s", tentativas + 1, MAX_TENTATIVAS, justificativa)
         return {
-            "agentes_chamados":   [NodeName.JUIZ],
+            "agentes_chamados":   [Node.JUIZ],
             "veredito_juiz":      veredito,
             "justificativa_juiz": justificativa,
             "feedback_juiz":      justificativa,
@@ -56,7 +56,7 @@ def no_juiz(estado: Estado) -> dict:
         logger.info("Juiz APROVOU: %s", justificativa)
 
     return {
-        "agentes_chamados":   [NodeName.JUIZ],
+        "agentes_chamados":   [Node.JUIZ],
         "veredito_juiz":      veredito,
         "justificativa_juiz": justificativa,
         "feedback_juiz":      "",
