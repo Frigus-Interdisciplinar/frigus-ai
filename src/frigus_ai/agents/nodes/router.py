@@ -1,23 +1,21 @@
 import re
 
 from config.logging import get_logger
-from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.agents.nodes.names import Node
 from frigus_ai.graph.agents import router_app
-from frigus_ai.graph.state import Estado, Route
+from frigus_ai.graph.state import ROTAS_VALIDAS, Estado, Route, RouteLiteral
 
 log = get_logger(__name__)
 
 
-def _extrair_rota(texto: str) -> Route:
+def _extrair_rota(texto: str) -> RouteLiteral:
 
     match = re.search(r"ROUTE=(\w+)", texto)
     if not match:
         return Route.FIM
 
-    try:
-        return Route(match.group(1))
-    except ValueError:
-        return Route.FIM
+    valor = match.group(1)
+    return valor if valor in ROTAS_VALIDAS else Route.FIM
 
 
 def _extrair_pergunta(texto: str) -> str:
@@ -38,16 +36,16 @@ def no_roteador(estado: Estado) -> dict:
 
     log.debug(f"Rota escolhida: {rota} | pergunta: '{pergunta}'")
 
-    if rota is Route.FIM:
+    if rota == Route.FIM:
         return {
-            "agentes_chamados": [NodeName.ROTEADOR],
+            "agentes_chamados": [Node.ROTEADOR],
             "rota":             Route.FIM,
             "pergunta_original": pergunta,
             "messages":         [{"role": "assistant", "content": texto}],
         }
 
     return {
-        "agentes_chamados":  [NodeName.ROTEADOR],
+        "agentes_chamados":  [Node.ROTEADOR],
         "rota":              rota,
         "pergunta_original": pergunta,
         "tentativas_juiz":   0,

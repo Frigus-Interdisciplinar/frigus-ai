@@ -3,7 +3,7 @@
 # Frigus.AI
 
 Assistente multi-agente do app **Frigus** — gestão de alimentos, receitas, compras e finanças domésticas.
-Construído com LangChain + LangGraph, RAG (FAISS), guardrails e um agente juiz (LLM-as-judge).
+Construído com LangChain + LangGraph, RAG (Qdrant), guardrails e um agente juiz (LLM-as-judge).
 
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=flat&logo=python&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1.2-1C3C3C?style=flat&logo=langchain&logoColor=white)
@@ -31,7 +31,7 @@ despensa). Ele atua em cinco domínios:
 **Financeiro (MoneySaving)** — gastos mensais, comparação entre meses, valor estimado de alimentos
 descartados e evolução do desperdício ao longo do tempo.
 
-**FAQ** — dúvidas sobre o funcionamento do app Frigus, via RAG (FAISS) sobre `data/pdf/Frigus-Documentacao.pdf`.
+**FAQ** — dúvidas sobre o funcionamento do app Frigus, via RAG (Qdrant) sobre `data/pdf/Frigus-Documentacao.pdf`.
 
 Para tudo fora desses domínios (small talk, perguntas fora de escopo), o próprio roteador responde
 diretamente ao usuário.
@@ -83,9 +83,10 @@ reprovado (loga um aviso), para nunca travar o usuário.
 frigus-ai/
 ├── main.py                          # Dispatcher — `python main.py <interface>`
 ├── pyproject.toml
-├── docker-compose.yml               # Postgres + Mongo
+├── docker-compose.yml               # Postgres + Mongo + Redis + Qdrant
 │
-├── interfaces/terminal/             # app.py (loop de input) + display.py (Rich + pyfiglet)
+├── interfaces/tui/                  # app.py (Textual) + display.py (Bubble/MessageRow) + app.tcss
+├── interfaces/api/                  # main.py (FastAPI) + routes/{chats,health}.py + schemas/ — esqueleto, sem auth
 ├── config/                          # settings, models (LLM), logging, docker (compose up/down)
 ├── data/
 │   ├── pdf/Frigus-Documentacao.pdf
@@ -100,13 +101,14 @@ frigus-ai/
     │   └── service.py               # send_message, get_history, iniciar/encerrar_sessao
     │
     ├── agents/
-    │   ├── prompts/                 # Prompts de cada agente
-    │   │   ├── base.py              # GenericAgent: persona, contexto temporal, shots
-    │   │   ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py
-    │   │   ├── orquestrador.py
-    │   │   ├── juiz.py              # critérios de avaliação + formato de veredito
-    │   │   ├── guardrail.py         # classificador + revisão de segurança alimentar/PII
-    │   │   └── resumidor.py
+    │   ├── prompts/                 # Só .md + loader.py — nenhum outro .py na pasta
+    │   │   ├── loader.py            # load_prompt()/load_sections(): frontmatter `---` (metadados,
+    │   │   │                        # hoje só usa_tools_obrigatorias) + seções `## NOME` do .md
+    │   │   ├── router.md / estoque.md / compras.md / receitas.md / faq.md / financeiro.md
+    │   │   ├── orquestrador.md
+    │   │   ├── juiz.md              # PAPEL + SHOTS + TEMPLATE (usado à parte, sem passar por load_prompt)
+    │   │   ├── guardrail.md         # CLASSIFICADOR + COMPLIANCE (sem persona — load_sections cru)
+    │   │   └── resumidor.md / perfil.md
     │   └── nodes/                   # Funções de nó do grafo LangGraph
     │       ├── names.py
     │       ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py / orquestrador.py
@@ -114,7 +116,7 @@ frigus-ai/
     │       └── guardrail/{entrada,saida,schemas}.py
     │
     ├── graph/
-    │   ├── state.py                 # Estado e Route StrEnum
+    │   ├── state.py                 # Estado e Route (Literal + classe de constantes)
     │   ├── llm.py                   # build_llm e instâncias de LLM
     │   ├── agents.py                # Agentes compilados (create_agent por especialista)
     │   └── builder.py               # Grafo (ciclo de retentativa do Juiz) + checkpointer Mongo
@@ -129,11 +131,12 @@ frigus-ai/
         │   ├── receitas/{schemas,core}.py
         │   └── financeiro/{schemas,core}.py
         ├── mongo/                   # agent_chats + user_profiles + checkpoints do grafo
-        └── faq_tools.py             # RAG (FAISS) sobre Frigus-Documentacao.pdf
+        ├── redis/                   # cache de perfil (perfil.py) + rate limit de chat (chat.py)
+        └── qdrant/faq/              # RAG (Qdrant) sobre Frigus-Documentacao.pdf — connection/core/ingest
 ```
 
-`api/`, `mcp_server/`, `a2a_server/`, `tools/redis/` e `tools/qdrant/` foram removidos — eram
-placeholders vazios. Serão recriados quando cada trabalho começar (ver "Próximos passos").
+`api/`, `mcp_server/` e `a2a_server/` foram removidos — eram placeholders vazios. Serão recriados
+quando cada trabalho começar (ver "Próximos passos").
 
 ---
 
@@ -145,7 +148,8 @@ placeholders vazios. Serão recriados quando cada trabalho começar (ver "Próxi
 | **Histórico de conversa do assistente** | MongoDB (`agent_chats`) | Mensagens por sessão do chatbot (distinto do chat social do app, que já existe em `conversations`/`messages` no Postgres) |
 | **Perfil comportamental** | MongoDB (`user_profiles`) | Resumo de hábitos gerado pela IA, chaveado por `users.id` |
 | **Checkpointing do grafo** | LangGraph `MongoDBSaver` (`graph_checkpoints`/`graph_checkpoint_writes`) | Estado interno do grafo entre turnos, chaveado por `thread_id` (= `session_id`) — sobrevive a restart do processo |
-| **Busca vetorial (RAG do FAQ)** | FAISS (local, em memória) | Índice do `Frigus-Documentacao.pdf` |
+| **Busca vetorial (RAG do FAQ)** | Qdrant | Índice do `Frigus-Documentacao.pdf` (`tools/qdrant/faq/`) |
+| **Cache de perfil comportamental + rate limit de chat** | Redis | `tools/redis/perfil.py` (cache-aside sobre `user_profiles`) e `tools/redis/chat.py` (mensagens/minuto por usuário) |
 
 Note que `users`, `groups`, `stocks` etc. no Postgres usam `INTEGER PRIMARY KEY` sem `SERIAL` (o DDL foi
 desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` (`tools/postgres/helpers.py::next_id`).
@@ -166,13 +170,15 @@ desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` 
 
 ## Próximos passos (fora do escopo desta base)
 
-As pastas `tools/redis/`, `tools/qdrant/`, `mcp_server/` e `a2a_server/` existem só com um `__init__.py` —
-são os pontos de extensão reservados para quando fizer sentido:
+As pastas `mcp_server/` e `a2a_server/` existem só com um `__init__.py` — são os pontos de extensão
+reservados para quando fizer sentido:
 
-- **Redis**: cache de RAG, rate limit, ou trocar o checkpointer em memória por um persistente.
-- **Qdrant**: RAG com banco vetorial de verdade (em vez do FAISS local) e busca semântica de receitas.
 - **MCP**: expor as tools do Frigus.AI para hosts MCP (Claude Desktop etc.).
 - **A2A**: expor o grafo como um agente Agent-to-Agent para outros sistemas multi-agente.
+- **Redis — fila de tasks**: pendente, deliberadamente não implementado ainda (ver TODO.md). Os dois
+  usos atuais (cache de perfil, rate limit) são leitura/escrita síncrona simples; uma fila de tasks
+  (ex. processar ingestão do Qdrant ou chamadas de MCP fora do caminho da requisição) é um uso
+  diferente de Redis, ainda sem desenho definido.
 
 ---
 
@@ -188,6 +194,8 @@ GROQ_API_KEY=...
 ANTHROPIC_API_KEY=...
 POSTGRES_URI=postgresql://frigus:frigus@localhost:5432/frigus
 MONGODB_URI=mongodb://localhost:27017
+REDIS_URL=redis://localhost:6379/0
+QDRANT_URL=http://localhost:6333
 ```
 
 ### Instalação
@@ -208,7 +216,8 @@ docker compose up -d
 ### Execução
 
 ```bash
-just run          # equivalente a `python main.py terminal`
+just run          # equivalente a `python main.py tui` (default)
+just run api       # sobe a API (FastAPI/uvicorn) em localhost:8000 — esqueleto, sem auth ainda
 ```
 
 ### Desenvolvimento
@@ -226,9 +235,12 @@ Digite `/exit` para encerrar.
 ## Dependências principais
 
 - [LangChain](https://github.com/langchain-ai/langchain) / [LangGraph](https://github.com/langchain-ai/langgraph)
-- [FAISS](https://github.com/facebookresearch/faiss) — busca vetorial para o RAG do FAQ
+- [qdrant-client](https://github.com/qdrant/qdrant-client) — busca vetorial para o RAG do FAQ
+- [redis](https://github.com/redis/redis-py) — cache de perfil comportamental + rate limit de chat
 - [psycopg2-binary](https://pypi.org/project/psycopg2-binary/) — Postgres
 - [pymongo](https://pymongo.readthedocs.io/) — Mongo
-- [Rich](https://github.com/Textualize/rich) + [pyfiglet](https://github.com/pwaller/pyfiglet) — interface de terminal
+- [Rich](https://github.com/Textualize/rich) + [pyfiglet](https://github.com/pwaller/pyfiglet) — banner/painéis da TUI
+- [Textual](https://github.com/Textualize/textual) — interface TUI (`interfaces/tui/`), única interface interativa hoje
+- [FastAPI](https://fastapi.tiangolo.com/) + [uvicorn](https://www.uvicorn.org/) — API (`interfaces/api/`), esqueleto sem auth
 - [Pydantic](https://docs.pydantic.dev/) — validação de schemas das tools
 - `langchain-anthropic`, `langchain-google-genai`, `langchain-groq` — integrações com providers

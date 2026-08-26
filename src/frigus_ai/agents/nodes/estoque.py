@@ -1,4 +1,4 @@
-from frigus_ai.agents.nodes.names import NodeName
+from frigus_ai.agents.nodes.names import Node
 from frigus_ai.graph.agents import estoque_app
 from frigus_ai.graph.state import Estado
 
@@ -15,7 +15,7 @@ def no_estoque(estado: Estado) -> dict:
     resposta = saida["messages"][-1].content
 
     return {
-        "agentes_chamados":      [NodeName.ESTOQUE],
+        "agentes_chamados":      [Node.ESTOQUE],
         "resposta_especialista": resposta,
         "dados_especialista":    resposta,
     }
