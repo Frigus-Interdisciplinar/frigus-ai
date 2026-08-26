@@ -6,7 +6,7 @@ from config.logging import get_logger
 
 logger = get_logger("docker")
 
-# Serviços definidos em docker-compose.yml: postgres, mongo
+# Serviços definidos em docker-compose.yml: postgres, mongo, redis, qdrant
 COMPOSE_FILE = "docker-compose.yml"
 
 
@@ -44,7 +44,7 @@ def _encerrar_servicos():
 
 def garantir_banco() -> None:
     """
-    Sobe (se necessário) os serviços do docker-compose: postgres, mongo.
+    Sobe (se necessário) os serviços do docker-compose: postgres, mongo, redis, qdrant.
     Registra o encerramento automático quando o processo terminar.
     """
 
@@ -58,7 +58,7 @@ def garantir_banco() -> None:
     )
 
     servicos_rodando = set(resultado.stdout.split())
-    servicos_esperados = {"postgres", "mongo"}
+    servicos_esperados = {"postgres", "mongo", "redis", "qdrant"}
 
     if servicos_esperados.issubset(servicos_rodando):
         logger.info("Todos os serviços já estão rodando.")

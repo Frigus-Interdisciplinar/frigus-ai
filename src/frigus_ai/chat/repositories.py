@@ -5,6 +5,11 @@ import frigus_ai.tools.mongo.users.core as perfis
 from frigus_ai.agents.nodes.guardrail.entrada import anonimizar_entrada
 from frigus_ai.chat.models import ChatMessage, Role
 from frigus_ai.tools.mongo.chats.schemas import Mensagem
+from frigus_ai.tools.redis.perfil import (
+    buscar_perfil_cache,
+    invalidar_perfil_cache,
+    salvar_perfil_cache,
+)
 
 
 def _para_mensagem(msg: ChatMessage) -> Mensagem:
@@ -42,7 +47,15 @@ def _redigir_saida_historico(historico: list[ChatMessage] | None) -> dict:
 
 @traceable(run_type="tool", name="buscar_perfil", process_outputs=_redigir_saida_perfil)
 def buscar_perfil(user_id: int) -> str:
-    return perfis.buscar_perfil(user_id)
+    """Cache-aside: tenta o Redis primeiro, só bate no Mongo em caso de miss."""
+
+    perfil_cache = buscar_perfil_cache(user_id)
+    if perfil_cache is not None:
+        return perfil_cache
+
+    perfil = perfis.buscar_perfil(user_id)
+    salvar_perfil_cache(user_id, perfil)
+    return perfil
 
 
 def garantir_perfil(user_id: int) -> None:
@@ -74,3 +87,4 @@ def salvar_mensagens(
 
 def encerrar_sessao(session_id: str, user_id: int) -> None:
     chats.encerrar_sessao(session_id, user_id)
+    invalidar_perfil_cache(user_id)

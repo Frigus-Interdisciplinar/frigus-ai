@@ -2,11 +2,16 @@ from frigus_ai.chat import repositories, runner
 from frigus_ai.chat.models import ChatMessage, Role
 from frigus_ai.tools.postgres.connection import get_conn
 from frigus_ai.tools.postgres.helpers import resolve_stock_id
+from frigus_ai.tools.redis.chat import can_send_message
 
 # Usuário fixo para rodar a demo localmente sem tela de login. `users.id` é
 # INTEGER PRIMARY KEY sem SERIAL no schema (data/sql/schema.sql), por isso
 # criamos o registro (e o grupo/estoque associados) na primeira execução.
 DEMO_USER_ID = 1
+
+
+class LimiteDeMensagensExcedido(Exception):
+    pass
 
 
 def _garantir_usuario_demo(user_id: int = DEMO_USER_ID) -> None:
@@ -43,6 +48,11 @@ def iniciar_sessao(user_id: int = DEMO_USER_ID) -> int | None:
 
 
 def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | None) -> str:
+    if not can_send_message(user_id):
+        raise LimiteDeMensagensExcedido(
+            "Você atingiu o limite de mensagens. Tente novamente em alguns instantes."
+        )
+
     perfil = repositories.buscar_perfil(user_id)
     resposta = runner.executar(conteudo, session_id, user_id, stock_id, perfil)
 
