@@ -1,10 +1,10 @@
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
+from frigus_ai.tools.qdrant.faq.connection import get_qdrant_client
+from frigus_ai.tools.redis.connection import get_client
 
 from frigus_ai.tools.mongo.connection import banco
 from frigus_ai.tools.postgres.connection import get_conn
-from frigus_ai.tools.qdrant.faq.connection import get_qdrant_client
-from frigus_ai.tools.redis.connection import get_client
 from interfaces.api.schemas.health import HealthCheckResponse
 
 router = APIRouter(prefix="/health", tags=["health"])
