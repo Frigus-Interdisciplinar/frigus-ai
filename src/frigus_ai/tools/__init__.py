@@ -23,6 +23,10 @@ from .postgres.receitas.core import (
     match_recipes_to_stock,
 )
 from .qdrant.faq.core import faq_retriever
+from .spoonacular.core import (
+    find_recipes_by_ingredients,
+    get_recipe_information,
+)
 
 ESTOQUE_TOOLS = [add_stock_product, query_stock, update_stock_quantity, discard_product]
 COMPRAS_TOOLS = [
@@ -33,7 +37,12 @@ COMPRAS_TOOLS = [
     generate_shopping_list_from_low_stock,
     register_purchase_from_nfe,
 ]
-RECEITAS_TOOLS = [match_recipes_to_stock, get_recipe_details]
+RECEITAS_TOOLS = [
+    match_recipes_to_stock,
+    get_recipe_details,
+    find_recipes_by_ingredients,
+    get_recipe_information,
+]
 FAQ_TOOLS = [faq_retriever]
 FINANCEIRO_TOOLS = [gastos_mensais, comparacao_mensal, valor_descartado, evolucao_desperdicio]
 
