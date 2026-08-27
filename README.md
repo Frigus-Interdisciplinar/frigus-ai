@@ -10,6 +10,10 @@ Construído com LangChain + LangGraph, RAG (Qdrant), guardrails e um agente juiz
 ![LangGraph](https://img.shields.io/badge/LangGraph-1.1-FF6B35?style=flat)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-psycopg2-336791?style=flat&logo=postgresql&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/MongoDB-pymongo-47A248?style=flat&logo=mongodb&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-pyredis-DC382D?style=flat&logo=redis&logoColor=white)
+![Neo4j](https://img.shields.io/badge/Neo4j-Graph_Database-4581C3?style=flat&logo=neo4j&logoColor=white)
+![Qdrant](https://img.shields.io/badge/Qdrant-Vector_Database-DC244C?style=flat&logo=qdrant&logoColor=white)
+
 
 </div>
 
@@ -43,32 +47,6 @@ diretamente ao usuário.
 <div align="center">
   <img src="assets/diagrama-agentes.png" alt="Diagrama do fluxo de agentes do Frigus.AI" width="720" />
 </div>
-
-```mermaid
-flowchart LR
-    U(["Usuário"]) --> GE["Guardrail Entrada"]
-    GE -->|bloqueado| FIM(["Fim"])
-    GE -->|aprovado| R["Router"]
-    R -->|estoque| ES["Estoque"]
-    R -->|compras| CO["Compras"]
-    R -->|receitas| RE["Receitas"]
-    R -->|faq| FAQ["FAQ"]
-    R -->|financeiro| FI["Financeiro"]
-    R -->|fora de escopo| FIM
-    ES --> O["Orquestrador"]
-    CO --> O
-    FI --> O
-    RE --> J["Juiz"]
-    FAQ --> J
-    O --> J
-    J -->|reprovado + tentativas < 2| ES
-    J -->|reprovado + tentativas < 2| CO
-    J -->|reprovado + tentativas < 2| RE
-    J -->|reprovado + tentativas < 2| FI
-    J -->|reprovado + tentativas < 2| FAQ
-    J -->|aprovado ou tentativas esgotadas| GS["Guardrail Saída"]
-    GS --> FIM
-```
 
 O **Juiz** é um agente LLM-as-judge: audita a resposta quanto a grounding (só usa dados que vieram das
 tools), relevância e completude, ANTES do guardrail de saída. Se reprovar, a resposta volta para o mesmo
