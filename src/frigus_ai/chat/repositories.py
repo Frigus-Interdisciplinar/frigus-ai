@@ -1,3 +1,5 @@
+import asyncio
+
 from langsmith import traceable
 
 import frigus_ai.tools.mongo.chats.core as chats
@@ -46,27 +48,27 @@ def _redigir_saida_historico(historico: list[ChatMessage] | None) -> dict:
 
 
 @traceable(run_type="tool", name="buscar_perfil", process_outputs=_redigir_saida_perfil)
-def buscar_perfil(user_id: int) -> str:
+async def buscar_perfil(user_id: int) -> str:
     """Cache-aside: tenta o Redis primeiro, só bate no Mongo em caso de miss."""
 
-    perfil_cache = buscar_perfil_cache(user_id)
+    perfil_cache = await asyncio.to_thread(buscar_perfil_cache, user_id)
     if perfil_cache is not None:
         return perfil_cache
 
-    perfil = perfis.buscar_perfil(user_id)
-    salvar_perfil_cache(user_id, perfil)
+    perfil = await asyncio.to_thread(perfis.buscar_perfil, user_id)
+    await asyncio.to_thread(salvar_perfil_cache, user_id, perfil)
     return perfil
 
 
-def garantir_perfil(user_id: int) -> None:
-    perfis.garantir_perfil(user_id)
+async def garantir_perfil(user_id: int) -> None:
+    await asyncio.to_thread(perfis.garantir_perfil, user_id)
 
 
 @traceable(
     run_type="tool", name="buscar_historico", process_outputs=_redigir_saida_historico
 )
-def buscar_historico(session_id: str, limit: int = 5) -> list[ChatMessage]:
-    doc = chats.buscar(session_id, limit=limit)
+async def buscar_historico(session_id: str, limit: int = 5) -> list[ChatMessage]:
+    doc = await asyncio.to_thread(chats.buscar, session_id, limit=limit)
     if not doc:
         return []
     return [_de_mensagem(m) for m in Mensagem.de_dict(doc["messages"])]
@@ -75,16 +77,16 @@ def buscar_historico(session_id: str, limit: int = 5) -> list[ChatMessage]:
 @traceable(
     run_type="tool", name="salvar_mensagens", process_inputs=_redigir_entrada_mensagens
 )
-def salvar_mensagens(
+async def salvar_mensagens(
     user_id: int, session_id: str, mensagens: list[ChatMessage]
 ) -> None:
     mensagens_mongo = [_para_mensagem(m) for m in mensagens]
-    if not chats.buscar(session_id):
-        chats.criar(user_id, session_id, mensagens_mongo)
+    if not await asyncio.to_thread(chats.buscar, session_id):
+        await asyncio.to_thread(chats.criar, user_id, session_id, mensagens_mongo)
     else:
-        chats.atualizar_mensagens(session_id, mensagens_mongo)
+        await asyncio.to_thread(chats.atualizar_mensagens, session_id, mensagens_mongo)
 
 
-def encerrar_sessao(session_id: str, user_id: int) -> None:
-    chats.encerrar_sessao(session_id, user_id)
-    invalidar_perfil_cache(user_id)
+async def encerrar_sessao(session_id: str, user_id: int) -> None:
+    await asyncio.to_thread(chats.encerrar_sessao, session_id, user_id)
+    await asyncio.to_thread(invalidar_perfil_cache, user_id)

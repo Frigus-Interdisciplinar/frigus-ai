@@ -3,7 +3,7 @@ from frigus_ai.graph.agents import faq_app
 from frigus_ai.graph.state import Estado
 
 
-def no_faq(estado: Estado) -> dict:
+async def no_faq(estado: Estado) -> dict:
 
     mensagens = [{"role": "human", "content": estado["pergunta_original"]}]
 
@@ -11,7 +11,7 @@ def no_faq(estado: Estado) -> dict:
     if feedback:
         mensagens.append({"role": "human", "content": f"[REVISÃO SOLICITADA PELO JUIZ] {feedback}"})
 
-    saida = faq_app.invoke({"messages": mensagens})
+    saida = await faq_app.ainvoke({"messages": mensagens})
     resposta = saida["messages"][-1].content
 
     return {

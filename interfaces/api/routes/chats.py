@@ -10,38 +10,38 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, status
 
 from frigus_ai.chat import service as chat_service
-from frigus_ai.chat.models import Role as DomainRole
 from interfaces.api.schemas.chat import (
+    _ROLE_MAP,
     ChatCreateResponse,
     ChatMessageResponse,
     MessageCreate,
     MessageResponse,
-    Role,
 )
-
-_ROLE_MAP = {
-    DomainRole.HUMAN: Role.USER,
-    DomainRole.AI: Role.ASSISTANT,
-}
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_chat() -> ChatCreateResponse:
+async def create_chat() -> ChatCreateResponse:
     chat_id = str(uuid4())
-    stock_id = chat_service.iniciar_sessao(chat_service.DEMO_USER_ID)
+    stock_id = await chat_service.iniciar_sessao(chat_service.DEMO_USER_ID)
 
     return ChatCreateResponse(chat_id=chat_id, stock_id=stock_id)
 
 
 @router.post("/{chat_id}/messages")
-def send_message(chat_id: str, payload: MessageCreate) -> ChatMessageResponse:
+async def send_message(chat_id: str, payload: MessageCreate) -> ChatMessageResponse:
     user_id = chat_service.DEMO_USER_ID
-    stock_id = chat_service.iniciar_sessao(user_id)
+    stock_id = await chat_service.iniciar_sessao(user_id)
 
     try:
-        resposta = chat_service.send_message(payload.content, chat_id, user_id, stock_id)
+        resposta = await chat_service.send_message(
+            payload.content, 
+            chat_id, 
+            user_id, 
+            stock_id
+        )
+        
     except Exception as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e)) from e
 
@@ -49,7 +49,10 @@ def send_message(chat_id: str, payload: MessageCreate) -> ChatMessageResponse:
 
 
 @router.get("/{chat_id}/messages")
-def get_messages(chat_id: str) -> list[MessageResponse]:
-    historico = chat_service.get_history(chat_id)
+async def get_messages(chat_id: str) -> list[MessageResponse]:
+    historico = await chat_service.get_history(chat_id)
 
-    return [MessageResponse(role=_ROLE_MAP[m.role], content=m.content) for m in historico]
+    return [
+        MessageResponse(role=_ROLE_MAP[m.role], content=m.content) 
+        for m in historico
+    ]

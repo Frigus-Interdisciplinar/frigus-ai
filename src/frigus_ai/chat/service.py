@@ -1,3 +1,5 @@
+import asyncio
+
 from frigus_ai.chat import repositories, runner
 from frigus_ai.chat.models import ChatMessage, Role
 from frigus_ai.tools.postgres.connection import get_conn
@@ -37,24 +39,28 @@ def _garantir_usuario_demo(user_id: int = DEMO_USER_ID) -> None:
             conn.commit()
 
 
-def iniciar_sessao(user_id: int = DEMO_USER_ID) -> int | None:
-    """Garante usuário demo + perfil e resolve o stock_id. Retorna o stock_id."""
-    _garantir_usuario_demo(user_id)
-    repositories.garantir_perfil(user_id)
-
+def _resolver_stock_id(user_id: int) -> int | None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             return resolve_stock_id(cur, user_id)
 
 
-def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | None) -> str:
-    if not can_send_message(user_id):
+async def iniciar_sessao(user_id: int = DEMO_USER_ID) -> int | None:
+    """Garante usuário demo + perfil e resolve o stock_id. Retorna o stock_id."""
+    await asyncio.to_thread(_garantir_usuario_demo, user_id)
+    await repositories.garantir_perfil(user_id)
+
+    return await asyncio.to_thread(_resolver_stock_id, user_id)
+
+
+async def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | None) -> str:
+    if not await asyncio.to_thread(can_send_message, user_id):
         raise LimiteDeMensagensExcedido(
             "Você atingiu o limite de mensagens. Tente novamente em alguns instantes."
         )
 
-    perfil = repositories.buscar_perfil(user_id)
-    resposta = runner.executar(conteudo, session_id, user_id, stock_id, perfil)
+    perfil = await repositories.buscar_perfil(user_id)
+    resposta = await runner.executar(conteudo, session_id, user_id, stock_id, perfil)
 
     if not resposta:
         return "Sem resposta."
@@ -63,14 +69,14 @@ def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | N
         ChatMessage(role=Role.HUMAN, content=conteudo),
         ChatMessage(role=Role.AI, content=resposta),
     ]
-    repositories.salvar_mensagens(user_id, session_id, novas)
+    await repositories.salvar_mensagens(user_id, session_id, novas)
 
     return resposta
 
 
-def get_history(session_id: str, limit: int = 5) -> list[ChatMessage]:
-    return repositories.buscar_historico(session_id, limit)
+async def get_history(session_id: str, limit: int = 5) -> list[ChatMessage]:
+    return await repositories.buscar_historico(session_id, limit)
 
 
-def encerrar_sessao(session_id: str, user_id: int) -> None:
-    repositories.encerrar_sessao(session_id, user_id)
+async def encerrar_sessao(session_id: str, user_id: int) -> None:
+    await repositories.encerrar_sessao(session_id, user_id)

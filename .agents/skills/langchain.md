@@ -31,7 +31,7 @@ router_app = create_agent(
     response_format=Roteamento,
 )
 
-saida = router_app.invoke({"messages": list(estado["messages"])})
+saida = await router_app.ainvoke({"messages": list(estado["messages"])})
 roteamento = saida["structured_response"]  # já é um Roteamento, sem parsing manual
 ```
 
@@ -39,7 +39,7 @@ Instead of (estado atual de `agents/nodes/router.py`):
 
 ```python
 # DO NOT DO THIS
-saida = router_app.invoke({"messages": list(estado["messages"])})
+saida = await router_app.ainvoke({"messages": list(estado["messages"])})
 texto = saida["messages"][-1].content
 match = re.search(r"ROUTE=(\w+)", texto)  # quebra se o LLM variar o formato
 rota = Route(match.group(1)) if match else Route.FIM
@@ -89,7 +89,7 @@ Do this — o que muda por turno entra como mensagem de sistema no `invoke`, nã
 
 ```python
 mensagens = [{"role": "system", "content": contexto_do_turno(perfil, pergunta)}, *estado["messages"]]
-saida = financeiro_app.invoke({"messages": mensagens})
+saida = await financeiro_app.ainvoke({"messages": mensagens})
 ```
 
 Instead of:
@@ -111,3 +111,14 @@ porque todo agente aqui é criado com `system_prompt`, que o `create_agent` prep
 Alternativa mais formal, se um dia precisar do prompt inteiro dinâmico: o middleware
 `dynamic_prompt` do `langchain.agents.middleware`, que recalcula o system prompt a cada chamada de
 modelo.
+
+## Nó de grafo `async def` não exige que as tools também sejam async
+
+Migração pra async (ver TODO.md "Async") converteu os 10 nós de `agents/nodes/` pra `async def` +
+`.ainvoke()` (no `*_app` de `graph/agents.py` e nos `llm_*.invoke` diretos de `juiz.py`/
+`guardrail/*.py`). As tools chamadas pelos agentes (`ESTOQUE_TOOLS` etc., psycopg2/pymongo por
+baixo) **continuam `def` sync sem nenhuma mudança** — `create_agent`/`ToolNode` do LangChain já faz
+offload automático pra thread quando a tool é sync e o agente roda via `.ainvoke()`, propagando
+`contextvars` corretamente (`tools/postgres/context.py:session_context`) sem precisar de
+`asyncio.to_thread` explícito nesse nível. Só vale reescrever uma tool pra `async def` se ela mesma
+ganhar um client async de verdade (ex. Redis/Qdrant, ver TODO.md) — nada obrigatório aqui.

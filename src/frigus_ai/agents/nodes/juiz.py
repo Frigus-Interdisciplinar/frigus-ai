@@ -26,7 +26,7 @@ def _extrair_veredito(texto: str) -> tuple[str, str]:
     return veredito, justificativa
 
 
-def no_juiz(estado: Estado) -> dict:
+async def no_juiz(estado: Estado) -> dict:
 
     tentativas = estado.get("tentativas_juiz", 0)
 
@@ -36,10 +36,11 @@ def no_juiz(estado: Estado) -> dict:
         resposta_gerada=estado.get("resposta_especialista", ""),
     )
 
-    saida = llm_juiz.invoke([
+    resultado = await llm_juiz.ainvoke([
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "human", "content": prompt},
-    ]).content
+    ])
+    saida = resultado.content
 
     veredito, justificativa = _extrair_veredito(saida)
 

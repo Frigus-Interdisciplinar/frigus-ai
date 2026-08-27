@@ -110,7 +110,8 @@ frigus-ai/
         │   └── financeiro/{schemas,core}.py
         ├── mongo/                   # agent_chats + user_profiles + checkpoints do grafo
         ├── redis/                   # cache de perfil (perfil.py) + rate limit de chat (chat.py)
-        └── qdrant/faq/              # RAG (Qdrant) sobre Frigus-Documentacao.pdf — connection/core/ingest
+        ├── qdrant/faq/              # RAG (Qdrant) sobre Frigus-Documentacao.pdf — connection/core/ingest
+        └── spoonacular/             # client HTTP (httpx) da Spoonacular Food API — receitas externas
 ```
 
 `api/`, `mcp_server/` e `a2a_server/` foram removidos — eram placeholders vazios. Serão recriados

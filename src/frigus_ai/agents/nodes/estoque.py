@@ -3,7 +3,7 @@ from frigus_ai.graph.agents import estoque_app
 from frigus_ai.graph.state import Estado
 
 
-def no_estoque(estado: Estado) -> dict:
+async def no_estoque(estado: Estado) -> dict:
 
     mensagens = list(estado["messages"])
 
@@ -11,7 +11,7 @@ def no_estoque(estado: Estado) -> dict:
     if feedback:
         mensagens = mensagens + [{"role": "human", "content": f"[REVISÃO SOLICITADA PELO JUIZ] {feedback}"}]
 
-    saida = estoque_app.invoke({"messages": mensagens})
+    saida = await estoque_app.ainvoke({"messages": mensagens})
     resposta = saida["messages"][-1].content
 
     return {

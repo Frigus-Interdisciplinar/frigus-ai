@@ -312,22 +312,28 @@ do projeto" (item extra) e resolvem gaps reais.
 - [ ] Pelo menos um teste pro cache-aside de perfil (hit vs. miss, mockando `tools/redis/connection.py`)
       — ainda sem teste de `chat/repositories.py` no geral (ver seção "Testes" abaixo)
 
-### Async — avaliado, não aplicado aqui
+### Async — decisão tomada, migração em duas fases (agentes → API)
 
-Pedido explícito era portar a base do assessor-ai e "deixar o projeto o mais async possível". A base
-portada (Redis e Qdrant) usa os clients **síncronos** (`redis-py`, `qdrant-client`), igual ao
-assessor-ai — não `redis.asyncio`/`AsyncQdrantClient`. Motivo: `.agents/skills/fastapi.md` já
-documenta, com o mesmo raciocínio do assessor-ai, que o projeto é **sync por design** — psycopg2,
-pymongo e `fluxo_agentes().invoke` são todos síncronos, e a própria API planejada usa rota `def` (não
-`async def`) de propósito, pra rodar em threadpool sem travar o event loop. Um client async só nesses
-dois módulos não ajudaria nada: toda chamada ainda passa por código síncrono acima e abaixo, então só
-criaria overhead de `asyncio.run()` por chamada sem ganho de throughput real.
+Ver plano completo em `C:\Users\davifranco-ieg\.claude\plans\async-napping-bentley.md`. Postgres
+(psycopg2) e Mongo (pymongo) continuam síncronos — trocar driver é decisão maior, fora de escopo
+(ver "ODM — avaliado, descartado" abaixo, mesmo raciocínio). Ganho real não é latência por request
+(chamada de LLM domina de qualquer jeito), é teto de concorrência + terreno pronto pra SSE/A2A/MCP.
 
-- [ ] **Decisão pendente do time:** se o objetivo é mesmo tornar o projeto mais async, é uma mudança
-      de arquitetura maior que este item (Postgres/Mongo síncronos, grafo LangGraph síncrono) — não
-      dá pra fazer só nos clients novos sem contradizer a decisão já documentada. Se for isso mesmo,
-      abrir como item próprio pra discutir escopo (rotas SSE de streaming já são candidatas óbvias,
-      ver `.agents/skills/streaming.md`), não misturar com a base de Redis/Qdrant
+- [x] **Fase 1 — agentes/grafo async.** Os 10 nós de `agents/nodes/` viraram `async def`,
+      chamando `.ainvoke()` nos `*_app` de `graph/agents.py` e nos `llm_*.invoke` diretos
+      (`juiz.py`, `guardrail/{entrada,saida}.py`). `chat/runner.py:executar` também é `async def`
+      agora (`await fluxo_agentes().ainvoke(...)`). Tools (`ESTOQUE_TOOLS` etc.) não mudaram — sync
+      continua funcionando via offload automático do LangChain pra thread (ver entrada nova em
+      `.agents/skills/langchain.md`). `chat/service.py:send_message` tem uma ponte provisória
+      (`asyncio.run(runner.executar(...))`) até a Fase 2 sair. `pytest-asyncio` entrou como dev dep
+      (`asyncio_mode = "auto"` em `pyproject.toml`). Verificado: `just test` (63 passed) e
+      `just check` limpos
+- [ ] **Fase 2 — API e interfaces.** `chat/service.py`/`chat/repositories.py` viram async de vez
+      (repositories embrulha pymongo com `asyncio.to_thread`, sem trocar driver), rotas de
+      `interfaces/api/routes/` viram `async def`, `interfaces/tui/app.py:_processar` troca
+      `@work(thread=True)` por worker async nativo do Textual. `.agents/skills/fastapi.md`
+      ("Divergências deliberadas" — rotas `async`) precisa ser reescrito junto, já que a decisão que
+      documenta deixa de valer
 
 ## Spoonacular — client + tabela de lookup de ingredientes
 

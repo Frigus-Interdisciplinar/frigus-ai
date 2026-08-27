@@ -1,6 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_DA_API = ConfigDict(populate_by_name=True, extra="ignore")
 
 
 class SearchIngredientsArgs(BaseModel):
@@ -42,3 +44,42 @@ class GetRecipeInformationArgs(BaseModel):
 class GetSimilarRecipesArgs(BaseModel):
     recipe_id: int = Field(description="ID da receita de referência.")
     number: int = Field(default=5, description="Quantidade máxima de receitas similares (1-100).")
+    
+class ReceitaPorIngrediente(BaseModel):
+    """Item de `GET /recipes/findByIngredients`."""
+
+    model_config = _DA_API
+
+    id: int
+    title: str
+    used_count: int = Field(alias="usedIngredientCount")
+    missed_count: int = Field(alias="missedIngredientCount")
+    missed: list[str] = Field(alias="missedIngredients", default_factory=list)
+
+    @field_validator("missed", mode="before")
+    @classmethod
+    def _so_os_nomes(cls, v: object) -> list[str]:
+        return [m.get("name", m) if isinstance(m, dict) else m for m in (v or [])]
+
+
+class IngredienteReceita(BaseModel):
+    """Item de `extendedIngredients` em `GET /recipes/{id}/information`."""
+
+    model_config = _DA_API
+
+    nome: str = Field(alias="name")
+    quantidade: float | None = Field(alias="amount", default=None)
+    unidade: str | None = Field(alias="unit", default=None)
+
+
+class ReceitaDetalhada(BaseModel):
+    """Resposta de `GET /recipes/{id}/information`."""
+
+    model_config = _DA_API
+
+    id: int
+    title: str
+    ready_in_minutes: int | None = Field(alias="readyInMinutes", default=None)
+    servings: int | None = None
+    ingredientes: list[IngredienteReceita] = Field(alias="extendedIngredients", default_factory=list)
+    instrucoes: str | None = Field(alias="instructions", default=None)
