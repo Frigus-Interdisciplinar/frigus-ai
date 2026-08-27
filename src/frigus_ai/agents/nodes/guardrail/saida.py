@@ -50,7 +50,7 @@ def _redigir_pii(texto: str, pii_list: list = PII) -> str:
     return texto
 
 
-def guardrail_saida(
+async def guardrail_saida(
     resposta: str,
     mapa_pii: dict,
     restaurar_pii: bool = False
@@ -63,9 +63,10 @@ def guardrail_saida(
     resposta = _redigir_pii(resposta, pii_list=PII_USUARIO)
     resposta = desanonimizar_saida(resposta, mapa_pii, restaurar=restaurar_pii)
 
-    saida = llm_rapido.invoke(
+    resultado_llm = await llm_rapido.ainvoke(
         _COMPLIANCE.format(resposta=resposta)
-    ).content.strip()
+    )
+    saida = resultado_llm.content.strip()
 
     if "RESPOSTA:" not in saida:
         return _saida_ok(resposta)
@@ -74,10 +75,10 @@ def guardrail_saida(
     return _saida_ok(revisada or resposta)
 
 
-def no_guardrail_saida(estado: Estado) -> dict:
+async def no_guardrail_saida(estado: Estado) -> dict:
 
     logger.info("Revisando resposta do especialista com guardrail de saída...")
-    resultado = guardrail_saida(
+    resultado = await guardrail_saida(
         estado["resposta_especialista"],
         estado.get("mapa_pii", {})
     )

@@ -11,7 +11,7 @@ def _extrair_resposta(estado_final: dict) -> str | None:
     return None
 
 
-def executar(
+async def executar(
     conteudo: str,
     session_id: str,
     user_id: int,
@@ -29,7 +29,7 @@ def executar(
     # stock_id/user_id ficam disponíveis via contextvars para as tools de
     # Postgres (tools/postgres/context.py) durante toda a invocação do grafo.
     with session_context(user_id=user_id, stock_id=stock_id):
-        estado_final = fluxo_agentes().invoke(
+        estado_final = await fluxo_agentes().ainvoke(
             estado_inicial,
             config={
                 "configurable": {"thread_id": session_id},

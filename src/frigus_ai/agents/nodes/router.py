@@ -27,9 +27,9 @@ def _extrair_pergunta(texto: str) -> str:
     return match.group(1).strip()
 
 
-def no_roteador(estado: Estado) -> dict:
+async def no_roteador(estado: Estado) -> dict:
 
-    saida = router_app.invoke({"messages": list(estado["messages"])})
+    saida = await router_app.ainvoke({"messages": list(estado["messages"])})
     texto = saida["messages"][-1].content
     rota  = _extrair_rota(texto)
     pergunta = _extrair_pergunta(texto)

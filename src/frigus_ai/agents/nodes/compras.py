@@ -3,7 +3,7 @@ from frigus_ai.graph.agents import compras_app
 from frigus_ai.graph.state import Estado
 
 
-def no_compras(estado: Estado) -> dict:
+async def no_compras(estado: Estado) -> dict:
 
     mensagens = list(estado["messages"])
 
@@ -11,7 +11,7 @@ def no_compras(estado: Estado) -> dict:
     if feedback:
         mensagens = mensagens + [{"role": "human", "content": f"[REVISÃO SOLICITADA PELO JUIZ] {feedback}"}]
 
-    saida = compras_app.invoke({"messages": mensagens})
+    saida = await compras_app.ainvoke({"messages": mensagens})
     resposta = saida["messages"][-1].content
 
     return {

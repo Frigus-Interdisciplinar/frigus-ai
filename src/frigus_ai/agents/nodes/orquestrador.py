@@ -3,13 +3,13 @@ from frigus_ai.graph.agents import orquestrador_app
 from frigus_ai.graph.state import Estado
 
 
-def no_orquestrador(estado: Estado) -> dict:
+async def no_orquestrador(estado: Estado) -> dict:
 
     mensagens = list(estado["messages"]) + [
         {"role": "human", "content": estado["resposta_especialista"]}
     ]
 
-    saida = orquestrador_app.invoke({"messages": mensagens})
+    saida = await orquestrador_app.ainvoke({"messages": mensagens})
 
     return {
         "agentes_chamados":      [Node.ORQUESTRADOR],
