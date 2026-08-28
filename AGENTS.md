@@ -30,7 +30,7 @@ ficar desatualizado.
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
 | Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph + histórico em Mongo (`tools/mongo/chats`). Checkpointer agora é `MongoDBSaver` (`graph/builder.py`) — estado sobrevive a restart. Falta só sessão HTTP de verdade, que depende da API |
 | Memória de longo prazo | ⚠️ Parcial | `tools/mongo/users` — perfil comportamental (resumo de hábitos) por `user_id`, persistente no Mongo. Avaliar se cobre o requisito ou se precisa de algo além do resumo (ex. memória vetorial) |
-| MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | `mcp_server/` e `a2a_server/` só têm `__init__.py` — ver TODO.md |
+| MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | Nada implementado — as pastas placeholder foram removidas do repo, serão recriadas quando o trabalho começar. Ver TODO.md |
 | RAG com fonte externa indicada | ✅ Feito | `tools/qdrant/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `agents/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
 | Guardrail | ✅ Feito | `agents/nodes/guardrail/{entrada,saida}.py` |
@@ -51,7 +51,9 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
 - Python 3.13+, gerenciado com `uv` (`uv venv`, `uv sync`, `uv add <pkg>`)
 - LangChain 1.2 / LangGraph 1.1 para orquestração de agentes
 - LLMs: Gemini (`gemini-2.5-flash`), Groq (`llama-3.3-70b-versatile`, `qwen-2.5-pro`), Claude
-  (`claude-haiku-4-5`, `claude-sonnet-4-6`) mapeados em `config/models.py`
+  (`claude-haiku-4-5`, `claude-sonnet-4-6`) e OpenRouter (`z-ai/glm-5.2:free`) mapeados em
+  `config/models.py`. Provider sem API key configurada faz `build_llm` devolver `None` e fica fora
+  da cadeia de fallback — só Gemini e Groq são obrigatórios
 - PostgreSQL (via Docker, auto start/stop em `config/docker.py`) para estoque/compras/receitas/
   financeiro, acessado via `psycopg2` cru (schema `dataload`, DDL fornecido em `data/sql/schema.sql`)
 - MongoDB para histórico de conversa (`tools/mongo/chats`), perfil comportamental
@@ -98,6 +100,33 @@ histórico. `interfaces/api/routes/chats.py` segue essa regra hoje, mas ainda n�
 trabalho de cada um começar (ver TODO.md).
 
 ## Convenções
+
+- **Leia o código antes de escrever código.** Antes de mudar qualquer arquivo, leia-o inteiro e leia
+  quem o chama. O padrão do repo está no código, não na sua cabeça: se um módulo já resolve o
+  problema de um jeito, o jeito certo é o dele. Faça a mudança caber no arquivo — não o contrário.
+  Se a sua mudança precisa de uma forma diferente da que já está ali, isso é sinal de que você
+  entendeu errado o problema, não de que o arquivo está errado. Confirme antes de divergir.
+
+  **Exemplo real (não repetir):** ao adicionar OpenRouter, `graph/llm.py` era uma coluna alinhada de
+  one-liners (`llm_x = build_llm(...)`) e `build_llm` já era orientado a tabela (`PROVIDER_MAP`,
+  `API_KEYS`, `BUILDERS`) com o tratamento por provider dentro da função. A primeira versão
+  adicionou no nível do módulo um ternário multi-linha, uma variável `_fallbacks` e um bloco de
+  comentário — quebrou o alinhamento e espalhou por fora o que a função já sabia fazer. O certo era
+  duas linhas dentro de `build_llm` (`if not api_key: return None`) e uma linha na coluna, como
+  todas as outras. **A regra que falhou foi de leitura, não de digitação.**
+
+- **Entenda o que o código faz de verdade, não o que o nome sugere.** Rode, grepe os callers, leia o
+  arquivo de teste. Achados que só apareceram por leitura real: a API não subia (`Role` do domínio
+  shadowando o `Role` do schema em `interfaces/api/schemas/chat.py`); o rate limit funcionava mas a
+  rota devolvia 500 em vez de 429; `.agents/skills/fastapi.md` documentava como decisão deliberada
+  um padrão (`rotas são def`) que a Fase 2 do async já tinha invertido. Nenhum apareceria lendo só
+  o nome das funções.
+
+- **Não construa infra para dado que o sistema não coleta.** Antes de propor integração nova, grepe
+  o schema e as tools atrás da entrada dela. Casos já barrados por essa regra: resolução de produto
+  por código de barras (não existe coluna de código de barras em `data/sql/schema.sql`, e a leitura
+  de NF-e é stub) e o grafo de preferências no Neo4j (`DISLIKES`/`ALLERGIC_TO` não são campo em
+  lugar nenhum — o perfil no Mongo é texto livre). Ver TODO.md.
 
 - Código de domínio (nomes de função, variáveis, docstrings de tool, mensagens ao usuário) é em
   **português**; nomes de classes/tipos de infraestrutura (`Settings`, `Model`, `Route`) em inglês.

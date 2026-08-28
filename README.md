@@ -135,6 +135,25 @@ desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` 
 
 ---
 
+## API HTTP
+
+`interfaces/api/` — FastAPI. Sem autenticação ainda: `user_id` é fixo em `DEMO_USER_ID`, mesmo
+bootstrap da TUI (ver TODO.md).
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/chats` | Cria uma sessão de chat (`chat_id` + `stock_id` resolvido) |
+| `POST` | `/chats/{chat_id}/messages` | Envia mensagem e roda o grafo. **429** + `Retry-After` se o rate limit do Redis estourar (10 msg/60s) |
+| `GET` | `/chats/{chat_id}/messages` | Histórico da sessão |
+| `DELETE` | `/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa e a atualização do perfil (duas chamadas de LLM) vão pra `BackgroundTasks`, fora do caminho da resposta |
+| `GET` | `/health/live` | Liveness |
+| `GET` | `/health/ready` | Readiness — checa Postgres/Mongo/Redis/Qdrant, **503** se algum estiver fora |
+
+Erro não previsto devolve **500** com mensagem genérica; o traceback vai pro log, nunca pro corpo da
+resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
+
+---
+
 ## Guardrails e Juiz
 
 - **Guardrail de Entrada**: detecção determinística de prompt injection/acesso a dados internos →
@@ -149,8 +168,8 @@ desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` 
 
 ## Próximos passos (fora do escopo desta base)
 
-As pastas `mcp_server/` e `a2a_server/` existem só com um `__init__.py` — são os pontos de extensão
-reservados para quando fizer sentido:
+`mcp_server/` e `a2a_server/` foram removidos (eram `__init__.py` vazio) — serão recriados quando
+cada trabalho começar:
 
 - **MCP**: expor as tools do Frigus.AI para hosts MCP (Claude Desktop etc.).
 - **A2A**: expor o grafo como um agente Agent-to-Agent para outros sistemas multi-agente.
@@ -168,9 +187,11 @@ reservados para quando fizer sentido:
 Copie `.env.example` para `.env` e preencha:
 
 ```env
-GEMINI_API_KEY=...
-GROQ_API_KEY=...
-ANTHROPIC_API_KEY=...
+GEMINI_API_KEY=...          # obrigatória
+GROQ_API_KEY=...            # obrigatória
+ANTHROPIC_API_KEY=...       # opcional
+OPENROUTER_API_KEY=...      # opcional — 3º provider na cadeia de fallback
+SPOONACULAR_API_KEY=...     # opcional — receitas externas
 POSTGRES_URI=postgresql://frigus:frigus@localhost:5432/frigus
 MONGODB_URI=mongodb://localhost:27017
 REDIS_URL=redis://localhost:6379/0
@@ -196,7 +217,7 @@ docker compose up -d
 
 ```bash
 just run          # equivalente a `python main.py tui` (default)
-just run api       # sobe a API (FastAPI/uvicorn) em localhost:8000 — esqueleto, sem auth ainda
+just run api       # sobe a API (FastAPI/uvicorn) em localhost:8000 — sem auth ainda
 ```
 
 ### Desenvolvimento
@@ -220,6 +241,7 @@ Digite `/exit` para encerrar.
 - [pymongo](https://pymongo.readthedocs.io/) — Mongo
 - [Rich](https://github.com/Textualize/rich) + [pyfiglet](https://github.com/pwaller/pyfiglet) — banner/painéis da TUI
 - [Textual](https://github.com/Textualize/textual) — interface TUI (`interfaces/tui/`), única interface interativa hoje
-- [FastAPI](https://fastapi.tiangolo.com/) + [uvicorn](https://www.uvicorn.org/) — API (`interfaces/api/`), esqueleto sem auth
+- [FastAPI](https://fastapi.tiangolo.com/) + [uvicorn](https://www.uvicorn.org/) — API (`interfaces/api/`), sem auth ainda
+- [httpx](https://www.python-httpx.org/) — client HTTP da Spoonacular Food API
 - [Pydantic](https://docs.pydantic.dev/) — validação de schemas das tools
-- `langchain-anthropic`, `langchain-google-genai`, `langchain-groq` — integrações com providers
+- `langchain-anthropic`, `langchain-google-genai`, `langchain-groq`, `langchain-openai` (OpenRouter, via base URL compatível) — integrações com providers
