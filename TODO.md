@@ -178,7 +178,24 @@ Rotas chamam só o módulo de serviço, nunca o grafo ou as tools direto. Ver
 - [ ] Controle de sessão por usuário de verdade (hoje é só `thread_id` gerado em memória na TUI) —
       ver item "Checkpointer persistente" abaixo, é pré-requisito. Depois disso, trocar `DEMO_USER_ID`
       hardcoded nas rotas por auth de verdade
-- [ ] Rate limiting básico (por IP e/ou por usuário)
+- [x] **Tratamento de erro nas rotas** — `LimiteDeMensagensExcedido` agora vira **429 +
+      `Retry-After: 60`**, e o `except Exception` genérico virou `logger.exception(...)` + `detail`
+      fixo (antes devolvia `str(e)`, vazando mensagem crua do psycopg2/pymongo pro cliente).
+      Registrado como pegadinha em `.agents/skills/fastapi.md`
+- [x] **`DELETE /chats/{chat_id}`** — 202 Accepted + `BackgroundTasks`, que agenda
+      `chat_service.encerrar_sessao` (resumo + perfil, duas chamadas de LLM) fora do caminho da
+      resposta. **Zero infra nova** — ver decisão na seção "Redis e Qdrant" sobre não subir fila
+      ainda. Destrava "memória de longo prazo" pelo caminho HTTP, que antes nunca gerava perfil
+- [x] **BUG pré-existente: a API não subia.** `schemas/chat.py` montava `_ROLE_MAP` acima da
+      declaração do `class Role` local, com o `Role` do domínio ainda shadowando o nome —
+      `AttributeError` no import, `uvicorn interfaces.api.main:app` não iniciava. Não havia teste
+      que importasse `interfaces.api.main`; agora há
+- [x] **Primeiro teste de API do repo** — `tests/interfaces/api/test_chats.py`, `TestClient` com
+      `chat_service` mockado (sem Postgres/Mongo/Redis): 429 com header, 500 sem vazar texto
+      interno, happy path e o 202 do DELETE
+- [ ] Rate limiting básico por IP (o por usuário já existe via Redis). **Nota:**
+      falta só o limite por IP; o por usuário (`tools/redis/chat.py`, 10 msg/60s) já roda e agora
+      responde o status HTTP certo
 
 ## Checkpointer persistente (controle de sessão) — concluído
 
@@ -291,11 +308,20 @@ do projeto" (item extra) e resolvem gaps reais.
 - [ ] **Rodar a ingestão** — `python -m frigus_ai.tools.qdrant.faq.ingest` precisa rodar uma vez
       contra o Qdrant local pra popular a collection `faq`; sem isso `faq_retriever` responde vazio.
       Não verificado nesta sessão (sem Docker/`.env` disponíveis no ambiente)
-- [ ] **Fila de tasks (Redis) — pendente, não implementada.** Os dois usos acima (cache, rate limit)
-      são leitura/escrita síncrona simples, não uma fila de verdade. Se aparecer trabalho que faça
-      sentido tirar do caminho da requisição (ex. ingestão do Qdrant sob demanda, chamadas de MCP
-      longas), avaliar Redis Streams ou uma lib de fila (RQ/Celery) nessa hora — sem caso de uso
-      concreto ainda, não adiantar infra
+- [ ] **Fila de tasks — o caso de uso concreto apareceu: `encerrar_sessao`.** Os dois usos acima
+      (cache, rate limit) são leitura/escrita síncrona simples, não fila. Mas
+      `tools/mongo/chats/core.py:encerrar_sessao` faz **duas chamadas de LLM** (`_gerar_resumo` +
+      `_gerar_perfil`) que o usuário espera só pra fechar o chat. É o único trabalho no projeto que
+      não precisa estar no caminho da requisição — nenhuma resposta depende do resultado.
+      **Ordem de ataque (não pular etapa):**
+      1. `BackgroundTasks` do FastAPI na rota `DELETE /chats/{id}` (ver seção API acima) — zero infra
+         nova, resolve 100% do problema observado. É por onde começar.
+      2. Só subir pra fila de verdade (Redis Streams ou RQ) se aparecer requisito de **durabilidade**
+         — job sobreviver a restart/crash do processo — ou mais de um worker. `BackgroundTasks` perde
+         a task se o processo morrer no meio; hoje isso custa um resumo de conversa, não um dado de
+         negócio.
+      Os candidatos antigos (ingestão do Qdrant sob demanda, chamadas de MCP longas) seguem
+      hipotéticos — não usar como justificativa
 - [ ] **Cache do embedding de busca (Redis) — pendente, não implementada.** Hoje `faq_retriever`
       chama `embeddings.embed_query(question)` (API do Gemini) toda vez, mesmo pra pergunta repetida
       — nenhum cache entre a pergunta e o vetor. Cachear em Redis por hash da pergunta normalizada
@@ -378,15 +404,69 @@ sem duplicar driver.
       YAGNI. **Default diferente do documentado na API:** `ranking=2` (minimiza faltando, não 1) e
       `ignore_pantry=True` (não `False`) em `FindRecipesByIngredientsArgs` — o default da API é
       genérico, o do produto é "o que dá pra fazer com o que já tenho"
-- [ ] `tools/spoonacular/core.py` — funções decoradas `@tool` + `@log_tool` chamando os endpoints
+- [x] `tools/spoonacular/core.py` — `find_recipes_by_ingredients` e `get_recipe_information`,
+      `@tool` + `@log_tool`. Cache com **TTL de 1h** (exigência do ToS da Spoonacular): a janela
+      horária (`int(time.time()) // 3600`) entra na chave do `lru_cache`, então a entrada velha é
+      descartada sozinha — sem cache externo. `number` limitado a `ge=1, le=10` (default 5) pra não
+      queimar a cota de 50 pontos/dia
 - [ ] `tools/mongo/spoonacular/schemas.py` — `IngredienteMatchDocument` (`@dataclass`, ver sketch já
       discutido no chat)
 - [ ] `tools/mongo/spoonacular/core.py` — `buscar_match(spoonacular_id)` / `salvar_match(...)`; toda
       tool acima que resolve ingrediente passa por aqui antes de gastar ponto de API
-- [ ] Registrar a(s) tool(s) no agente `receitas` (`agents/nodes/receitas.py` / `graph/agents.py`)
+- [x] Registrar a(s) tool(s) no agente `receitas` — em `tools/__init__.py:RECEITAS_TOOLS`.
+      **Junto veio um bug de produto:** o prompt mandava passar "os itens do estoque" pra
+      `find_recipes_by_ingredients`, mas `match_recipes_to_stock` só devolve contagens (não os nomes
+      dos ingredientes) e o agente não tinha `query_stock`. Sem fonte pros nomes, o LLM só podia
+      inventar. Resolvido adicionando `query_stock` ao `RECEITAS_TOOLS` (tool que já existia) e
+      corrigindo `prompts/receitas.md` — **não** criando tool composta nova
 - [ ] Atualizar tabela de tools no README.md
-- [ ] Pelo menos um teste (`tests/tools/spoonacular/` ou equivalente) — mocka a chamada HTTP, cobre
-      a lógica de decisão (cache hit vs. miss em `buscar_match`), não o client em si
+- [x] Teste em `tests/tools/spoonacular/test_core.py` — mocka a chamada HTTP, cobre mapeamento de
+      resposta, erro 402 (cota) e **expiração do cache na virada da janela** (verificado por mutação:
+      sem a janela na chave, o teste falha)
+- [ ] Atualizar `.agents/skills/spoonacular.md` — a seção "Pegadinhas deste repo" ainda diz "client
+      não implementado", e os endpoints `/food/products/*` avaliados depois (resolução de produto)
+      não estão documentados lá. Ver a decisão abaixo antes de escrever
+
+### Resolução de produto (`/food/products/*`) — avaliado, adiado
+
+Desenho considerado: `resolver_produto(codigo_barras | nome)` devolvendo
+`encontrado | confirmacao_necessaria | nao_encontrado`, separando `product_id` interno do
+`spoonacular_product_id`. **Adiado por dois motivos concretos:**
+
+1. **Não existe código de barras no sistema.** `grep -riE "upc|barcode|ean|gtin"` não acha nada;
+   `data/sql/schema.sql:products` é `id, name, category, storage_place, unit_price`; a única origem
+   plausível (`register_purchase_from_nfe`) é stub que retorna erro. O branch de UPC nasceria morto.
+2. **A cota não comporta.** `search` + `products/{id}` + `classify` = ~3 pontos **por produto**; uma
+   compra de 15 itens consome 45 dos 50 pontos/dia. Não é problema de afinar TTL, é aritmética.
+
+Vale registrar também: `/food/products/*` é catálogo de embalados de marca do mercado americano —
+o mesmo motivo pelo qual não usamos "preço de produtos comparáveis" no MoneySaving (base
+estrangeira) invalida o catálogo como fonte de despensa brasileira. Se um dia houver resolução de
+ingrediente, o caminho é `/ingredients/search` (genérico, 1 ponto), que o skill file já documenta.
+`Analyze Recipe` também fica fora: aceita receita só em inglês/alemão, exigiria tradução antes.
+
+**Reavaliar quando:** a leitura de NF-e sair do stub (aí existe código de barras de verdade).
+
+## OpenRouter como terceiro provider — implementado
+
+`config/models.py` ganhou `openrouter` nas três tabelas (`PROVIDER_MAP`, `API_KEYS`, `BUILDERS`).
+OpenRouter fala o protocolo da OpenAI, então o builder é
+`partial(ChatOpenAI, base_url="https://openrouter.ai/api/v1")` — `build_llm` não precisou de nenhum
+`if provider ==` novo.
+
+- [x] `uv add langchain-openai`; `OPENROUTER_API_KEY` em `config/settings.py` + `.env.example`
+      (default `""`, mesmo padrão de `ANTHROPIC_API_KEY`)
+- [x] **`build_llm` devolve `None` quando o provider não tem API key.** `ChatOpenAI` valida a chave
+      no construtor (diferente de Gemini/Groq/Anthropic), então sem isso o import quebraria pra quem
+      não configurou. De quebra corrige uma inconsistência que já existia: `ANTHROPIC_API_KEY` tem
+      default `""` e `build_llm(model=CLAUDE_SONNET)` construía um cliente com chave vazia que só
+      falharia na primeira chamada
+- [x] Cadeia: `llm_especialista = gemini → groq → openrouter` (o terceiro só entra se configurado)
+- [x] `tests/graph/test_llm.py` — resolução do provider, `None` sem chave, e o fallback com 2 elos
+      quando a chave existe
+- **Modelo escolhido:** `z-ai/glm-5.2:free`. O catálogo `:free` **rotaciona** — hoje não há mais
+      llama/deepseek/qwen gratuitos. Ao trocar, confirmar em <https://openrouter.ai/models> que o
+      modelo suporta **tool calling**, que `llm_especialista` exige
 
 ## Neo4j — grafo de recomendação de receitas (avaliado)
 
@@ -413,6 +493,16 @@ antiga em "Faltando", mais abaixo) pra "grafo de preferência/recomendação de 
       cruzam com o que o usuário é alérgico/não gosta" (última query de `queries.cypher`), que é
       consulta recursiva cara em documento — vale confirmar se esse tipo de consulta é usado de
       verdade antes de subir infra
+- [ ] **Bloqueador antes de tudo acima: não existe fonte de dado pra povoar o grafo.**
+      `PREFERS`/`DISLIKES`/`ALLERGIC_TO` são o que dá valor ao Neo4j (só a última query de
+      `queries.cypher` — receitas que não cruzam com alergia/desgosto — justifica banco de grafo; o
+      resto são lookups que Postgres/Mongo já fazem). Mas alergia e preferência **não são campo em
+      lugar nenhum do sistema**: `data/sql/schema.sql` não tem coluna pra isso, e o perfil em
+      `tools/mongo/users` é texto livre gerado por LLM (`prompts/perfil.md`), não dado estruturado.
+      Subir Neo4j antes disso é infra sem dado — mesmo erro de construir resolução de produto por
+      código de barras sem código de barras no sistema. **Pré-requisito:** extrair preferência
+      estruturada (do perfil ou de um cadastro explícito) e ter onde guardá-la. Só depois decidir
+      Neo4j vs. array em documento Mongo
 - [ ] Se seguir: novo serviço no `docker-compose.yml`, `tools/neo4j/connection.py` (driver oficial
       `neo4j`, lazy igual às outras conexões) e `tools/neo4j/core.py` com as tools de fato
 
