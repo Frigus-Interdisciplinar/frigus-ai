@@ -39,6 +39,7 @@ COMPRAS_TOOLS = [
 ]
 RECEITAS_TOOLS = [
     match_recipes_to_stock,
+    query_stock,
     get_recipe_details,
     find_recipes_by_ingredients,
     get_recipe_information,
