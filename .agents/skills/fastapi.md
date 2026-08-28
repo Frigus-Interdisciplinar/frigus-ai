@@ -27,14 +27,17 @@ segui-las sem discutir antes:
 - **SQLModel:** o oficial prefere SQLModel a SQLAlchemy. Aqui o Postgres é acessado via `psycopg2`
   cru (schema `dataload` fornecido pela disciplina, DDL em `data/sql/schema.sql`, sem ORM nenhum) —
   não é o caso de escolher entre SQLModel e SQLAlchemy, nenhum dos dois se aplica.
-- **Rotas `async`:** o oficial usa `async def` nos exemplos. Aqui quase todo I/O é síncrono
-  (psycopg2, pymongo, `fluxo_agentes().invoke`), então rota é `def` normal de propósito — mesmo
-  raciocínio do assessor-ai (repo irmão): `def` roda em threadpool automaticamente, `async def`
-  bloqueando o event loop derruba throughput de todas as requests, não só a atual.
+- **Rotas `async`:** ~~aqui rota é `def` normal de propósito~~ — **essa divergência deixou de valer
+  na Fase 2 do async.** Hoje as rotas são `async def` e convergem com o skill oficial. O I/O
+  síncrono (psycopg2, pymongo) não sumiu: ele é embrulhado em `asyncio.to_thread` na camada de
+  repositories (`chat/repositories.py`), e o grafo é dirigido por `ainvoke`. A regra que continua
+  valendo é a de sempre: **nada de I/O bloqueante direto dentro de `async def`** — se for síncrono,
+  vai pra thread antes.
 - **Asyncer:** não é dependência do projeto. Só faz sentido se aparecer código de fato async (ex.
   streaming SSE) que precise chamar o grafo síncrono — aí sim avalie, não antes.
-- **HTTPX:** ainda não é dependência aqui (nenhum client HTTP existe hoje). É a escolha padrão
-  quando um aparecer — client do Spoonacular incluso — em vez de `requests`.
+- **HTTPX:** ~~ainda não é dependência aqui~~ — já é. `tools/spoonacular/connection.py` usa
+  `httpx.Client`, e o `TestClient` do FastAPI depende dele. Segue sendo a escolha padrão pra client
+  HTTP novo, em vez de `requests`.
 
 ## Usar `Annotated` em dependência e parâmetro
 
@@ -154,14 +157,38 @@ async def stream_message(...) -> AsyncIterable[ServerSentEvent]:
     yield ServerSentEvent(data={"status": "pensando"}, event="status")
 ```
 
-**Cuidado ao chegar aqui:** endpoint SSE é `async` obrigatoriamente, mas `chat.service.send_message`
-é síncrono do começo ao fim (grafo LangGraph + psycopg2 + pymongo). Chamar direto dentro do
-`async def` trava o event loop inteiro — tem que ir pra thread (`anyio.to_thread.run_sync`), que é
-justamente o que o FastAPI faz sozinho hoje por a rota ser `def`. Ver [streaming.md](streaming.md).
+**Cuidado ao chegar aqui:** `chat.service.send_message` já é `async` (Fase 2), então o endpoint SSE
+pode chamá-lo direto — o cuidado mudou de lugar. Pra streaming de token o grafo tem que ser dirigido
+por `fluxo_agentes().astream(..., stream_mode="messages")`, que devolve 2-tuplas
+`(AIMessageChunk, metadata)`. **Todos os 10 nós têm LLM**, então isso inclui o `ROUTE=` do roteador,
+o veredito do Juiz e o guardrail: filtre por `metadata["langgraph_node"]` ou o cliente recebe o
+raciocínio interno inteiro. Ver [streaming.md](streaming.md).
 
 ---
 
 # Pegadinhas deste repo
 
-Ainda nenhuma — API não implementada aqui até o momento. Adicione uma entrada quando encontrar uma
-pegadinha real de FastAPI neste repo (mesmo espírito do assessor-ai: achado, não teoria).
+## `except Exception` genérico em rota engole exceção de domínio e vaza erro interno
+
+`routes/chats.py:send_message` tinha um único `except Exception` que virava
+`HTTPException(500, str(e))`. Dois problemas de uma vez:
+
+1. `LimiteDeMensagensExcedido` (rate limit do Redis, `chat/service.py`) caía nele — o cliente
+   recebia **500** onde o certo é **429 + `Retry-After`**. O limite funcionava; a API mentia sobre ele.
+2. `str(e)` num erro de infra devolve a mensagem crua do psycopg2/pymongo pro cliente HTTP
+   (usuário, senha, fragmento de query). O traceback, que era o que interessava, ia pro lixo.
+
+Regra: capture as exceções de domínio **antes** do `except Exception`, e no genérico use
+`logger.exception(...)` + mensagem fixa no `detail`. Nunca `str(e)` de exceção não prevista no body.
+
+## `Role` do domínio shadowando `Role` do schema quebrava o import da API inteira
+
+`schemas/chat.py` fazia `from frigus_ai.chat.models import Role` **e** `... import Role as
+DomainRole`, e montava `_ROLE_MAP = {DomainRole.HUMAN: Role.USER, ...}` **acima** da declaração do
+`class Role(StrEnum)` local. Nesse ponto `Role` ainda era o do domínio (`HUMAN`/`AI`), então
+`Role.USER` levantava `AttributeError` no import do módulo — `uvicorn interfaces.api.main:app` não
+subia de jeito nenhum.
+
+Passou despercebido porque **não havia nenhum teste que importasse `interfaces.api.main`**. Hoje há
+(`tests/interfaces/api/test_chats.py`). Ao criar schema que traduz enum de domínio pra enum público:
+importe o de domínio só com alias, declare o público primeiro, monte o mapa depois.
