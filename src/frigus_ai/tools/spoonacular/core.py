@@ -1,3 +1,4 @@
+import time
 from functools import lru_cache
 
 import httpx
@@ -18,9 +19,13 @@ from .schemas import (
 
 logger = get_logger("spoonacular")
 
+# ToS da Spoonacular: cache de resposta no máximo 1h. A janela entra na chave do
+# lru_cache, então a entrada velha vira lixo sozinha na virada da hora.
+_TTL_SEGUNDOS = 3600
+
 
 @lru_cache(maxsize=128)
-def _get(path: str, params: tuple[tuple[str, object], ...]):
+def _get(path: str, params: tuple[tuple[str, object], ...], _janela: int):
     
     resposta = cliente.get(path, params=dict(params), timeout=10)
     resposta.raise_for_status()
@@ -35,7 +40,7 @@ def _chamar(path: str, params: dict):
     chave = tuple(sorted((k, v) for k, v in params.items() if v is not None))
     
     try:
-        return _get(path, chave)
+        return _get(path, chave, int(time.time()) // _TTL_SEGUNDOS)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 402:
             raise RuntimeError(

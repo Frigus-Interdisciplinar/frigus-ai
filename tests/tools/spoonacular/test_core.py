@@ -128,3 +128,16 @@ def test_sem_api_key_nao_chama_a_api(monkeypatch):
 
     assert r["status"] == "error"
     assert fake.chamadas == []
+
+
+def test_cache_expira_na_virada_da_janela(monkeypatch):
+    fake = _fake(monkeypatch, [])
+
+    monkeypatch.setattr(core.time, "time", lambda: 0.0)
+    core.find_recipes_by_ingredients.invoke({"ingredients": ["ovo"]})
+    core.find_recipes_by_ingredients.invoke({"ingredients": ["ovo"]})
+    assert len(fake.chamadas) == 1
+
+    monkeypatch.setattr(core.time, "time", lambda: float(core._TTL_SEGUNDOS))
+    core.find_recipes_by_ingredients.invoke({"ingredients": ["ovo"]})
+    assert len(fake.chamadas) == 2
