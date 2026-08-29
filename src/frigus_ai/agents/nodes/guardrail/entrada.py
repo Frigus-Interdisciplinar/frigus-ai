@@ -112,7 +112,7 @@ async def no_guardrail_entrada(estado: Estado) -> dict:
     resultado = await guardrail_entrada(texto_anonimizado)
 
     if resultado["bloqueado"]:
-        logger.warning(f"Mensagem bloqueada por guardrail: {resultado['motivo']} - {ultima_msg.content}")
+        logger.warning(f"Mensagem bloqueada por guardrail: {resultado['motivo']} - {texto_anonimizado}")
         return {
             "agentes_chamados":   [Node.GUARDRAIL_ENTRADA],
             "mensagem_bloqueada": resultado["mensagem"],
