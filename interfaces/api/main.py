@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from frigus_ai.tools.spoonacular.connection import fechar_client
-from interfaces.api.routes import chats_router, health_router
+from interfaces.api.routes import chats_router, health_router, keys_router
 
 
 @asynccontextmanager
@@ -23,3 +23,4 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(chats_router)
+app.include_router(keys_router)

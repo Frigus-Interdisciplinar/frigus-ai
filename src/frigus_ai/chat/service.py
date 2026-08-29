@@ -3,7 +3,7 @@ import asyncio
 from frigus_ai.chat import repositories, runner
 from frigus_ai.chat.models import ChatMessage, Role
 from frigus_ai.tools.postgres.connection import get_conn
-from frigus_ai.tools.postgres.helpers import resolve_stock_id
+from frigus_ai.tools.postgres.helpers import next_id, resolve_stock_id
 from frigus_ai.tools.redis.chat import can_send_message
 
 # Usuário fixo para rodar a demo localmente sem tela de login. `users.id` é
@@ -39,7 +39,46 @@ def _garantir_usuario_demo(user_id: int = DEMO_USER_ID) -> None:
             conn.commit()
 
 
-def _resolver_stock_id(user_id: int) -> int | None:
+def _criar_usuario(nome: str, email: str) -> int:
+    """
+    Mesmo bootstrap do usuário demo (user + group + stock + vínculo), mas com id
+    gerado: é o que o `POST /keys` precisa pra emitir key pra alguém que não seja
+    o DEMO_USER_ID. `hash_password` é NOT NULL no schema e não há login por senha
+    aqui — a credencial é a API key, guardada só como hash no Redis.
+    """
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email = %s;", (email,))
+            if existente := cur.fetchone():
+                return existente[0]
+
+            user_id = next_id(cur, "users")
+            cur.execute(
+                """
+                INSERT INTO users (id, name, account_type, email, hash_password)
+                VALUES (%s, %s, 'Pessoal', %s, 'api-key');
+                """,
+                (user_id, nome, email),
+            )
+
+            group_id = next_id(cur, "groups")
+            cur.execute("INSERT INTO groups (id, name) VALUES (%s, %s);", (group_id, "Minha Casa"))
+            cur.execute("INSERT INTO stocks (id, group_id) VALUES (%s, %s);", (next_id(cur, "stocks"), group_id))
+            cur.execute(
+                "INSERT INTO user_groups (id, user_id, group_id) VALUES (%s, %s, %s);",
+                (next_id(cur, "user_groups"), user_id, group_id),
+            )
+            conn.commit()
+
+    return user_id
+
+
+async def criar_usuario(nome: str, email: str) -> int:
+    return await asyncio.to_thread(_criar_usuario, nome, email)
+
+
+def resolver_stock_id(user_id: int) -> int | None:
     with get_conn() as conn:
         with conn.cursor() as cur:
             return resolve_stock_id(cur, user_id)
@@ -50,7 +89,7 @@ async def iniciar_sessao(user_id: int = DEMO_USER_ID) -> int | None:
     await asyncio.to_thread(_garantir_usuario_demo, user_id)
     await repositories.garantir_perfil(user_id)
 
-    return await asyncio.to_thread(_resolver_stock_id, user_id)
+    return await asyncio.to_thread(resolver_stock_id, user_id)
 
 
 async def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | None) -> str:

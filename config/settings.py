@@ -20,6 +20,11 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Auth da API. Default desligado pra TUI/demo continuarem rodando sem key;
+    # ligue junto com SIGNUP_SECRET pra exigir X-API-Key nas rotas de chat.
+    API_KEY_AUTH_ENABLED: bool = False
+    SIGNUP_SECRET: str = ""
+
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION_NAME: str = "faq"
