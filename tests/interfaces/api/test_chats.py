@@ -45,9 +45,16 @@ def test_limite_de_mensagens_vira_429_com_retry_after(cliente, monkeypatch):
 
 
 def test_erro_generico_vira_500_sem_vazar_mensagem_interna(cliente, monkeypatch):
+    """
+    Quem traduz é o handler de `main.py`, não a rota. `raise_server_exceptions=False`
+    porque o TestClient re-levanta a exceção do servidor por padrão — com ele ligado o
+    teste vê o RuntimeError cru em vez da resposta que o cliente HTTP receberia.
+    """
+
     interno = "FATAL: password authentication failed for user postgres"
     _stub_send_message(monkeypatch, RuntimeError(interno))
 
+    cliente = TestClient(app, raise_server_exceptions=False)
     r = cliente.post(f"/chats/{CHAT_ID}/messages", json={"content": "oi"})
 
     assert r.status_code == 500

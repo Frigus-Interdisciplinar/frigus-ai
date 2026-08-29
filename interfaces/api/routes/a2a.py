@@ -15,13 +15,11 @@ protocolo — vem da mesma auth por `X-API-Key` das rotas de chat.
 from importlib.metadata import version
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
-from config.logging import get_logger
 from config.settings import settings
 from frigus_ai.chat import service as chat_service
-from frigus_ai.tools.redis.schemas import CHAT_TTL_TIME
-from interfaces.api.auth import CurrentUserDep
+from interfaces.api.auth import CurrentUserDep, StockIdDep
 from interfaces.api.schemas.a2a import (
     AgentCapabilities,
     AgentCard,
@@ -36,7 +34,6 @@ from interfaces.api.schemas.a2a import (
 )
 
 router = APIRouter(tags=["a2a"])
-logger = get_logger(__name__)
 
 
 SKILLS = [
@@ -118,11 +115,14 @@ def _erro(id_req, codigo: int, mensagem: str) -> JsonRpcResponse:
 # exclude_none: o JSON-RPC 2.0 proíbe `result` e `error` no mesmo objeto — sem isso
 # a resposta de erro sairia com `"result": null` junto.
 @router.post("/a2a", response_model_exclude_none=True)
-async def message_send(payload: JsonRpcRequest, user_id: CurrentUserDep) -> JsonRpcResponse:
+async def message_send(
+    payload: JsonRpcRequest, user_id: CurrentUserDep, stock_id: StockIdDep
+) -> JsonRpcResponse:
     """
     Erro de protocolo volta como objeto `error` do JSON-RPC (HTTP 200, como manda o
     JSON-RPC 2.0). Falha de transporte — auth, rate limit, erro interno — volta como
-    status HTTP, onde um cliente A2A espera encontrá-la.
+    status HTTP, onde um cliente A2A espera encontrá-la; quem traduz são os handlers
+    de `interfaces/api/main.py`, não esta rota.
 
     Exceção conhecida: body que nem chega a ser um envelope JSON-RPC válido é barrado
     pelo Pydantic e sai como **422**, não como `-32600`. Deixado assim de propósito —
@@ -140,24 +140,9 @@ async def message_send(payload: JsonRpcRequest, user_id: CurrentUserDep) -> Json
     # Sem contextId o cliente está abrindo conversa nova — devolvemos o id gerado
     # para ele reusar na próxima chamada.
     session_id = params.message.context_id or str(uuid4())
-    stock_id = await chat_service.iniciar_sessao(user_id)
-    try:
-        resposta = await chat_service.send_message(
-            params.message.texto(), session_id, user_id, stock_id
-        )
-
-    except chat_service.LimiteDeMensagensExcedido as e:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            str(e),
-            headers={"Retry-After": str(CHAT_TTL_TIME)},
-        ) from e
-
-    except Exception as e:
-        logger.exception("Falha em message/send | context_id=%s", session_id)
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Erro interno ao processar a mensagem."
-        ) from e
+    resposta = await chat_service.send_message(
+        params.message.texto(), session_id, user_id, stock_id
+    )
 
     return JsonRpcResponse(
         id=payload.id,
