@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 
 from frigus_ai.chat import repositories, runner
 from frigus_ai.chat.models import ChatMessage, Role
@@ -92,11 +93,17 @@ async def iniciar_sessao(user_id: int = DEMO_USER_ID) -> int | None:
     return await asyncio.to_thread(resolver_stock_id, user_id)
 
 
-async def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | None) -> str:
+async def garantir_limite(user_id: int) -> None:
+    """Consome uma unidade do rate limit; levanta se o usuário estourou a janela."""
+
     if not await asyncio.to_thread(can_send_message, user_id):
         raise LimiteDeMensagensExcedido(
             "Você atingiu o limite de mensagens. Tente novamente em alguns instantes."
         )
+
+
+async def send_message(conteudo: str, session_id: str, user_id: int, stock_id: int | None) -> str:
+    await garantir_limite(user_id)
 
     perfil = await repositories.buscar_perfil(user_id)
     resposta = await runner.executar(conteudo, session_id, user_id, stock_id, perfil)
@@ -111,6 +118,37 @@ async def send_message(conteudo: str, session_id: str, user_id: int, stock_id: i
     await repositories.salvar_mensagens(user_id, session_id, novas)
 
     return resposta
+
+
+async def stream_message(
+    conteudo: str, session_id: str, user_id: int, stock_id: int | None
+) -> AsyncIterator[tuple[str, str]]:
+    """
+    Mesmo caso de uso do `send_message` (perfil, grafo, persistência), só que
+    emitindo o progresso por nó enquanto o grafo roda.
+
+    **Não** chama `garantir_limite` aqui de propósito: o corpo de um gerador só roda
+    depois que a resposta HTTP começou, quando 429 já não é possível. Quem consome
+    o limite no caminho SSE é a dependência da rota, antes de abrir o stream — e
+    `can_send_message` incrementa contador, então chamar nos dois lugares cobraria
+    duas mensagens por request.
+    """
+
+    perfil = await repositories.buscar_perfil(user_id)
+    resposta = ""
+
+    async for tipo, valor in runner.executar_stream(
+        conteudo, session_id, user_id, stock_id, perfil
+    ):
+        if tipo == "resposta":
+            resposta = valor
+        yield tipo, valor
+
+    novas = [
+        ChatMessage(role=Role.HUMAN, content=conteudo),
+        ChatMessage(role=Role.AI, content=resposta),
+    ]
+    await repositories.salvar_mensagens(user_id, session_id, novas)
 
 
 async def get_history(session_id: str, user_id: int, limit: int = 5) -> list[ChatMessage]:

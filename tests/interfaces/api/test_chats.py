@@ -19,7 +19,11 @@ def cliente(monkeypatch):
     async def _iniciar_sessao(user_id):
         return 1
 
+    async def _garantir_limite(user_id):
+        return None
+
     monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
+    monkeypatch.setattr(rotas.chat_service, "garantir_limite", _garantir_limite)
     return TestClient(app)
 
 
@@ -76,3 +80,37 @@ def test_delete_chat_devolve_202_e_agenda_encerramento(cliente, monkeypatch):
     assert r.status_code == 202
     # TestClient roda as background tasks antes de devolver a resposta
     assert chamadas == [(CHAT_ID, rotas.chat_service.DEMO_USER_ID)]
+
+
+def test_stream_devolve_eventos_por_no_e_resposta(cliente, monkeypatch):
+    async def _stream(conteudo, chat_id, user_id, stock_id):
+        yield "no", "roteador_node"
+        yield "no", "estoque_node"
+        yield "resposta", f"eco: {conteudo}"
+
+    monkeypatch.setattr(rotas.chat_service, "stream_message", _stream)
+
+    with cliente.stream(
+        "POST", f"/chats/{CHAT_ID}/messages/stream", json={"content": "oi"}
+    ) as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        corpo = "".join(r.iter_text())
+
+    assert corpo.count("event: no") == 2
+    assert "event: resposta" in corpo
+    assert "eco: oi" in corpo
+
+
+def test_stream_com_limite_excedido_vira_429_antes_do_stream(cliente, monkeypatch):
+    """O 429 tem que sair como status HTTP, não como evento no meio do stream."""
+
+    async def _garantir_limite(user_id):
+        raise LimiteDeMensagensExcedido("Você atingiu o limite.")
+
+    monkeypatch.setattr(rotas.chat_service, "garantir_limite", _garantir_limite)
+
+    r = cliente.post(f"/chats/{CHAT_ID}/messages/stream", json={"content": "oi"})
+
+    assert r.status_code == 429
+    assert r.headers["Retry-After"] == "60"
