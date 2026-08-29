@@ -47,7 +47,7 @@ class Estado(MessagesState):
     rota:                  RouteLiteral
     pergunta_original:     str
     mapa_pii:              dict
-    mensagem_bloqueada:    str
+    mensagem_bloqueada:    str | None
     perfil_usuario:        str
     stock_id:              int | None
 

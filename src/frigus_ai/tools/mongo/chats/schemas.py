@@ -1,24 +1,7 @@
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
 from enum import StrEnum
 
 from langchain_core.messages import AIMessage, HumanMessage
-
-
-@dataclass
-class ChatDocument:
-    """
-    Histórico do chatbot (agente de IA), não confundir com as tabelas
-    `conversations`/`messages` do Postgres — que são o chat social do app
-    (usuários conversando entre si dentro de um grupo).
-    """
-
-    user_id:    int
-    session_id: str
-    messages:   list[dict]
-    resume:     str      = field(default="")
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class Role(StrEnum):

@@ -3,32 +3,27 @@
 Próximos passos planejados. Contexto do projeto e checklist de requisitos da disciplina em
 [AGENTS.md](AGENTS.md).
 
-## CONTEXTO_TEMPORAL congela na data do import — bug pré-existente, achado durante o refactor de prompts
+## CONTEXTO_TEMPORAL congelava na data do import — corrigido
 
-`.agents/skills/langchain.md` já documenta esse anti-padrão com um exemplo que é literalmente
-`GenericAgent.CONTEXTO_TEMPORAL = f"Data atual: {datetime.now()}"` — e cita que o mesmo erro já
-aconteceu de verdade no assessor-ai (data interpretada como a do deploy, não a de agora). O código
-daqui tinha exatamente esse padrão desde antes do refactor de prompts pra `.md` (preservado por
-fidelidade ao converter — não é regressão nova, é um bug que já existia). Hoje:
+Bug pré-existente (não era regressão do refactor de prompts pra `.md`, foi preservado por fidelidade
+na conversão): `loader.py` computava a data uma vez no import, e `graph/agents.py` embutia o
+resultado dentro de `create_agent(system_prompt=...)` também no import. Num processo de vida longa
+(API rodando, TUI aberta na virada do dia), o agente respondia com a data de quando o processo
+subiu — errado justamente em "o que vence hoje", que é o core do domínio.
 
-- `agents/prompts/loader.py` computa `_data_hora_fmt = datetime.now(UTC).astimezone()...` uma vez,
-  no import do módulo.
-- `graph/agents.py` chama `load_prompt("estoque")` etc. também uma vez, no import do módulo, e o
-  resultado (já com a data embutida) fica congelado dentro de `create_agent(system_prompt=...)`
-  pelo resto da vida do processo.
-
-Ou seja: num processo de vida longa (API rodando, TUI aberta durante a virada do dia), o agente
-segue respondendo com a data/hora de quando o processo subiu, não a de agora — pode gerar respostas
-erradas em perguntas tipo "o que vence hoje" perto da meia-noite.
-
-- [ ] Mover CONTEXTO_TEMPORAL pra fora do `system_prompt` (que só monta uma vez) e para uma mensagem
-      de sistema por turno, no `.invoke()` — mesma correção que o skill já recomenda (`Do this` em
-      `.agents/skills/langchain.md`): `mensagens = [{"role": "system", "content": contexto_do_turno(...)},
-      *estado["messages"]]`. Precisa checar a ressalva de providers no mesmo skill (Gemini funde
-      system messages extras só se já houver uma no índice 0 — hoje há, via `system_prompt`, então
-      é seguro; confirmar que continua sendo depois da mudança)
-- [ ] Decidir se isso afeta só os agentes que usam `create_agent` (7, via `graph/agents.py`) ou
-      também Juiz/Resumidor/Perfil, que montam o prompt uma vez em import de módulo do mesmo jeito
+- [x] **`contexto_temporal()` virou função**, chamada por `load_prompt()` a cada chamada. O que
+      passou a ser cacheado (`lru_cache`) é o parse do `.md`, que não muda em runtime — não o prompt
+      pronto.
+- [x] **Os 7 agentes de `graph/agents.py` recebem o prompt por `dynamic_prompt`** (middleware do
+      LangChain) em vez de `system_prompt=`, então o prompt é remontado a cada chamada de modelo.
+      Ficou mais curto que antes: os 7 `create_agent` repetidos viraram um helper `_montar()`.
+      **Não** foi preciso mexer em mensagem de sistema por turno como o skill sugeria — logo a
+      ressalva de providers do `.agents/skills/langchain.md` (Gemini fundindo system messages
+      extras) não se aplica, porque continua havendo exatamente uma system message.
+- [x] **Juiz/Resumidor/Perfil também congelavam** (montavam o prompt em constante de módulo) —
+      `agents/nodes/juiz.py` e `tools/mongo/helpers.py` agora chamam `load_prompt()` dentro da
+      função.
+- [x] Regressão coberta por `tests/agents/prompts/test_loader.py`.
 
 ## Refatoração de estrutura — alinhar com o assessor-ai — concluída
 

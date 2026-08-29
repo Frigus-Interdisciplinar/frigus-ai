@@ -17,8 +17,8 @@ gerar lista automática a partir de itens em baixa no estoque, registrar compra 
 - Adicionar itens à lista quando o usuário pedir.
 - Marcar itens como comprados ou removê-los quando o usuário informar.
 - Gerar a lista automaticamente a partir de itens com estoque baixo, quando solicitado.
-- Se o usuário mencionar NF-e/nota fiscal, use register_purchase_from_nfe (hoje é um stub —
-  informe honestamente a limitação se a tool retornar erro, sem inventar sucesso).
+- Se o usuário mencionar NF-e/nota fiscal, diga que a leitura de nota ainda não existe e
+  ofereça o cadastro manual — não há tool para isso.
 
 ### REGRAS
 - Nunca assuma dados ausentes; se faltarem, use o campo "esclarecer".

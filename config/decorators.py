@@ -11,7 +11,9 @@ def log_tool(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
 
-        logger.info("CHAMANDO | %s | args=%s kwargs=%s", func.__name__, args, kwargs)
+        # Sem args/kwargs/result no log: as tools recebem e devolvem dados do
+        # usuário (alimentos, gastos, nomes). O detalhe fica no tracing, que redige PII.
+        logger.info("CHAMANDO | %s", func.__name__)
 
         start = time.perf_counter()
         result = func(*args, **kwargs)
@@ -24,10 +26,10 @@ def log_tool(func):
 
         match status:
             case "error":
-                logger.error("ERRO     | %s | elapsed=%.3fs | result=%s", func.__name__, elapsed, result)
+                logger.error("ERRO     | %s | elapsed=%.3fs", func.__name__, elapsed)
 
             case _:
-                logger.info("OK       | %s | elapsed=%.3fs | result=%s", func.__name__, elapsed, result)
+                logger.info("OK       | %s | elapsed=%.3fs", func.__name__, elapsed)
 
         return result
 

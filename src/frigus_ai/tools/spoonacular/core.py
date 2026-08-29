@@ -9,7 +9,7 @@ from config.logging import get_logger
 from config.settings import settings
 from frigus_ai.tools.response import Response
 
-from .connection import cliente
+from .connection import get_client
 from .schemas import (
     FindRecipesByIngredientsArgs,
     GetRecipeInformationArgs,
@@ -27,7 +27,7 @@ _TTL_SEGUNDOS = 3600
 @lru_cache(maxsize=128)
 def _get(path: str, params: tuple[tuple[str, object], ...], _janela: int):
     
-    resposta = cliente.get(path, params=dict(params), timeout=10)
+    resposta = get_client().get(path, params=dict(params), timeout=10)
     resposta.raise_for_status()
 
     return resposta.json()

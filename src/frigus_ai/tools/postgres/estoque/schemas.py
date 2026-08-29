@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from frigus_ai.tools.postgres.helpers import CATEGORY_VALUES, STORAGE_PLACE_VALUES
 
@@ -35,6 +35,14 @@ class UpdateStockQuantityArgs(BaseModel):
     product_name: str | None = Field(default=None, description="Nome (ou parte) do produto, usado se stock_product_id não for informado.")
     delta: int | None = Field(default=None, description="Variação da quantidade (negativo para consumo, positivo para reposição).")
     novo_valor: int | None = Field(default=None, description="Define a quantidade final diretamente (alternativa a delta).")
+
+    @model_validator(mode="after")
+    def _delta_ou_novo_valor(self):
+        if (self.delta is None) == (self.novo_valor is None):
+            raise ValueError("Informe 'delta' OU 'novo_valor', nunca os dois nem nenhum.")
+        if self.novo_valor is not None and self.novo_valor < 0:
+            raise ValueError("'novo_valor' não pode ser negativo.")
+        return self
 
 
 class DiscardProductArgs(BaseModel):

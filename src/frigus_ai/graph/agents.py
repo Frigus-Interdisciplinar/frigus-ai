@@ -1,4 +1,5 @@
 from langchain.agents import create_agent
+from langchain.agents.middleware import dynamic_prompt
 
 from frigus_ai.agents.prompts.loader import load_prompt
 from frigus_ai.graph.llm import (
@@ -13,45 +14,29 @@ from frigus_ai.tools import (
     RECEITAS_TOOLS,
 )
 
-router_app = create_agent(
-    model=llm_rapido,
-    system_prompt=load_prompt("router"),
-)
 
-estoque_app = create_agent(
-    model=llm_especialista,
-    tools=ESTOQUE_TOOLS,
-    system_prompt=load_prompt("estoque"),
-)
+def _montar(nome: str, model, tools: list | None = None):
+    """
+    O system_prompt vai por `dynamic_prompt` (middleware), não por `system_prompt=`:
+    o prompt carrega a data/hora atual, e como string fixa ela congelava no import —
+    um processo de API vivo respondia "hoje" com a data em que subiu. O parse do .md
+    continua cacheado no loader; só o contexto temporal é remontado a cada chamada.
+    """
 
-compras_app = create_agent(
-    model=llm_especialista,
-    tools=COMPRAS_TOOLS,
-    system_prompt=load_prompt("compras"),
-)
+    @dynamic_prompt
+    def _prompt(request) -> str:
+        return load_prompt(nome)
 
-receitas_app = create_agent(
-    model=llm_especialista,
-    tools=RECEITAS_TOOLS,
-    system_prompt=load_prompt("receitas"),
-)
+    return create_agent(model=model, tools=tools or [], middleware=[_prompt])
 
-faq_app = create_agent(
-    model=llm_rapido,
-    tools=FAQ_TOOLS,
-    system_prompt=load_prompt("faq"),
-)
 
-financeiro_app = create_agent(
-    model=llm_especialista,
-    tools=FINANCEIRO_TOOLS,
-    system_prompt=load_prompt("financeiro"),
-)
-
-orquestrador_app = create_agent(
-    model=llm_rapido,
-    system_prompt=load_prompt("orquestrador"),
-)
+router_app       = _montar("router",       llm_rapido)
+estoque_app      = _montar("estoque",      llm_especialista, ESTOQUE_TOOLS)
+compras_app      = _montar("compras",      llm_especialista, COMPRAS_TOOLS)
+receitas_app     = _montar("receitas",     llm_especialista, RECEITAS_TOOLS)
+faq_app          = _montar("faq",          llm_rapido,       FAQ_TOOLS)
+financeiro_app   = _montar("financeiro",   llm_especialista, FINANCEIRO_TOOLS)
+orquestrador_app = _montar("orquestrador", llm_rapido)
 
 
 __all__ = [

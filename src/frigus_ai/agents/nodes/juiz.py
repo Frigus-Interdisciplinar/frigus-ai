@@ -12,7 +12,6 @@ logger = get_logger(__name__)
 # mesmo reprovado (mesmo princípio do guardrail de saída: nunca trava o usuário).
 MAX_TENTATIVAS = 2
 
-_SYSTEM_PROMPT = load_prompt("juiz")
 _TEMPLATE = load_sections("juiz.md")["template"]
 
 
@@ -37,7 +36,7 @@ async def no_juiz(estado: Estado) -> dict:
     )
 
     resultado = await llm_juiz.ainvoke([
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": load_prompt("juiz")},  # load_prompt carrega a data do turno
         {"role": "human", "content": prompt},
     ])
     saida = resultado.content

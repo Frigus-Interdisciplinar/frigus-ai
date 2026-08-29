@@ -8,7 +8,6 @@ from frigus_ai.tools.postgres.compras.schemas import (
     GenerateShoppingListFromLowStockArgs,
     MarkPurchasedArgs,
     QueryShoppingListArgs,
-    RegisterPurchaseFromNfeArgs,
 )
 from frigus_ai.tools.postgres.connection import get_conn
 from frigus_ai.tools.postgres.context import current_stock_id
@@ -216,10 +215,28 @@ def mark_purchased(
                         return Response.error("Item não encontrado na lista de compras aberta.")
                     target_id = row[0]
 
+                # O EXISTS impede que um shopping_list_product_id vindo do LLM
+                # altere item de outra lista/estoque — o caminho por product_name
+                # já filtra por stock_id, o caminho por ID não filtrava nada.
                 cur.execute(
-                    "UPDATE shopping_list_products SET status = %s WHERE id = %s;",
-                    (status, target_id)
+                    """
+                    UPDATE shopping_list_products slp
+                    SET status = %s
+                    WHERE slp.id = %s
+                      AND EXISTS (
+                          SELECT 1 FROM shopping_lists sl
+                          WHERE sl.id = slp.list_id
+                            AND sl.stock_id = %s
+                            AND sl.status = 'Aberta'
+                      );
+                    """,
+                    (status, target_id, stock_id)
                 )
+
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return Response.error("Item não encontrado na lista de compras aberta.")
+
                 conn.commit()
 
                 logger.info("MARK OK | shopping_list_product_id=%s status=%s", target_id, status)
@@ -297,30 +314,10 @@ def generate_shopping_list_from_low_stock() -> dict:
                 return Response.error(e)
 
 
-@tool("register_purchase_from_nfe", args_schema=RegisterPurchaseFromNfeArgs)
-@log_tool
-def register_purchase_from_nfe(nfe_key_or_url: str) -> dict:
-    """
-    Registra uma compra a partir do QR Code de uma NF-e (leitura via SEFAZ-SP).
-
-    STUB: a integração real com a SEFAZ (scraping da página HTML da nota) ainda
-    não está implementada nesta base. Use add_stock_product para cadastro manual
-    enquanto isso.
-    """
-
-    logger.warning("register_purchase_from_nfe chamado, mas integração SEFAZ não está implementada | chave=%s", nfe_key_or_url)
-
-    return Response.error(
-        "Integração com NF-e/SEFAZ ainda não implementada nesta versão. "
-        "Cadastre os produtos manualmente com add_stock_product."
-    )
-
-
 __all__ = [
     "add_shopping_list_product",
     "create_shopping_list",
     "generate_shopping_list_from_low_stock",
     "mark_purchased",
     "query_shopping_list",
-    "register_purchase_from_nfe",
 ]

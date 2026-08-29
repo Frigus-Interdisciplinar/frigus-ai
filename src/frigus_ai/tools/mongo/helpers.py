@@ -4,10 +4,6 @@ from frigus_ai.graph.llm import llm_rapido
 
 log = get_logger(__name__)
 
-_RESUMO_PROMPT = load_prompt("resumidor")
-_PERFIL_PROMPT = load_prompt("perfil")
-
-
 def _formatar_conversa(mensagens: list[dict]) -> str:
     linhas = []
 
@@ -23,7 +19,7 @@ def _gerar_resumo(mensagens: list[dict]) -> str:
     conversa = _formatar_conversa(mensagens)
 
     return llm_rapido.invoke(
-        _RESUMO_PROMPT.format(conversa=conversa)
+        load_prompt("resumidor").format(conversa=conversa)
     ).content.strip()
 
 
@@ -31,5 +27,5 @@ def _gerar_perfil(perfil_atual: str, resumo: str) -> str:
     log.info("Atualizando perfil do usuário...")
 
     return llm_rapido.invoke(
-        _PERFIL_PROMPT.format(perfil_atual=perfil_atual, resumo=resumo)
+        load_prompt("perfil").format(perfil_atual=perfil_atual, resumo=resumo)
     ).content.strip()

@@ -10,14 +10,12 @@ outra seção (TEMPLATE do Juiz) ou não quer o envelope de persona (Guardrail).
 """
 
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 
 _PASTA = Path(__file__).parent
 _MARCADOR_SECAO = "## "
 _MARCADOR_FRONTMATTER = "---"
-
-_agora = datetime.now(UTC).astimezone()
-_data_hora_fmt = _agora.strftime("%A, %d de %B de %Y — %H:%M:%S %Z")
 
 PERSONA_SISTEMA = """
 ### PERSONA
@@ -29,9 +27,18 @@ que não vieram das tools. Seu objetivo é ser um parceiro confiável para o usu
 e evitar desperdício de comida.
 """
 
-CONTEXTO_TEMPORAL = f"""
+def contexto_temporal() -> str:
+    """
+    Montado a cada chamada, nunca no import: como constante de módulo, um processo
+    de API vivo continuava dizendo "hoje" com a data em que subiu — e "o que vence
+    hoje" é o core do domínio. Por isso `load_prompt` também não pode ser cacheado.
+    """
+
+    agora = datetime.now(UTC).astimezone()
+
+    return f"""
 ### CONTEXTO TEMPORAL
-Data e hora atual (fornecida pelo sistema): {_data_hora_fmt}
+Data e hora atual (fornecida pelo sistema): {agora.strftime("%A, %d de %B de %Y — %H:%M:%S %Z")}
 Use esta referência para interpretar "hoje", "ontem", "essa semana",
 calcular datas relativas e preencher timestamps nas operações.
 """
@@ -88,6 +95,7 @@ def _parse_secoes(texto: str) -> dict[str, str]:
     return secoes
 
 
+@lru_cache(maxsize=32)
 def _ler(nome_arquivo: str) -> tuple[dict[str, str], dict[str, str]]:
     texto = (_PASTA / nome_arquivo).read_text(encoding="utf-8")
     metadados, corpo = _parse_frontmatter(texto)
@@ -108,7 +116,7 @@ def load_prompt(nome_arquivo: str) -> str:
 
     metadados, secoes = _ler(nome_arquivo + ".md")
 
-    partes = [PERSONA_SISTEMA, CONTEXTO_TEMPORAL]
+    partes = [PERSONA_SISTEMA, contexto_temporal()]
 
     if metadados.get("usa_tools_obrigatorias") == "true":
         partes.append(OBRIGATORIEDADE_TOOLS)
@@ -121,4 +129,4 @@ def load_prompt(nome_arquivo: str) -> str:
     return "\n\n".join(partes)
 
 
-__all__ = ["load_prompt", "load_sections"]
+__all__ = ["contexto_temporal", "load_prompt", "load_sections"]
