@@ -1,5 +1,7 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
+from frigus_ai.agents.prompts import loader
 from frigus_ai.agents.prompts.loader import load_sections
 
 
@@ -58,3 +60,35 @@ def test_load_sections_arquivo_vazio(tmp_path):
     md = _escrever_md(tmp_path, "")
 
     assert load_sections(md) == {}
+
+
+def test_contexto_temporal_nao_congela_entre_chamadas(monkeypatch):
+    """
+    Regressão: a data era constante de módulo, montada no import — uma API viva
+    respondia "hoje" com a data em que o processo subiu, e "o que vence hoje" é o
+    core do domínio.
+    """
+
+    class _FakeDatetime:
+        agora = datetime(2026, 8, 28, 12, 0, tzinfo=UTC)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.agora
+
+    monkeypatch.setattr(loader, "datetime", _FakeDatetime)
+
+    primeiro = loader.contexto_temporal()
+
+    _FakeDatetime.agora = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+    segundo = loader.contexto_temporal()
+
+    assert primeiro != segundo
+    assert "28" in primeiro
+    assert "29" in segundo
+
+
+def test_load_prompt_carrega_a_data_do_momento_da_chamada():
+    prompt = loader.load_prompt("estoque")
+
+    assert datetime.now(UTC).astimezone().strftime("%d de") in prompt
