@@ -64,7 +64,8 @@ frigus-ai/
 ├── docker-compose.yml               # Postgres + Mongo + Redis + Qdrant
 │
 ├── interfaces/tui/                  # app.py (Textual) + display.py (Bubble/MessageRow) + app.tcss
-├── interfaces/api/                  # main.py (FastAPI) + routes/{chats,health}.py + schemas/ — esqueleto, sem auth
+├── interfaces/api/                  # main.py (FastAPI) + auth.py (X-API-Key) + routes/{chats,health,keys,a2a}.py + schemas/
+├── interfaces/mcp/                  # server.py — as tools de domínio como servidor MCP, montado em /mcp
 ├── config/                          # settings, models (LLM), logging, docker (compose up/down)
 ├── data/
 │   ├── pdf/Frigus-Documentacao.pdf
@@ -75,8 +76,8 @@ frigus-ai/
     ├── chat/                        # Camada de serviço — usada por toda interface
     │   ├── models.py                # ChatMessage/Role — contrato próprio, independente do Mongo
     │   ├── repositories.py          # Acesso a tools/mongo/{chats,users}
-    │   ├── runner.py                # Invoca o grafo e extrai a resposta
-    │   └── service.py               # send_message, get_history, iniciar/encerrar_sessao
+    │   ├── runner.py                # Invoca o grafo (executar/executar_stream) e extrai a resposta
+    │   └── service.py               # send_message, stream_message, get_history, iniciar/encerrar_sessao
     │
     ├── agents/
     │   ├── prompts/                 # Só .md + loader.py — nenhum outro .py na pasta
@@ -109,13 +110,13 @@ frigus-ai/
         │   ├── receitas/{schemas,core}.py
         │   └── financeiro/{schemas,core}.py
         ├── mongo/                   # agent_chats + user_profiles + checkpoints do grafo
-        ├── redis/                   # cache de perfil (perfil.py) + rate limit de chat (chat.py)
+        ├── redis/                   # cache de perfil (perfil.py) + rate limit (chat.py) + API keys (api_key.py)
         ├── qdrant/faq/              # RAG (Qdrant) sobre Frigus-Documentacao.pdf — connection/core/ingest
         └── spoonacular/             # client HTTP (httpx) da Spoonacular Food API — receitas externas
 ```
 
-`api/`, `mcp_server/` e `a2a_server/` foram removidos — eram placeholders vazios. Serão recriados
-quando cada trabalho começar (ver "Próximos passos").
+`mcp_server/` e `a2a_server/` (placeholders vazios) deram lugar a `interfaces/mcp/` e à rota do
+Agent Card em `interfaces/api/routes/a2a.py` — ver "MCP e A2A" abaixo.
 
 ---
 
@@ -137,20 +138,66 @@ desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` 
 
 ## API HTTP
 
-`interfaces/api/` — FastAPI. Sem autenticação ainda: `user_id` é fixo em `DEMO_USER_ID`, mesmo
-bootstrap da TUI (ver TODO.md).
+`interfaces/api/` — FastAPI.
+
+**Autenticação:** header `X-API-Key`, resolvido em `interfaces/api/auth.py`. O Redis guarda só
+`sha256(key) -> user_id` (`tools/redis/api_key.py`) — a key em claro aparece uma única vez, na
+resposta do `POST /keys`. Com `API_KEY_AUTH_ENABLED=false` (default) a dependência devolve
+`DEMO_USER_ID`, para a TUI e a demo local rodarem sem key.
 
 | Método | Rota | O que faz |
 |---|---|---|
+| `POST` | `/keys` | Emite API key para um usuário (cria usuário + grupo + estoque). Exige `X-Signup-Secret`; **409** se o usuário já tem key ativa |
 | `POST` | `/chats` | Cria uma sessão de chat (`chat_id` + `stock_id` resolvido) |
 | `POST` | `/chats/{chat_id}/messages` | Envia mensagem e roda o grafo. **429** + `Retry-After` se o rate limit do Redis estourar (10 msg/60s) |
-| `GET` | `/chats/{chat_id}/messages` | Histórico da sessão |
+| `POST` | `/chats/{chat_id}/messages/stream` | Mesma operação em **SSE**: um evento `no` por agente concluído, um evento `resposta` no fim |
+| `GET` | `/chats/{chat_id}/messages` | Histórico da sessão (só do dono do `user_id` autenticado) |
 | `DELETE` | `/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa e a atualização do perfil (duas chamadas de LLM) vão pra `BackgroundTasks`, fora do caminho da resposta |
 | `GET` | `/health/live` | Liveness |
 | `GET` | `/health/ready` | Readiness — checa Postgres/Mongo/Redis/Qdrant, **503** se algum estiver fora |
+| `GET` | `/.well-known/agent-card.json` | Agent Card do A2A (discovery) |
+| `POST` | `/a2a` | A2A `message/send` (JSON-RPC 2.0) — conversa com o grafo como agente externo |
+| `POST` | `/mcp` | Servidor MCP (Streamable HTTP) com as tools de domínio |
 
-Erro não previsto devolve **500** com mensagem genérica; o traceback vai pro log, nunca pro corpo da
-resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
+Rate limit (**429** + `Retry-After`) e erro não previsto (**500** com mensagem genérica; traceback só
+no log, nunca no corpo) são traduzidos por handlers registrados no app (`interfaces/api/main.py`) —
+as rotas só escrevem o caminho feliz.
+
+O streaming é **progresso por nó, não token a token**: quem escreve o texto final é o Guardrail de
+Saída, que reescreve a resposta inteira depois que o LLM termina — não há token final para emitir
+antes disso (`chat/runner.py::executar_stream`).
+
+---
+
+## MCP e A2A
+
+**MCP** (`interfaces/mcp/server.py`) — as 18 tools de domínio (estoque, compras, receitas,
+financeiro, FAQ) expostas como servidor MCP em `POST /mcp`, montado dentro da própria API para
+reaproveitar o `X-API-Key`. As tools de Postgres leem `user_id`/`stock_id` de `contextvars` e nunca
+dos argumentos, então um middleware ASGI resolve a identidade pelo header e abre o `session_context`
+em volta da requisição — o equivalente ao que `chat/runner.py` faz por turno do grafo.
+
+Detalhes que não são óbvios e estão comentados no código:
+
+- O lifespan do app montado **não** é executado pelo FastAPI; sem encadeá-lo (`interfaces/api/main.py`)
+  toda chamada morre em `Task group is not initialized`.
+- `stateless_http=True` — sessão MCP de longa duração rodaria o handler em outra task, e o
+  `session_context` do middleware não chegaria na tool.
+- O SDK liga proteção contra DNS rebinding por padrão, com allowlist `localhost:*`. Em domínio real
+  é preciso passar `host=` diferente de localhost, senão tudo responde **421**.
+
+**A2A** (`interfaces/api/routes/a2a.py`) — Agent Card em `/.well-known/agent-card.json`, com uma
+skill por domínio do grafo, e a operação `message/send` em `POST /a2a` (JSON-RPC 2.0). Escrito à mão,
+sem o `a2a-sdk`: o card declara `streaming=false`/`pushNotifications=false`, então task store,
+streaming e cancelamento — o que o SDK traz de fato — seriam código morto.
+
+O `contextId` do A2A **é** o `session_id` do chat: é ele que faz duas chamadas caírem na mesma
+conversa (mesmo `thread_id` no checkpointer). Sem `contextId`, a resposta devolve o id gerado para o
+cliente reusar. O `user_id` não vem do protocolo — vem da mesma auth por `X-API-Key`.
+
+Erro de protocolo (método desconhecido, params inválidos) volta como objeto `error` do JSON-RPC com
+HTTP 200; auth e rate limit voltam como status HTTP (401/429), que é onde um cliente A2A espera
+encontrá-los.
 
 ---
 
@@ -168,15 +215,11 @@ resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
 
 ## Próximos passos (fora do escopo desta base)
 
-`mcp_server/` e `a2a_server/` foram removidos (eram `__init__.py` vazio) — serão recriados quando
-cada trabalho começar:
-
-- **MCP**: expor as tools do Frigus.AI para hosts MCP (Claude Desktop etc.).
-- **A2A**: expor o grafo como um agente Agent-to-Agent para outros sistemas multi-agente.
-- **Redis — fila de tasks**: pendente, deliberadamente não implementado ainda (ver TODO.md). Os dois
-  usos atuais (cache de perfil, rate limit) são leitura/escrita síncrona simples; uma fila de tasks
-  (ex. processar ingestão do Qdrant ou chamadas de MCP fora do caminho da requisição) é um uso
-  diferente de Redis, ainda sem desenho definido.
+- **A2A como cliente**: hoje o Frigus é servidor A2A (card + `message/send`). Consumir outro agente
+  (ex. a agenda do assessor-ai) por A2A ainda está em discussão — ver TODO.md.
+- **Redis — fila de tasks**: pendente, deliberadamente não implementado ainda (ver TODO.md). Os
+  usos atuais (cache de perfil, rate limit, API keys) são leitura/escrita síncrona simples; uma fila
+  de tasks é um uso diferente de Redis, ainda sem desenho definido.
 
 ---
 
@@ -196,6 +239,10 @@ POSTGRES_URI=postgresql://frigus:frigus@localhost:5432/frigus
 MONGODB_URI=mongodb://localhost:27017
 REDIS_URL=redis://localhost:6379/0
 QDRANT_URL=http://localhost:6333
+
+API_KEY_AUTH_ENABLED=false  # true exige X-API-Key nas rotas de chat e no /mcp
+SIGNUP_SECRET=...           # obrigatório para emitir key via POST /keys
+A2A_BASE_URL=http://localhost:8000
 ```
 
 ### Instalação
@@ -236,12 +283,13 @@ Digite `/exit` para encerrar.
 
 - [LangChain](https://github.com/langchain-ai/langchain) / [LangGraph](https://github.com/langchain-ai/langgraph)
 - [qdrant-client](https://github.com/qdrant/qdrant-client) — busca vetorial para o RAG do FAQ
-- [redis](https://github.com/redis/redis-py) — cache de perfil comportamental + rate limit de chat
+- [redis](https://github.com/redis/redis-py) — cache de perfil comportamental + rate limit de chat + API keys
 - [psycopg2-binary](https://pypi.org/project/psycopg2-binary/) — Postgres
 - [pymongo](https://pymongo.readthedocs.io/) — Mongo
 - [Rich](https://github.com/Textualize/rich) + [pyfiglet](https://github.com/pwaller/pyfiglet) — banner/painéis da TUI
 - [Textual](https://github.com/Textualize/textual) — interface TUI (`interfaces/tui/`), única interface interativa hoje
-- [FastAPI](https://fastapi.tiangolo.com/) + [uvicorn](https://www.uvicorn.org/) — API (`interfaces/api/`), sem auth ainda
+- [FastAPI](https://fastapi.tiangolo.com/) + [uvicorn](https://www.uvicorn.org/) — API (`interfaces/api/`), com auth por `X-API-Key`
+- [mcp](https://github.com/modelcontextprotocol/python-sdk) — SDK oficial do MCP (`MCPServer`), usado em `interfaces/mcp/`
 - [httpx](https://www.python-httpx.org/) — client HTTP da Spoonacular Food API
 - [Pydantic](https://docs.pydantic.dev/) — validação de schemas das tools
 - `langchain-anthropic`, `langchain-google-genai`, `langchain-groq`, `langchain-openai` (OpenRouter, via base URL compatível) — integrações com providers

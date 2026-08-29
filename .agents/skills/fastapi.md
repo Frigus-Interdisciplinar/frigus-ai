@@ -192,3 +192,41 @@ subia de jeito nenhum.
 Passou despercebido porque **não havia nenhum teste que importasse `interfaces.api.main`**. Hoje há
 (`tests/interfaces/api/test_chats.py`). Ao criar schema que traduz enum de domínio pra enum público:
 importe o de domínio só com alias, declare o público primeiro, monte o mapa depois.
+
+## 429/500 são handler no app, não `try/except` em cada rota
+
+O mesmo par `except LimiteDeMensagensExcedido -> 429 + Retry-After` / `except Exception -> log + 500`
+estava escrito **três vezes** (`/chats/{id}/messages`, a dependência do SSE e `/a2a`). Rate limit é
+regra de domínio (`chat/service.py`) e vale pra qualquer rota que fale com o grafo — traduzir pra
+HTTP é responsabilidade de um lugar só.
+
+Do this — em `interfaces/api/main.py`:
+
+```python
+@app.exception_handler(LimiteDeMensagensExcedido)
+async def limite_excedido(request: Request, exc: LimiteDeMensagensExcedido) -> JSONResponse:
+    return JSONResponse(
+        {"detail": str(exc)},
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        headers={"Retry-After": str(CHAT_TTL_TIME)},
+    )
+```
+
+```python
+# a rota volta a ser o caso feliz
+@router.post("/{chat_id}/messages")
+async def send_message(chat_id: str, payload: MessageCreate, user_id: CurrentUserDep) -> ChatMessageResponse:
+    stock_id = await chat_service.iniciar_sessao(user_id)
+    resposta = await chat_service.send_message(payload.content, chat_id, user_id, stock_id)
+    return ChatMessageResponse(chat_id=chat_id, content=resposta)
+```
+
+**Pegadinha no teste:** com um `@app.exception_handler(Exception)` registrado, o `TestClient`
+**re-levanta** a exceção do servidor por padrão — o teste vê o `RuntimeError` cru, não a resposta que
+o cliente HTTP receberia. Pra afirmar sobre o corpo do 500, use
+`TestClient(app, raise_server_exceptions=False)` (ver
+`tests/interfaces/api/test_chats.py::test_erro_generico_vira_500_sem_vazar_mensagem_interna`).
+
+**Onde o `try/except` continua necessário:** dentro de rota que é gerador (SSE). O corpo só roda
+depois que o status HTTP saiu, então exceção lá dentro não vira status nenhum — por isso o rate limit
+do `/chats/{id}/messages/stream` é uma **dependência**, que roda antes da resposta abrir.
