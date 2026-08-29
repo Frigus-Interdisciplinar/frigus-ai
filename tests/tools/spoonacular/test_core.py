@@ -39,7 +39,7 @@ class _FakeClient:
 
 def _fake(monkeypatch, json_data, status_code=200):
     fake = _FakeClient(_FakeResponse(json_data, status_code))
-    monkeypatch.setattr(core, "cliente", fake)
+    monkeypatch.setattr(core, "get_client", lambda: fake)
     return fake
 
 
