@@ -30,5 +30,3 @@ class MarkPurchasedArgs(BaseModel):
 class GenerateShoppingListFromLowStockArgs(BaseModel):
     pass
 
-class RegisterPurchaseFromNfeArgs(BaseModel):
-    nfe_key_or_url: str = Field(description="Chave de acesso ou URL do QR Code da NF-e (formato SEFAZ-SP).")

@@ -4,7 +4,6 @@ from .postgres.compras.core import (
     generate_shopping_list_from_low_stock,
     mark_purchased,
     query_shopping_list,
-    register_purchase_from_nfe,
 )
 from .postgres.estoque.core import (
     add_stock_product,
@@ -35,7 +34,6 @@ COMPRAS_TOOLS = [
     query_shopping_list,
     mark_purchased,
     generate_shopping_list_from_low_stock,
-    register_purchase_from_nfe,
 ]
 RECEITAS_TOOLS = [
     match_recipes_to_stock,

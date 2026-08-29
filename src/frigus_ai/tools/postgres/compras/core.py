@@ -8,7 +8,6 @@ from frigus_ai.tools.postgres.compras.schemas import (
     GenerateShoppingListFromLowStockArgs,
     MarkPurchasedArgs,
     QueryShoppingListArgs,
-    RegisterPurchaseFromNfeArgs,
 )
 from frigus_ai.tools.postgres.connection import get_conn
 from frigus_ai.tools.postgres.context import current_stock_id
@@ -315,30 +314,10 @@ def generate_shopping_list_from_low_stock() -> dict:
                 return Response.error(e)
 
 
-@tool("register_purchase_from_nfe", args_schema=RegisterPurchaseFromNfeArgs)
-@log_tool
-def register_purchase_from_nfe(nfe_key_or_url: str) -> dict:
-    """
-    Registra uma compra a partir do QR Code de uma NF-e (leitura via SEFAZ-SP).
-
-    STUB: a integração real com a SEFAZ (scraping da página HTML da nota) ainda
-    não está implementada nesta base. Use add_stock_product para cadastro manual
-    enquanto isso.
-    """
-
-    logger.warning("register_purchase_from_nfe chamado, mas integração SEFAZ não está implementada | chave=%s", nfe_key_or_url)
-
-    return Response.error(
-        "Integração com NF-e/SEFAZ ainda não implementada nesta versão. "
-        "Cadastre os produtos manualmente com add_stock_product."
-    )
-
-
 __all__ = [
     "add_shopping_list_product",
     "create_shopping_list",
     "generate_shopping_list_from_low_stock",
     "mark_purchased",
     "query_shopping_list",
-    "register_purchase_from_nfe",
 ]
