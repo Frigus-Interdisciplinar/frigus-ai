@@ -63,7 +63,7 @@ async def send_message(chat_id: str, payload: MessageCreate) -> ChatMessageRespo
 
 @router.get("/{chat_id}/messages")
 async def get_messages(chat_id: str) -> list[MessageResponse]:
-    historico = await chat_service.get_history(chat_id)
+    historico = await chat_service.get_history(chat_id, chat_service.DEMO_USER_ID)
 
     return [
         MessageResponse(role=_ROLE_MAP[m.role], content=m.content)

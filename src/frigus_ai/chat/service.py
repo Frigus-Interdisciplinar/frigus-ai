@@ -74,8 +74,8 @@ async def send_message(conteudo: str, session_id: str, user_id: int, stock_id: i
     return resposta
 
 
-async def get_history(session_id: str, limit: int = 5) -> list[ChatMessage]:
-    return await repositories.buscar_historico(session_id, limit)
+async def get_history(session_id: str, user_id: int, limit: int = 5) -> list[ChatMessage]:
+    return await repositories.buscar_historico(session_id, user_id, limit)
 
 
 async def encerrar_sessao(session_id: str, user_id: int) -> None:

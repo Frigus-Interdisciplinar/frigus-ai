@@ -67,8 +67,10 @@ async def garantir_perfil(user_id: int) -> None:
 @traceable(
     run_type="tool", name="buscar_historico", process_outputs=_redigir_saida_historico
 )
-async def buscar_historico(session_id: str, limit: int = 5) -> list[ChatMessage]:
-    doc = await asyncio.to_thread(chats.buscar, session_id, limit=limit)
+async def buscar_historico(
+    session_id: str, user_id: int, limit: int = 5
+) -> list[ChatMessage]:
+    doc = await asyncio.to_thread(chats.buscar, session_id, user_id, limit=limit)
     if not doc:
         return []
     return [_de_mensagem(m) for m in Mensagem.de_dict(doc["messages"])]
@@ -81,10 +83,7 @@ async def salvar_mensagens(
     user_id: int, session_id: str, mensagens: list[ChatMessage]
 ) -> None:
     mensagens_mongo = [_para_mensagem(m) for m in mensagens]
-    if not await asyncio.to_thread(chats.buscar, session_id):
-        await asyncio.to_thread(chats.criar, user_id, session_id, mensagens_mongo)
-    else:
-        await asyncio.to_thread(chats.atualizar_mensagens, session_id, mensagens_mongo)
+    await asyncio.to_thread(chats.adicionar_mensagens, session_id, user_id, mensagens_mongo)
 
 
 async def encerrar_sessao(session_id: str, user_id: int) -> None:
