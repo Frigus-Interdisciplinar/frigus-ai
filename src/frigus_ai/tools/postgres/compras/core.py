@@ -216,10 +216,28 @@ def mark_purchased(
                         return Response.error("Item não encontrado na lista de compras aberta.")
                     target_id = row[0]
 
+                # O EXISTS impede que um shopping_list_product_id vindo do LLM
+                # altere item de outra lista/estoque — o caminho por product_name
+                # já filtra por stock_id, o caminho por ID não filtrava nada.
                 cur.execute(
-                    "UPDATE shopping_list_products SET status = %s WHERE id = %s;",
-                    (status, target_id)
+                    """
+                    UPDATE shopping_list_products slp
+                    SET status = %s
+                    WHERE slp.id = %s
+                      AND EXISTS (
+                          SELECT 1 FROM shopping_lists sl
+                          WHERE sl.id = slp.list_id
+                            AND sl.stock_id = %s
+                            AND sl.status = 'Aberta'
+                      );
+                    """,
+                    (status, target_id, stock_id)
                 )
+
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    return Response.error("Item não encontrado na lista de compras aberta.")
+
                 conn.commit()
 
                 logger.info("MARK OK | shopping_list_product_id=%s status=%s", target_id, status)
