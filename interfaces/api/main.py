@@ -3,7 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from frigus_ai.tools.spoonacular.connection import fechar_client
-from interfaces.api.routes import chats_router, health_router, keys_router
+from interfaces.api.routes import (
+    a2a_router,
+    chats_router,
+    health_router,
+    keys_router,
+)
 from interfaces.mcp.server import lifespan_mcp
 from interfaces.mcp.server import montar_app as montar_app_mcp
 
@@ -27,6 +32,7 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(chats_router)
 app.include_router(keys_router)
+app.include_router(a2a_router)
 
 # Servidor MCP das tools de domínio, no mesmo processo da API (POST /mcp).
 app.mount("/mcp", montar_app_mcp())
