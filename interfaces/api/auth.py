@@ -53,3 +53,15 @@ def verify_signup_secret(
 
 CurrentUserDep = Annotated[int, Depends(get_current_user)]
 
+
+async def get_stock_id(user_id: CurrentUserDep) -> int | None:
+    """
+    O estoque do usuário autenticado. Fica aqui junto do `user_id` porque é derivado
+    dele — e o FastAPI resolve `CurrentUserDep` uma vez por request, então a rota pode
+    pedir os dois sem `iniciar_sessao` rodar duas vezes.
+    """
+
+    return await chat_service.iniciar_sessao(user_id)
+
+
+StockIdDep = Annotated[int | None, Depends(get_stock_id)]

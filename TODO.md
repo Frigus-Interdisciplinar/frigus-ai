@@ -170,9 +170,11 @@ Rotas chamam só o módulo de serviço, nunca o grafo ou as tools direto. Ver
       hardcoded em `DEMO_USER_ID` em cada rota (mesmo bootstrap do terminal/TUI) e `stock_id`
       reresolvido via `iniciar_sessao()` a cada request (idempotente, mas ineficiente sem sessão
       persistente)
-- [ ] Controle de sessão por usuário de verdade (hoje é só `thread_id` gerado em memória na TUI) —
-      ver item "Checkpointer persistente" abaixo, é pré-requisito. Depois disso, trocar `DEMO_USER_ID`
-      hardcoded nas rotas por auth de verdade
+- [x] **Controle de sessão por usuário de verdade** — `interfaces/api/auth.py`: header `X-API-Key`,
+      Redis guardando só `sha256(key) -> user_id` (`tools/redis/api_key.py`), `POST /keys` protegido
+      por `X-Signup-Secret`. `API_KEY_AUTH_ENABLED=false` (default) mantém o bypass pro `DEMO_USER_ID`,
+      pra TUI e demo local seguirem rodando sem key. Junto disso, `tools/mongo/chats` passou a filtrar
+      por `user_id` em toda operação — sem isso a auth existiria mas o IDOR continuaria
 - [x] **Tratamento de erro nas rotas** — `LimiteDeMensagensExcedido` agora vira **429 +
       `Retry-After: 60`**, e o `except Exception` genérico virou `logger.exception(...)` + `detail`
       fixo (antes devolvia `str(e)`, vazando mensagem crua do psycopg2/pymongo pro cliente).
@@ -191,6 +193,13 @@ Rotas chamam só o módulo de serviço, nunca o grafo ou as tools direto. Ver
 - [ ] Rate limiting básico por IP (o por usuário já existe via Redis). **Nota:**
       falta só o limite por IP; o por usuário (`tools/redis/chat.py`, 10 msg/60s) já roda e agora
       responde o status HTTP certo
+- [x] **Streaming SSE** — `POST /chats/{id}/messages/stream`, um evento `no` por agente concluído e
+      um `resposta` no fim (`chat/runner.py:executar_stream`, `stream_mode="updates"`). **Não é token
+      a token**: quem escreve o texto final é o Guardrail de Saída, que reescreve a resposta inteira
+      depois que o LLM termina — não existe token final pra emitir antes disso. O rate limit virou
+      dependência de rota nesse caminho: o corpo de um gerador só roda depois que o status HTTP saiu,
+      então 429 lá dentro chegaria tarde
+- [x] **Lifespan** — fecha o `httpx.Client` da Spoonacular e encadeia o lifespan do app MCP montado
 
 ## Checkpointer persistente (controle de sessão) — concluído
 
@@ -226,14 +235,19 @@ Requisito explícito da disciplina. `mcp_server/`, `a2a_server/` e `api/` foram 
 (eram só `__init__.py` vazio, sem implementação nenhuma — recriar quando o trabalho de cada um
 começar de verdade, não versionar pasta placeholder sem uso).
 
-- [ ] **MCP**: expor as tools do Frigus.AI (estoque, compras, receitas, financeiro, faq) como
-      servidor MCP, pra hosts MCP externos (Claude Desktop etc.) conseguirem consumir o domínio do
-      Frigus sem precisar do grafo inteiro. Quando `tools/spoonacular/core.py` existir (ver seção
-      "Spoonacular" abaixo), entra na mesma lista — é só mais um domínio de consulta, mesmo padrão
-      das demais
-- [ ] **A2A**: expor `fluxo_agentes` (ou o módulo de serviço, pós-refactor) como agente
-      Agent-to-Agent, pra outro sistema multiagente conseguir conversar com o Frigus.AI como um
-      agente externo
+- [x] **MCP** — `interfaces/mcp/server.py`, 18 tools em `POST /mcp` (SDK oficial `mcp`, Streamable
+      HTTP), montado dentro da própria API pra reusar o `X-API-Key`. Tool nova entra sozinha: a lista
+      é montada a partir de `frigus_ai.tools`. Pegadinhas em `.agents/skills/mcp.md` — `FastMCP` virou
+      `MCPServer` no mcp 2.x; lifespan de app montado não roda sozinho (`Task group is not
+      initialized`); `stateless_http=True` é o que mantém o `session_context` do middleware válido
+      dentro da tool; proteção contra DNS rebinding responde 421 fora de `localhost:*`
+- [x] **A2A (servidor)** — Agent Card em `/.well-known/agent-card.json` + `message/send`
+      (JSON-RPC 2.0) em `POST /a2a` (`interfaces/api/routes/a2a.py`), escrito à mão em Pydantic, sem
+      o `a2a-sdk`: o card declara `streaming=false`/`pushNotifications=false`, então task store,
+      streaming e cancelamento (o que o SDK traz) seriam código morto. **Reavaliar o SDK** se o card
+      passar a anunciar streaming ou tasks. O `contextId` do A2A é o `session_id` do chat, e o
+      `user_id` vem da auth por `X-API-Key`, não do protocolo. Limitação conhecida: envelope
+      JSON-RPC malformado sai como 422 do Pydantic, não como `-32600`
 - [ ] Decidir se os dois vivem só neste repo ou se algum consome a API (API fica neste repo —
       decidido, ver seção "API (FastAPI/Flask)" acima)
 - [ ] **Em discussão:** usar o A2A como *cliente* também, não só servidor — trocar o agente
@@ -430,7 +444,9 @@ Desenho considerado: `resolver_produto(codigo_barras | nome)` devolvendo
 
 1. **Não existe código de barras no sistema.** `grep -riE "upc|barcode|ean|gtin"` não acha nada;
    `data/sql/schema.sql:products` é `id, name, category, storage_place, unit_price`; a única origem
-   plausível (`register_purchase_from_nfe`) é stub que retorna erro. O branch de UPC nasceria morto.
+   plausível (`register_purchase_from_nfe`) era stub que retornava erro — **removido do repo desde
+   então** (tool, schema e menção no prompt de compras), justamente por estar registrada como
+   funcionalidade real sem implementação. O branch de UPC nasceria morto.
 2. **A cota não comporta.** `search` + `products/{id}` + `classify` = ~3 pontos **por produto**; uma
    compra de 15 itens consome 45 dos 50 pontos/dia. Não é problema de afinar TTL, é aritmética.
 

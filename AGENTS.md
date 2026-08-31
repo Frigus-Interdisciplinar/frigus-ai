@@ -24,13 +24,13 @@ ficar desatualizado.
 
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ⚠️ Parcial | `interfaces/api/` — esqueleto de rotas (`/health`, `/chats`) rodando, sem autenticação/rate limiting ainda (ver TODO.md) |
+| API FastAPI/Flask | ✅ Feito | `interfaces/api/` — `/health`, `/chats` (incl. SSE em `/chats/{id}/messages/stream`), `/keys`. Auth por `X-API-Key` (`auth.py`) + rate limit por usuário no Redis. Falta rate limit por IP (ver TODO.md) |
 | Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`agents/nodes/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
-| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph + histórico em Mongo (`tools/mongo/chats`). Checkpointer agora é `MongoDBSaver` (`graph/builder.py`) — estado sobrevive a restart. Falta só sessão HTTP de verdade, que depende da API |
+| Controle de sessões por usuário | ✅ Feito | `thread_id=session_id` no checkpointer `MongoDBSaver` (`graph/builder.py`) + histórico em Mongo. Toda operação em `tools/mongo/chats` filtra por `user_id` além do `session_id`, e o `user_id` vem da auth por API key — não é mais `DEMO_USER_ID` hardcoded quando `API_KEY_AUTH_ENABLED=true` |
 | Memória de longo prazo | ⚠️ Parcial | `tools/mongo/users` — perfil comportamental (resumo de hábitos) por `user_id`, persistente no Mongo. Avaliar se cobre o requisito ou se precisa de algo além do resumo (ex. memória vetorial) |
-| MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | Nada implementado — as pastas placeholder foram removidas do repo, serão recriadas quando o trabalho começar. Ver TODO.md |
+| MCP, A2A (integrações com sistemas/agentes externos) | ✅ Feito | **MCP ✅**: `interfaces/mcp/server.py` expõe as 18 tools de domínio em `POST /mcp` (SDK oficial `mcp`, Streamable HTTP), montado na própria API pra reusar o `X-API-Key`. **A2A ✅**: Agent Card em `/.well-known/agent-card.json` + `message/send` (JSON-RPC 2.0) em `POST /a2a` (`interfaces/api/routes/a2a.py`), escrito à mão — o `contextId` do protocolo é o `session_id` do chat. Falta só A2A como *cliente* (em discussão no TODO.md) |
 | RAG com fonte externa indicada | ✅ Feito | `tools/qdrant/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `agents/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
 | Guardrail | ✅ Feito | `agents/nodes/guardrail/{entrada,saida}.py` |
@@ -79,7 +79,8 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 └── chat/                models.py (contrato de mensagem), repositories.py (Mongo), runner.py (invoca o grafo), service.py (casos de uso)
 
 interfaces/tui/         app.py (Textual) + display.py (Bubble/MessageRow) + app.tcss — única interface interativa
-interfaces/api/         main.py (FastAPI) + routes/{chats,health}.py + schemas/ — esqueleto, sem auth ainda
+interfaces/api/         main.py (FastAPI) + auth.py (X-API-Key) + routes/{chats,health,keys,a2a}.py + schemas/
+interfaces/mcp/         server.py — as tools de domínio como servidor MCP (POST /mcp), montado na API
 config/                 settings.py (env vars via pydantic-settings), models.py (Model enum + providers), docker.py, logging.py
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
 main.py                 dispatcher fino — `python main.py <interface>` (`tui` [default] ou `api`)
@@ -92,12 +93,14 @@ qualquer tool nova (redis, qdrant, etc).
 Nenhuma interface (`interfaces/*`) deve chamar `frigus_ai.graph.builder`, `frigus_ai.tools.mongo.*`
 ou `frigus_ai.tools.postgres.*` diretamente — sempre via `frigus_ai.chat.service`. É esse limite que
 permite API/TUI existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir
-histórico. `interfaces/api/routes/chats.py` segue essa regra hoje, mas ainda não tem autenticação —
-`user_id` é sempre `DEMO_USER_ID` (ver TODO.md).
+histórico. `interfaces/api/routes/chats.py` segue essa regra, e o `user_id` vem da dependência de auth
+(`interfaces/api/auth.py`). `interfaces/mcp/server.py` é a exceção consciente: um servidor MCP expõe
+as *tools*, não o grafo, então ele importa `frigus_ai.tools` direto — mas continua não tocando
+`graph.builder`, e resolve identidade pelo mesmo `session_context` que o runner usa.
 
 `interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa agora.
-`mcp_server/` e `a2a_server/` continuam só placeholders vazios removidos do repo — recriar quando o
-trabalho de cada um começar (ver TODO.md).
+`mcp_server/`/`a2a_server/` (placeholders) deram lugar a `interfaces/mcp/` e à rota do Agent Card em
+`interfaces/api/routes/a2a.py`.
 
 ## Convenções
 
@@ -138,12 +141,22 @@ trabalho de cada um começar (ver TODO.md).
   (`LANGGRAPH_ALLOWED_MSGPACK_MODULES` foi removido de `graph/builder.py` por causa disso).
 - Conexões com banco (Postgres, Mongo) são **lazy** — inicializadas só na primeira operação, nunca
   no import do módulo. Mantenha esse padrão para novas integrações (Redis, Qdrant, MCP, A2A).
+- **Nada que dependa de "agora" pode ser montado no import.** O contexto temporal do prompt era
+  constante de módulo (`loader.py`) e congelava na hora em que o processo subia — numa API viva, "o
+  que vence hoje" respondia com a data do deploy. Hoje `load_prompt()` remonta a data a cada chamada
+  e os agentes recebem o prompt via middleware `dynamic_prompt` (`graph/agents.py`), não por
+  `system_prompt=`. O que é cacheável ali é o parse do `.md`, não o prompt pronto.
 - Tools retornam a classe `Response` (`tools/response.py`) para padronizar sucesso/erro.
+- **Log não recebe dado de usuário.** `config/decorators.py:log_tool` loga nome/status/tempo da
+  tool, nunca args nem result (que carregam alimentos, gastos e nomes), e o guardrail de entrada
+  loga o texto **já anonimizado** ao bloquear. O detalhe fica no tracing (LangSmith), que redige
+  PII. Testes de regressão: `tests/tools/test_decorators.py` e
+  `tests/agents/nodes/guardrail/test_logs.py`.
 - **Tools do LLM nunca recebem `user_id`/`stock_id` como argumento.** Args de tool são escolhidos
   pelo LLM via tool-calling — qualquer dado de escopo/permissão não pode vir por ali. O padrão é um
   `contextvars.ContextVar` setado uma vez por request (`tools/postgres/context.py:session_context`,
-  chamado em `chat/runner.py:executar`) e lido dentro da tool. Ver uso em
-  `tools/postgres/{estoque,compras,receitas,financeiro}/core.py`.
+  chamado em `chat/runner.py:executar` e no middleware ASGI de `interfaces/mcp/server.py`) e lido
+  dentro da tool. Ver uso em `tools/postgres/{estoque,compras,receitas,financeiro}/core.py`.
 - Não commitar `.env`; usar `.env.example` como referência de variáveis novas.
 - **Simplicidade acima de tudo.** Projeto de disciplina em estágio inicial — prefira a solução direta
   à abstração "flexível para o futuro". Sem camada genérica, sem config plugável, sem interface para
@@ -204,13 +217,15 @@ just check           # lint (roda no CI em push/PR pra main); `just fix` aplica 
 4. Se a tool precisa ser escopada por usuário/estoque, usar o `ContextVar` de
    `tools/postgres/context.py` — nunca adicionar `user_id`/`stock_id` ao schema da tool.
 5. Registrar a tool no agente correspondente em `agents/nodes/`.
-6. Atualizar a tabela de estrutura no README.md.
+6. Nada a fazer pro MCP: `interfaces/mcp/server.py` monta a lista a partir de `frigus_ai.tools`, e a
+   tool nova é exposta junto automaticamente.
+7. Atualizar a tabela de estrutura no README.md.
 
 ## Skills por biblioteca
 
 `.agents/skills/` guarda convenções e pegadinhas específicas de cada lib/serviço externo usada no
-projeto (pydantic, fastapi, mongo, langchain, spoonacular — um arquivo por lib, regra + exemplo do
-que fazer e do que não fazer).
+projeto (pydantic, fastapi, mongo, langchain, spoonacular, mcp — um arquivo por lib, regra +
+exemplo do que fazer e do que não fazer).
 `dependencies.md`, `responses.md`, `streaming.md`, `path-operations.md` e `other-tools.md` são
 material de referência do skill oficial do FastAPI, linkados a partir de `fastapi.md`. São achados
 reais deste repo ou do assessor-ai (repo irmão, mesmo stack de Mongo/LangChain — sinalizado quando o
