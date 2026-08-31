@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     API_KEY_AUTH_ENABLED: bool = False
     SIGNUP_SECRET: str = ""
 
+    A2A_BASE_URL: str = "http://localhost:8000"
+
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION_NAME: str = "faq"
