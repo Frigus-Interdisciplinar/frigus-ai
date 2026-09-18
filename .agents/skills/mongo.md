@@ -11,22 +11,45 @@ I/O no import" e pode ser importado à vontade.
 
 `MongoDBSaver.__init__`, ao contrário, **conecta na hora**: ele cria índices nas collections de
 checkpoint. Instanciar no import faria todo `python main.py`, todo `pytest` e toda coleta de teste
-baterem no Mongo antes de qualquer coisa acontecer — por isso `fluxo_agentes()` em
-`graph/builder.py` é `@functools.cache` numa função, não uma variável de módulo:
+baterem no Mongo antes de qualquer coisa acontecer — por isso `fluxo_agentes` em `graph/builder.py`
+é a classe `FluxoAgentes`, com `get()`/`aclose()` assíncronos e lock, e não uma variável de módulo
+nem um `@functools.cache` numa função:
 
 ```python
-@functools.cache
-def fluxo_agentes():
-    checkpointer = MongoDBSaver(
-        banco.client,
-        db_name=banco.name,
-        checkpoint_collection_name="graph_checkpoints",
-        writes_collection_name="graph_checkpoint_writes",
-    )
-    return grafo.compile(checkpointer=checkpointer)
+class FluxoAgentes:
+    def __init__(self) -> None:
+        self._compilado: CompiledStateGraph | None = None
+        self._lock = asyncio.Lock()
+
+    async def get(self) -> CompiledStateGraph:
+        if self._compilado is not None:
+            return self._compilado
+
+        async with self._lock:
+            if self._compilado is None:
+                checkpointer = MongoDBSaver(
+                    banco.client,
+                    db_name=banco.name,
+                    checkpoint_collection_name="graph_checkpoints",
+                    writes_collection_name="graph_checkpoint_writes",
+                )
+                self._compilado = grafo.compile(checkpointer=checkpointer)
+
+        return self._compilado
+
+    async def aclose(self) -> None:
+        async with self._lock:
+            self._compilado = None
+
+
+fluxo_agentes = FluxoAgentes()
 ```
 
-`@cache` (stdlib) já dá o singleton lazy — não escreva memoização na mão com `if _instancia is None`.
+`api/lifespan.py` chama `await fluxo_agentes.get()` no startup (falha cedo se o Mongo estiver fora
+do ar, em vez de aceitar tráfego e errar 502 em cada mensagem) e `await fluxo_agentes.aclose()` no
+shutdown. Quem consome o grafo (`services/chat/runner.py`) faz `grafo = await fluxo_agentes.get()`
+e só depois `grafo.ainvoke(...)`/`grafo.astream(...)` — nunca `fluxo_agentes()` direto, não é mais
+uma função.
 
 ## `ServerSelectionTimeoutError` em deploy hospedado = allowlist do host, não código
 

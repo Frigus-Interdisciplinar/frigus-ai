@@ -1,4 +1,4 @@
-from frigus_ai.tools.response import Response
+from frigus_ai.graph.tools.response import Response
 
 
 def test_ok_sem_dados():

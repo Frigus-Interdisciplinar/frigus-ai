@@ -1,12 +1,12 @@
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt
 
-from frigus_ai.agents.prompts.loader import load_prompt
 from frigus_ai.graph.llm import (
     llm_especialista,
     llm_rapido,
 )
-from frigus_ai.tools import (
+from frigus_ai.graph.prompts import load_prompt
+from frigus_ai.graph.tools import (
     COMPRAS_TOOLS,
     ESTOQUE_TOOLS,
     FAQ_TOOLS,

@@ -1,5 +1,4 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
-cmd := "frigus-ai"
 python := if os() == "windows" { ".venv/Scripts/python" } else { ".venv/bin/python" }
 
 venv:
@@ -8,7 +7,7 @@ venv:
 
 run mode="tui":
     @echo "Running the application"
-    {{cmd}} {{mode}}
+    bash scripts/run.sh {{mode}}
 
 check:
     @echo "Running pre-commit checks"
