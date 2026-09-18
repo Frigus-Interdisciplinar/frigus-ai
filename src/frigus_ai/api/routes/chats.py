@@ -30,15 +30,22 @@ from frigus_ai.services.chat_service import service as chat_service
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 
-async def _usuario_dentro_do_limite(user_id: CurrentUserDep) -> int:
-    """Rate limit do caminho SSE: o corpo de um gerador só roda depois que o status
-    HTTP saiu, então 429 lá dentro seria tarde demais. Aqui roda antes do stream abrir."""
+async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep) -> int:
+    """
+    Dono do chat + rate limit do caminho SSE. Vai numa dependência, e não no corpo da
+    rota, porque o corpo de um gerador só roda depois que o status HTTP saiu — 403/429
+    lá dentro seriam tarde demais. Aqui roda antes do stream abrir.
 
+    Ownership antes do limite: request que vai levar 403 não deve consumir mensagem
+    da janela do usuário.
+    """
+
+    await chat_service.validar_ownership(chat_id, user_id)
     await chat_service.garantir_limite(user_id)
     return user_id
 
 
-UsuarioComLimiteDep = Annotated[int, Depends(_usuario_dentro_do_limite)]
+DonoComLimiteDep = Annotated[int, Depends(_dono_do_chat_dentro_do_limite)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -62,7 +69,7 @@ async def send_message(
 
 @router.post("/{chat_id}/messages/stream", response_class=EventSourceResponse)
 async def stream_message(
-    chat_id: str, payload: MessageCreate, user_id: UsuarioComLimiteDep
+    chat_id: str, payload: MessageCreate, user_id: DonoComLimiteDep
 ) -> AsyncIterable[ServerSentEvent]:
     """Um evento `no` por agente concluído, um evento `resposta` no fim."""
 

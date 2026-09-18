@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
 from frigus_ai.api.routes import chats as rotas
-from frigus_ai.exceptions import LimiteDeMensagensExcedido
+from frigus_ai.exceptions import ChatDeOutroUsuario, LimiteDeMensagensExcedido
 from frigus_ai.services.user_service import user_service
 
 CHAT_ID = "chat-de-teste"
@@ -125,3 +125,19 @@ def test_stream_com_limite_excedido_vira_429_antes_do_stream(cliente, monkeypatc
     assert r.status_code == 429
     assert r.headers["Retry-After"] == "60"
 
+
+def test_stream_rejeita_chat_de_outro_dono(cliente, monkeypatch):
+    """
+    O checkpointer do grafo indexa por `thread_id=session_id` sem user_id — sem a checagem
+    de dono, o /stream carregaria a conversa de outro usuário no contexto do LLM e devolveria
+    pelo SSE. O `send_message` já barrava; o stream não.
+    """
+
+    async def _de_outro(session_id, user_id):
+        raise ChatDeOutroUsuario(session_id)
+
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _de_outro)
+
+    resposta = cliente.post(f"/chats/{CHAT_ID}/messages/stream", json={"content": "oi"})
+
+    assert resposta.status_code == 403
