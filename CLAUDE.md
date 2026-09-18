@@ -12,12 +12,11 @@ Claude Code; não duplique conteúdo do AGENTS.md aqui.
 - Respeite o idioma do arquivo (português para código de domínio, inglês para infraestrutura) — ver
   seção "Convenções" do AGENTS.md.
 - Antes de adicionar uma tool nova (Redis, Qdrant, MCP, A2A, API, etc.), siga o padrão descrito em
-  "Ao adicionar uma tool nova" no AGENTS.md e confira o [TODO.md](TODO.md) para o que já está
+  "Ao adicionar uma tool nova" no AGENTS.md e confira `.agents/notes/` para o que já está
   planejado ou decidido.
 - Antes de escrever código novo que toque FastAPI, Pydantic, MongoDB/pymongo, LangChain/LangGraph ou
   o client do Spoonacular, confira `.agents/skills/<lib>.md` — são pegadinhas reais já encontradas
   neste repo ou no assessor-ai (ver seção "Skills por biblioteca" do AGENTS.md).
-- **API (FastAPI/Flask) fica neste mesmo repositório** — decidido, sem repo separado. Ver
-  "Decisão: API no mesmo repo ou separado?" no TODO.md.
+- **API (FastAPI/Flask) fica neste mesmo repositório** — decidido, sem repo separado.
 - Não rodar `docker stop`/`docker start` fora do fluxo de `config/docker.py` sem avisar o usuário —
   os containers Postgres/Mongo podem estar compartilhados com outras execuções locais.

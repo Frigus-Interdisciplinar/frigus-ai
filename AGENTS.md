@@ -12,9 +12,9 @@ de Sistemas Multiagentes** — ver seção "Requisitos da disciplina" abaixo par
 entregue e o que já está feito.
 
 `main.py` é um dispatcher fino (`python main.py <interface>`) — a lógica de montar estado, invocar o
-grafo e persistir histórico vive em `frigus_ai.chat.service`, compartilhada por todas as interfaces
-(`tui`, `api`). Detalhes de arquitetura, fluxo de agentes e tools estão no [README.md](README.md) —
-leia-o antes de mexer em `agents/` ou `graph/`.
+grafo e persistir histórico vive em `frigus_ai.services.chat_service`, compartilhada por todas as
+interfaces (`tui`, `api`, A2A e MCP). Detalhes de arquitetura, fluxo de agentes e tools estão no
+[README.md](README.md) — leia-o antes de mexer em `src/frigus_ai/graph/`.
 
 ## Requisitos da disciplina
 
@@ -22,25 +22,45 @@ Baseado no enunciado do trabalho ("mínimo para 7,0" + extra). Cada item marca o
 neste repo e onde. Antes de reportar algo como pendente, confira o código — este checklist pode
 ficar desatualizado.
 
+**A ordem de ataque do que falta (P0/P1/P2) fica em
+`.agents/notes/pending/requisitos-disciplina/arquivos.md`** — esta tabela só diz onde está cada
+coisa; a nota diz o que fazer primeiro.
+
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ⚠️ Parcial | `interfaces/api/` — esqueleto de rotas (`/health`, `/chats`) rodando, sem autenticação/rate limiting ainda (ver TODO.md) |
-| Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`agents/nodes/names.py`) |
+| API FastAPI/Flask | ⚠️ Parcial | `src/frigus_ai/api/` — health, chats, keys, MCP e A2A, com autenticação/rate limit condicionais. Falta schema em `GET /chats` (hoje `list[dict]`), versionamento e ownership no `DELETE /chats/{id}` |
+| Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`graph/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
-| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no checkpointer LangGraph + histórico em Mongo (`tools/mongo/chats`). Checkpointer agora é `MongoDBSaver` (`graph/builder.py`) — estado sobrevive a restart. Falta só sessão HTTP de verdade, que depende da API |
-| Memória de longo prazo | ⚠️ Parcial | `tools/mongo/users` — perfil comportamental (resumo de hábitos) por `user_id`, persistente no Mongo. Avaliar se cobre o requisito ou se precisa de algo além do resumo (ex. memória vetorial) |
-| MCP, A2A (integrações com sistemas/agentes externos) | ❌ Pendente | Nada implementado — as pastas placeholder foram removidas do repo, serão recriadas quando o trabalho começar. Ver TODO.md |
-| RAG com fonte externa indicada | ✅ Feito | `tools/qdrant/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
-| Agente juiz (mitigação de alucinação) | ✅ Feito | `agents/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
-| Guardrail | ✅ Feito | `agents/nodes/guardrail/{entrada,saida}.py` |
-| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ❌ Pendente | ver TODO.md |
-| Observabilidade/SRE — latência interagentes e tempo total de resposta | ⚠️ Parcial | Tracing via LangSmith ligado (`config/settings.py`, `chat/runner.py`, `chat/repositories.py`) — dado já disponível no dashboard, falta só consultar/reportar |
-| Observabilidade/SRE — índice de erros | ❌ Pendente | |
-| Observabilidade/SRE — custo/ROI | ❌ Pendente | |
-| Observabilidade/SRE — custo por resolução | ❌ Pendente | |
+| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no `MongoDBSaver` + histórico em Mongo. Ownership checado em `send_message`, `get_messages` e `/stream`; falta no `DELETE` e no A2A |
+| Memória de longo prazo | ✅ Feito | Perfil comportamental persistente em Mongo (`user_profiles`), recuperado por `user_id` e usado no fluxo de chat |
+| MCP | ⚠️ Parcial | `src/frigus_ai/mcp.py` expõe as tools com autenticação por `X-API-Key`; falta validação externa ponta a ponta |
+| A2A | ⚠️ Parcial | `src/frigus_ai/a2a.py` mantém integração SDK alternativa e `src/frigus_ai/api/routes/a2a.py` mantém contrato manual; faltam consolidar uma superfície e autenticação no SDK |
+| RAG com fonte externa indicada | ✅ Feito | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
+| Agente juiz (mitigação de alucinação) | ✅ Feito | `graph/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
+| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `privacy.py`, regex de ataque, classificador com cache no Redis) e saída |
+| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ⚠️ Parcial | Tokens são coletados por `metrics_callback.py` e traces vão para LangSmith; falta transformar isso em estimativa documentada para os dois cenários |
+| Observabilidade/SRE — latência interagentes e tempo total de resposta | ✅ Feito | Prometheus mede HTTP, grafo, nodes, tools e LLM; LangSmith complementa os traces individuais |
+| Observabilidade/SRE — índice de erros | ⚠️ Parcial | Contadores de falha existem em Prometheus; falta definir fórmula, janela e relatório da disciplina |
+| Observabilidade/SRE — custo/ROI | ❌ Pendente | Falta definir valor de resolução, premissas de custo e cálculo reproduzível |
+| Observabilidade/SRE — custo por resolução | ⚠️ Parcial | Tokens por chamada já são observados; falta associar custo e resolução concluída em um relatório |
 | Desenho de arquitetura de alto nível | ✅ Feito | README.md — diagrama Mermaid + `assets/diagrama-agentes.png` |
-| Extra: complexidade do projeto | Em andamento | 5 domínios de negócio + guardrail duplo + juiz já é acima da média; MCP/A2A/observabilidade (pendentes acima) são o que mais soma aqui |
+| Extra: Redis com fila ou ranking | ❌ Pendente | Redis hoje só faz cache (perfil, guardrail), rate limit, sessão A2A e api-key — o enunciado pede fila **ou** ranking; cache não conta |
+| Extra: Neo4j | ❌ Pendente | Só `.cypher` em `infra/neo4j/cql/`; sem driver no `pyproject.toml`, sem conexão e sem traversal. Usar driver oficial, **não** OGM (ver nota de requisitos) |
+| Extra: complexidade do projeto | Em andamento | 5 domínios de negócio + guardrail duplo + juiz + RAG + integrações MCP/A2A já são acima da média; Redis por fila/ranking e Neo4j são os principais extras restantes |
+
+### Checklist por matéria/entrega
+
+| Área | Feito e comprovado | Pendente para fechar |
+|---|---|---|
+| Sistemas Multiagentes | Grafo LangGraph, 5+ especialistas, router, guardrails e juiz com retentativas | Avaliação reproduzível de qualidade e grounding |
+| API e integrações | FastAPI, health, chats, autenticação condicional, MCP e A2A manual; ownership checado em `send_message`, `get_messages` e `/stream` | Schemas completos, versionamento, contrato A2A único e ownership no `DELETE /chats/{id}` (hoje devolve 202 para não-dono, sem vazar dado) |
+| Persistência | PostgreSQL, MongoDB, Redis e Qdrant lazy; histórico, perfil e checkpoint; `receitas`, `financeiro` e `estoque` em SQLAlchemy + `@transacional` | Migrar `compras` do SQL cru, IDs seguros contra concorrência e validação real com Docker |
+| MCP | Tools em `src/frigus_ai/mcp.py`, contexto de usuário/estoque e testes MCP | Teste externo/ponta a ponta e documentação de cliente |
+| A2A | Agent Card e executor SDK existem; contrato manual tem autenticação da API | Escolher SDK ou manual, propagar `X-API-Key` e persistir sessão (o usuário demo fixo já saiu: `api/auth.py` resolve por key ou cria usuário local único) |
+| Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, Prometheus e dashboard Grafana | Validar scrape real e produzir relatórios de custo, erro, ROI e resolução |
+| Avaliação da disciplina | Nada ainda — `evals/` hoje só tem as métricas Prometheus, que são runtime (13 módulos importam `evals.metrics`, incluindo todos os nós), não avaliação | Harness de verdade (cenários, grounding, preços, definição de resolução, relatórios). `pending/requisitos-disciplina` registra a dívida: ou move pra `observability/`, ou reescreve a decisão antiga |
+| Extras | RAG e arquitetura documentados | Fila/ranking em Redis e Neo4j com traversal demonstrável |
 
 **Importante:** a escola não paga API de IA generativa — por isso o projeto já usa só providers com
 tier gratuito viável (Gemini, Groq) e Claude/Anthropic como opcional (`ANTHROPIC_API_KEY` tem
@@ -59,9 +79,11 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
 - MongoDB para histórico de conversa (`tools/mongo/chats`), perfil comportamental
   (`tools/mongo/users`) e checkpoint do LangGraph (`MongoDBSaver`, coleções `graph_checkpoints`/
   `graph_checkpoint_writes`)
-- Qdrant para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf` (`tools/qdrant/faq/`)
-- Redis para cache do perfil comportamental e rate limit de chat (`tools/redis/`) — fila de tasks
-  ainda não implementada, ver TODO.md
+- Qdrant para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf` (`graph/tools/faq/`)
+- Redis para cache do perfil comportamental e rate limit de chat (`src/frigus_ai/infra/redis/`) —
+  ainda falta o uso obrigatório do enunciado para fila de processamento ou ranking em tempo real
+- Prometheus/LangSmith para observabilidade operacional; avaliações offline e relatórios da
+  disciplina devem ficar em `evals/`, separados do runtime
 - `pytest` (`tests/`, espelhando a estrutura do pacote) + `ruff` (lint) + CI no GitHub Actions
   (`.github/workflows/ci.yml`)
 
@@ -69,38 +91,58 @@ default vazio em `config/settings.py`, então o projeto roda sem ela).
 
 ```text
 src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchling, layout src/)
-├── agents/
-│   ├── prompts/         só .md + loader.py — load_prompt()/load_sections() montam o system_prompt
+├── graph/               tudo do LangGraph
+│   ├── state.py         Estado + EntradaGrafo/SaidaGrafo + os *Update de cada nó + AsyncNode[R]
+│   ├── names.py         nomes dos nós. Fora de nodes/ de propósito: state.py importa daqui e, de
+│   │                     dentro do pacote, o __init__ fecharia ciclo de import
+│   ├── builder.py       monta e compila o grafo (+ checkpointer Mongo)
+│   ├── llm.py           builders de LLM   |   agents.py  agentes compilados (create_agent)
+│   ├── prompts/         só .md + __init__.py — load_prompt()/load_sections() montam o system_prompt
 │   │                     a partir de frontmatter (metadados) + seções `## NOME` do corpo
-│   └── nodes/           nós de grafo — um arquivo por agente/domínio
-├── graph/               state.py (estado + Route), llm.py (builders), agents.py (agentes compilados), builder.py (grafo)
-├── tools/                integrações externas: tools/postgres/{estoque,compras,receitas,financeiro},
-│                         tools/mongo/{chats,users}, tools/qdrant/faq/, tools/redis/
-└── chat/                models.py (contrato de mensagem), repositories.py (Mongo), runner.py (invoca o grafo), service.py (casos de uso)
+│   ├── nodes/           um arquivo por nó + contexto.py (responder/perguntar/poda do histórico)
+│   ├── guardrail/       subsistema próprio: entrada/saida (nós), padroes, schemas, cache
+│   └── tools/           tools do LLM por domínio: estoque, compras, receitas, financeiro, faq,
+│                         spoonacular — cada uma com schemas.py + repo.py
+├── repositories/        persistência: Postgres via SQLAlchemy (@transacional) e Mongo
+├── services/            casos de uso (chat_service, user_service, api_key_service, runner)
+├── infra/               conexões lazy: postgres (pool + engine + models), mongo, redis, qdrant, neo4j
+├── api/                 app.py, routes, schemas, auth, middleware e handlers da API FastAPI
+├── evals/               métricas Prometheus (ver dívida em .agents/notes/pending/requisitos-disciplina)
+├── privacy.py           PII: anonimizar/desanonimizar/redigir. Neutro — guardrail, repository e
+│                         service usam; por isso não mora dentro do guardrail
+└── tui/                 app.py (Textual) + display.py + app.tcss — interface interativa
 
-interfaces/tui/         app.py (Textual) + display.py (Bubble/MessageRow) + app.tcss — única interface interativa
-interfaces/api/         main.py (FastAPI) + routes/{chats,health}.py + schemas/ — esqueleto, sem auth ainda
-config/                 settings.py (env vars via pydantic-settings), models.py (Model enum + providers), docker.py, logging.py
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
+prometheus/ grafana/    scrape config, datasource e dashboard (8 painéis)
 main.py                 dispatcher fino — `python main.py <interface>` (`tui` [default] ou `api`)
 ```
 
-Padrão de cada domínio de tool: `schemas.py` (Pydantic) + `core.py` (as tools em si), com
+Padrão de cada domínio de tool: `schemas.py` (Pydantic) + `repo.py` (as tools em si), com
 `connection.py`/`context.py`/`helpers.py` compartilhados em `tools/postgres/`. Siga esse padrão para
 qualquer tool nova (redis, qdrant, etc).
 
 Nenhuma interface (`interfaces/*`) deve chamar `frigus_ai.graph.builder`, `frigus_ai.tools.mongo.*`
 ou `frigus_ai.tools.postgres.*` diretamente — sempre via `frigus_ai.chat.service`. É esse limite que
 permite API/TUI existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir
-histórico. `interfaces/api/routes/chats.py` segue essa regra hoje, mas ainda não tem autenticação —
-`user_id` é sempre `DEMO_USER_ID` (ver TODO.md).
+histórico. `src/frigus_ai/api/routes/chats.py` segue essa regra; a identidade real ainda precisa ser
+propagada de forma consistente para todos os fluxos, sem depender de `DEMO_USER_ID`.
 
 `interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa agora.
-`mcp_server/` e `a2a_server/` continuam só placeholders vazios removidos do repo — recriar quando o
-trabalho de cada um começar (ver TODO.md).
+`src/frigus_ai/mcp.py` e `src/frigus_ai/a2a.py` já existem. O MCP e o A2A ainda devem ser tratados
+como integrações parcialmente concluídas até que seus contratos externos, autenticação e testes
+de ponta a ponta estejam fechados.
+
+`src/frigus_ai/metrics.py` e `src/frigus_ai/metrics_callback.py` pertencem à observabilidade de
+runtime e não devem ser movidos para `evals/`. A pasta `evals/` deve conter avaliações offline:
+datasets/cenários, execução de casos, agregação e relatórios de custo, erro, latência, ROI e custo
+por resolução. Não misturar prompts/respostas reais com métricas Prometheus nem commitar segredos.
 
 ## Convenções
 
+- **Não alterar nem apagar código sem solicitação explícita do usuário.** Mudanças de código,
+  configuração ou documentação só devem ser feitas quando fizerem parte do pedido atual. Arquivos
+  só podem ser apagados com permissão prévia específica; prefira adaptar ou deixar o legado fora do
+  caminho de execução até essa autorização.
 - **Leia o código antes de escrever código.** Antes de mudar qualquer arquivo, leia-o inteiro e leia
   quem o chama. O padrão do repo está no código, não na sua cabeça: se um módulo já resolve o
   problema de um jeito, o jeito certo é o dele. Faça a mudança caber no arquivo — não o contrário.
@@ -126,13 +168,13 @@ trabalho de cada um começar (ver TODO.md).
   o schema e as tools atrás da entrada dela. Casos já barrados por essa regra: resolução de produto
   por código de barras (não existe coluna de código de barras em `data/sql/schema.sql`, e a leitura
   de NF-e é stub) e o grafo de preferências no Neo4j (`DISLIKES`/`ALLERGIC_TO` não são campo em
-  lugar nenhum — o perfil no Mongo é texto livre). Ver TODO.md.
+  lugar nenhum — o perfil no Mongo é texto livre).
 
 - Código de domínio (nomes de função, variáveis, docstrings de tool, mensagens ao usuário) é em
   **português**; nomes de classes/tipos de infraestrutura (`Settings`, `Model`, `Route`) em inglês.
   Siga o idioma já usado no arquivo que você está editando.
-- Enums de domínio usam `StrEnum` (ver `agents/nodes/guardrail/schemas.py:Categoria`,
-  `chat/models.py:Role`). **Exceção:** `graph/state.py:Route` e `agents/nodes/names.py:Node` são
+- Enums de domínio usam `StrEnum` (ver `graph/guardrail/schemas.py:Categoria`,
+  `chat/models.py:Role`). **Exceção:** `graph/state.py:Route` e `graph/names.py:Node` são
   `Literal` + classe de constantes (não `StrEnum`) — valores guardados em `Estado` (checkpointado
   pelo `MongoDBSaver`) precisam ser `str` puro pro msgpack, sem allowlist extra
   (`LANGGRAPH_ALLOWED_MSGPACK_MODULES` foi removido de `graph/builder.py` por causa disso).
@@ -164,13 +206,13 @@ trabalho de cada um começar (ver TODO.md).
   de review: se o PR adiciona comportamento e não tem teste nenhum, o teste vem junto ou o PR
   explica por que não dá. Alvo é a lógica de decisão (branch, parser, cálculo, regra de negócio),
   não getter/wrapper trivial. Se a coisa só é testável com banco/LLM real, mocke a fronteira (ver
-  `tests/agents/nodes/guardrail/test_entrada.py`, que cobre só os caminhos determinísticos).
+  `tests/graph/guardrail/test_entrada.py`, que cobre só os caminhos determinísticos).
 - Pegadinha nova de lib vira entrada em `.agents/skills/<lib>.md`.
 
 ## Padrões de organização e clean code
 
-- **Single responsibility por nó de agente.** `agents/nodes/` (execução) fica separado de
-  `agents/prompts/` (conteúdo/persona) — mudar o texto de um prompt nunca deveria exigir tocar na
+- **Single responsibility por nó de agente.** `graph/nodes/` (execução) fica separado de
+  `graph/prompts/` (conteúdo/persona) — mudar o texto de um prompt nunca deveria exigir tocar na
   lógica de roteamento do grafo, e vice-versa.
 - **Contrato de retorno único.** Tools não retornam dict cru nem deixam exception vazar para o
   agente — usam `Response` (`tools/response.py`). Ao criar tool nova, reusar essa classe.
@@ -202,8 +244,8 @@ just check           # lint (roda no CI em push/PR pra main); `just fix` aplica 
    `config/decorators.py:log_tool`).
 3. Se for um serviço externo com estado de conexão, criar `connection.py` com init lazy.
 4. Se a tool precisa ser escopada por usuário/estoque, usar o `ContextVar` de
-   `tools/postgres/context.py` — nunca adicionar `user_id`/`stock_id` ao schema da tool.
-5. Registrar a tool no agente correspondente em `agents/nodes/`.
+   `infra/postgres/context.py` — nunca adicionar `user_id`/`stock_id` ao schema da tool.
+5. Registrar a tool no agente correspondente em `graph/agents.py`.
 6. Atualizar a tabela de estrutura no README.md.
 
 ## Skills por biblioteca
@@ -220,9 +262,14 @@ repetir.
 
 ## Próximos passos
 
-Refatoração de estrutura e roadmap de implementação (MCP, A2A, observabilidade, etc.) estão em
-[TODO.md](TODO.md) — confira antes de começar qualquer trabalho novo, pra não duplicar decisão já
-tomada ou já descartada lá.
+Para o refactor de alinhamento com o assessor-ai, a fonte prioritária de continuidade, decisões e
+pendências é `.agents/notes/`, que fica no mesmo nível de `.agents/skills/`. Leia primeiro
+`.agents/notes/README.md`, depois as notas em `implemented/` e `pending/`.
+
+Novas migrações e alterações relevantes devem ser documentadas em
+`.agents/notes/<implemented|pending>/<titulo-da-mudanca>/arquivos.md`, com os arquivos tocados,
+a ideia da mudança, decisões e pendências. Quando uma pendência for concluída, atualize a nota
+correspondente e mova-a para `implemented/`, sem apagar histórico.
 
 ## Claude Code
 
