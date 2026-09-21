@@ -1,0 +1,111 @@
+{
+  "title": "Frigus.AI",
+  "uid": "frigus-ai-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requests HTTP por rota (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (route, status_class) (rate(frigus_http_requests_total[5m]))",
+          "legendFormat": "{{route}} [{{status_class}}]"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Duração HTTP p95 por rota",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(frigus_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Execuções do grafo por outcome",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(frigus_graph_runs_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Duração do grafo p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, outcome) (rate(frigus_graph_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Duração p95 por node",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, node) (rate(frigus_node_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{node}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Execuções de tool por termination",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (tool, termination) (rate(frigus_tool_runs_total[5m]))",
+          "legendFormat": "{{tool}} [{{termination}}]"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Tokens de LLM por modelo/direção",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by (model, direction) (rate(frigus_llm_tokens_total[5m]))",
+          "legendFormat": "{{model}} [{{direction}}]"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Rejeições de rate limit",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by (scope) (rate(frigus_rate_limit_rejections_total[5m]))",
+          "legendFormat": "{{scope}}"
+        }
+      ]
+    }
+  ]
+}

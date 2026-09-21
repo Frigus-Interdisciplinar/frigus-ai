@@ -181,6 +181,25 @@ raciocínio interno inteiro. Ver [streaming.md](streaming.md).
 Regra: capture as exceções de domínio **antes** do `except Exception`, e no genérico use
 `logger.exception(...)` + mensagem fixa no `detail`. Nunca `str(e)` de exceção não prevista no body.
 
+**Atualização:** isso hoje é centralizado em `api/exception_handler.py`
+(`register_exception_handlers`), não mais `try/except` por rota — `chats.py` e `a2a.py` tratavam o
+mesmo par de erros do mesmo jeito, então virou duplicação assim que a segunda rota apareceu.
+
+## `add_exception_handler(Exception, ...)` some no `TestClient` sem `raise_server_exceptions=False`
+
+Starlette não trata um handler pra `Exception`/`500` como os demais: em vez de ir pro
+`ExceptionMiddleware` (onde `LimiteDeMensagensExcedido` e outras exceções específicas são
+resolvidas), ele vira o `error_handler` do `ServerErrorMiddleware`, a camada **mais externa** de
+todas. Esse middleware monta a resposta com o handler e **relança a exceção mesmo assim** — de
+propósito, é o que deixa um servidor de verdade (uvicorn) logar o traceback depois de já ter
+mandado a resposta pro cliente.
+
+O `TestClient` da Starlette tem `raise_server_exceptions=True` por padrão, e nesse modo ele propaga
+a exceção relançada em vez de te dar de volta a `Response` que o cliente HTTP real recebeu — um
+teste que espera **500 com corpo genérico** (`api/exception_handler.py:_handle_inesperado`) explode
+com o traceback cru da exceção de teste. Corrija no fixture do teste, não no app:
+`TestClient(app, raise_server_exceptions=False)` (ver `tests/api/test_chats.py`).
+
 ## `Role` do domínio shadowando `Role` do schema quebrava o import da API inteira
 
 `schemas/chat.py` fazia `from frigus_ai.chat.models import Role` **e** `... import Role as

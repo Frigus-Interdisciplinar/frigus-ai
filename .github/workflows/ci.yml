@@ -26,7 +26,7 @@ jobs:
       - name: Instalar dependências
         run: uv sync --locked
 
-      # As env vars obrigatórias de config/settings.py vêm de tests/conftest.py
+      # As env vars obrigatórias de src/frigus_ai/settings.py vêm de tests/conftest.py
       # (valores fake) — nenhum teste faz I/O real, então o CI não precisa de secret.
       - name: Lint
         run: uv run ruff check .

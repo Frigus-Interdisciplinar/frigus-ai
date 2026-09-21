@@ -1,0 +1,11 @@
+# Scrape config local. A API roda no host (main.py api / just run api), não em container —
+# por isso o alvo é host.docker.internal, não um nome de serviço do compose.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: frigus-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8000"]

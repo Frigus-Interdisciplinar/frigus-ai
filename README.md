@@ -78,9 +78,16 @@ frigus-ai/
     │   ├── runner.py                # Invoca o grafo e extrai a resposta
     │   └── service.py               # send_message, get_history, iniciar/encerrar_sessao
     │
-    ├── agents/
-    │   ├── prompts/                 # Só .md + loader.py — nenhum outro .py na pasta
-    │   │   ├── loader.py            # load_prompt()/load_sections(): frontmatter `---` (metadados,
+    ├── graph/
+    │   ├── state.py                 # Estado + EntradaGrafo/SaidaGrafo, os *Update de cada node
+    │   │                            # e o contrato AsyncNode[R]; Route (Literal + constantes)
+    │   ├── names.py                 # Nomes dos nodes. Fora de nodes/ de propósito: state.py importa
+    │   │                            # daqui, e de dentro do pacote daria ciclo de import
+    │   ├── llm.py                   # build_llm e instâncias de LLM
+    │   ├── agents.py                # Agentes compilados (create_agent por especialista)
+    │   ├── builder.py               # Grafo (ciclo de retentativa do Juiz) + checkpointer Mongo
+    │   ├── prompts/                 # Só .md + __init__.py — nenhum outro .py na pasta
+    │   │   ├── __init__.py          # load_prompt()/load_sections(): frontmatter `---` (metadados,
     │   │   │                        # hoje só usa_tools_obrigatorias) + seções `## NOME` do .md
     │   │   ├── router.md / estoque.md / compras.md / receitas.md / faq.md / financeiro.md
     │   │   ├── orquestrador.md
@@ -88,16 +95,19 @@ frigus-ai/
     │   │   ├── guardrail.md         # CLASSIFICADOR + COMPLIANCE (sem persona — load_sections cru)
     │   │   └── resumidor.md / perfil.md
     │   └── nodes/                   # Funções de nó do grafo LangGraph
-    │       ├── names.py
+    │       ├── contexto.py          # responder() p/ agente, perguntar() p/ LLM cru,
+    │       │                        # mensagens_do_turno() e podar_historico() (teto do checkpoint)
     │       ├── router.py / estoque.py / compras.py / receitas.py / faq.py / financeiro.py / orquestrador.py
-    │       ├── juiz.py
-    │       └── guardrail/{entrada,saida,schemas}.py
+    │       └── juiz.py
+    │   └── guardrail/               # subsistema próprio, fora de nodes/: os nós são só a porta
+    │       ├── entrada.py           # nó: anonimiza, detecta ataque, classifica (com cache)
+    │       ├── saida.py             # nó: redige PII e revisa a resposta
+    │       ├── padroes.py           # regex de jailbreak + keywords de dado interno
+    │       ├── schemas.py           # Categoria, Motivo, RespostaBloqueio, RESPOSTAS_BLOQUEIO
+    │       └── cache.py             # veredito do classificador no Redis (evita LLM repetida)
     │
-    ├── graph/
-    │   ├── state.py                 # Estado e Route (Literal + classe de constantes)
-    │   ├── llm.py                   # build_llm e instâncias de LLM
-    │   ├── agents.py                # Agentes compilados (create_agent por especialista)
-    │   └── builder.py               # Grafo (ciclo de retentativa do Juiz) + checkpointer Mongo
+    ├── privacy.py                   # PII: anonimizar/desanonimizar/redigir. Neutro de propósito —
+    │                                # guardrail, repository e service usam (ver docstring)
     │
     └── tools/
         ├── postgres/
@@ -127,7 +137,7 @@ quando cada trabalho começar (ver "Próximos passos").
 | **Histórico de conversa do assistente** | MongoDB (`agent_chats`) | Mensagens por sessão do chatbot (distinto do chat social do app, que já existe em `conversations`/`messages` no Postgres) |
 | **Perfil comportamental** | MongoDB (`user_profiles`) | Resumo de hábitos gerado pela IA, chaveado por `users.id` |
 | **Checkpointing do grafo** | LangGraph `MongoDBSaver` (`graph_checkpoints`/`graph_checkpoint_writes`) | Estado interno do grafo entre turnos, chaveado por `thread_id` (= `session_id`) — sobrevive a restart do processo |
-| **Busca vetorial (RAG do FAQ)** | Qdrant | Índice do `Frigus-Documentacao.pdf` (`tools/qdrant/faq/`) |
+| **Busca vetorial (RAG do FAQ)** | Qdrant | Índice do `Frigus-Documentacao.pdf` (`graph/tools/faq/`) |
 | **Cache de perfil comportamental + rate limit de chat** | Redis | `tools/redis/perfil.py` (cache-aside sobre `user_profiles`) e `tools/redis/chat.py` (mensagens/minuto por usuário) |
 
 Note que `users`, `groups`, `stocks` etc. no Postgres usam `INTEGER PRIMARY KEY` sem `SERIAL` (o DDL foi
@@ -137,8 +147,9 @@ desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` 
 
 ## API HTTP
 
-`interfaces/api/` — FastAPI. Sem autenticação ainda: `user_id` é fixo em `DEMO_USER_ID`, mesmo
-bootstrap da TUI (ver TODO.md).
+`src/frigus_ai/api/` — FastAPI. Autenticação por `X-API-Key` condicional
+(`API_KEY_AUTH_ENABLED`): ligada, resolve o usuário pela key; desligada (modo local/demo),
+reaproveita ou cria um usuário local único — não há mais `DEMO_USER_ID` fixo.
 
 | Método | Rota | O que faz |
 |---|---|---|
@@ -173,7 +184,7 @@ cada trabalho começar:
 
 - **MCP**: expor as tools do Frigus.AI para hosts MCP (Claude Desktop etc.).
 - **A2A**: expor o grafo como um agente Agent-to-Agent para outros sistemas multi-agente.
-- **Redis — fila de tasks**: pendente, deliberadamente não implementado ainda (ver TODO.md). Os dois
+- **Redis — fila de tasks**: pendente, deliberadamente não implementado ainda. Os dois
   usos atuais (cache de perfil, rate limit) são leitura/escrita síncrona simples; uma fila de tasks
   (ex. processar ingestão do Qdrant ou chamadas de MCP fora do caminho da requisição) é um uso
   diferente de Redis, ainda sem desenho definido.

@@ -60,8 +60,39 @@ services:
       timeout: 5s
       retries: 10
 
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: frigus_prometheus
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # já nativo no Docker Desktop; necessário no Linux
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - frigus_prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: frigus_grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - frigus_grafana_data:/var/lib/grafana
+
 volumes:
   frigus_postgres_data:
   frigus_mongo_data:
   frigus_redis_data:
   frigus_qdrant_data:
+  frigus_prometheus_data:
+  frigus_grafana_data:
