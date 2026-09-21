@@ -28,7 +28,7 @@ def cliente(monkeypatch):
 
     async def _validar_ownership(chat_id, user_id):
         """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
-        return None
+        return
 
     monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
     monkeypatch.setattr(rotas.chat_service, "garantir_limite", _garantir_limite)
