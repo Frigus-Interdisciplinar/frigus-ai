@@ -17,11 +17,18 @@ CATEGORY_VALUES = [
 
 STORAGE_PLACE_VALUES = ["Geladeira", "Freezer", "Despensa", "Armário", "Prateleira"]
 
-PRODUCT_STATUS_VALUES = ["Fresco", "Próximo do vencimento", "Vencido"]
+VENCIDO = "Vencido"
+PRODUCT_STATUS_VALUES = ["Fresco", "Próximo do vencimento", VENCIDO]
+
+ENTRADA = "Entrada"
+SAIDA = "Saída"
+AJUSTE = "Ajuste"
+MOVEMENT_TYPE_VALUES = [ENTRADA, SAIDA, AJUSTE]
 
 CategoryEnum = Enum(*CATEGORY_VALUES, name="category_enum")
 StoragePlaceEnum = Enum(*STORAGE_PLACE_VALUES, name="storage_place_enum")
 ProductStatusEnum = Enum(*PRODUCT_STATUS_VALUES, name="product_status_enum")
+MovementTypeEnum = Enum(*MOVEMENT_TYPE_VALUES, name="movement_type_enum")
 
 
 class Product(Base):
@@ -58,7 +65,7 @@ class StockMovement(Base):
     id: Mapped[int] = mapped_column(primary_key=True)  # SERIAL no schema
     stock_product_id: Mapped[int] = mapped_column(ForeignKey("stock_products.id", ondelete="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    movement_type: Mapped[str] = mapped_column(Enum("Entrada", "Saída", "Ajuste", name="movement_type_enum"))
+    movement_type: Mapped[str] = mapped_column(MovementTypeEnum)
     quantity: Mapped[int]
     date: Mapped[datetime | None]
 
@@ -73,9 +80,14 @@ class Discard(Base):
 
 
 __all__ = [
+    "AJUSTE",
     "CATEGORY_VALUES",
+    "ENTRADA",
+    "MOVEMENT_TYPE_VALUES",
     "PRODUCT_STATUS_VALUES",
+    "SAIDA",
     "STORAGE_PLACE_VALUES",
+    "VENCIDO",
     "Discard",
     "Product",
     "StockMovement",

@@ -80,9 +80,13 @@ def test_send_message_ok(cliente, monkeypatch):
 def test_delete_chat_devolve_202_e_agenda_encerramento(cliente, monkeypatch):
     chamadas = []
 
+    async def _dono_ok(session_id, user_id):
+        return None
+
     async def _encerrar(session_id, user_id):
         chamadas.append((session_id, user_id))
 
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _dono_ok)
     monkeypatch.setattr(rotas.chat_service, "encerrar_sessao", _encerrar)
 
     r = cliente.delete(f"/chats/{CHAT_ID}")
@@ -90,6 +94,54 @@ def test_delete_chat_devolve_202_e_agenda_encerramento(cliente, monkeypatch):
     assert r.status_code == 202
     # TestClient roda as background tasks antes de devolver a resposta
     assert chamadas == [(CHAT_ID, 1)]
+
+
+def test_delete_chat_de_outro_dono_vira_403_e_nao_agenda_nada(cliente, monkeypatch):
+    chamadas = []
+
+    async def _dono_errado(session_id, user_id):
+        raise ChatDeOutroUsuario(session_id)
+
+    async def _encerrar(session_id, user_id):
+        chamadas.append((session_id, user_id))
+
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _dono_errado)
+    monkeypatch.setattr(rotas.chat_service, "encerrar_sessao", _encerrar)
+
+    r = cliente.delete(f"/chats/{CHAT_ID}")
+
+    assert r.status_code == 403
+    assert chamadas == []
+
+
+def test_list_chats_devolve_schema_tipado(cliente, monkeypatch):
+    async def _listar(user_id):
+        return [
+            {
+                "session_id": CHAT_ID,
+                "user_id": 1,
+                "messages": [{"role": "human", "content": "oi"}],
+                "resume": "conversa sobre estoque",
+                "created_at": "2025-01-01T00:00:00Z",
+                "updated_at": "2025-01-02T00:00:00Z",
+            }
+        ]
+
+    monkeypatch.setattr(rotas.chat_service, "listar_chats", _listar)
+
+    r = cliente.get("/chats")
+
+    assert r.status_code == 200
+    assert r.json() == [
+        {
+            "chat_id": CHAT_ID,
+            "resume": "conversa sobre estoque",
+            "created_at": "2025-01-01T00:00:00Z",
+            "updated_at": "2025-01-02T00:00:00Z",
+        }
+    ]
+    # messages/user_id (internos do Mongo) não vazam no schema de resposta
+    assert "messages" not in r.json()[0]
 
 
 def test_stream_devolve_eventos_por_no_e_resposta(cliente, monkeypatch):

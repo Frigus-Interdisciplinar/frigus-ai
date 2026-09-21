@@ -4,11 +4,11 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from frigus_ai.evals.metrics import GRAPH_DURATION, GRAPH_RUNS
-from frigus_ai.evals.metrics_callback import PrometheusCallbackHandler
 from frigus_ai.graph.builder import fluxo_agentes
 from frigus_ai.graph.state import EntradaGrafo
 from frigus_ai.infra.postgres.context import session_context
+from frigus_ai.observability.metrics import GRAPH_DURATION, GRAPH_RUNS
+from frigus_ai.observability.metrics_callback import PrometheusCallbackHandler
 
 
 def _extrair_resposta(estado: Mapping[str, object]) -> str | None:

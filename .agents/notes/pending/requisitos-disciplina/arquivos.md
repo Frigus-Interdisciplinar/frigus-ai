@@ -1,13 +1,13 @@
 # Requisitos da disciplina — o que falta
 
-Conferido contra o código em `refactor/structure` (suíte: 177 passed).
+Conferido contra o código em `refactor/structure` (suíte: 197 passed).
 Antes de reportar item como pendente, confira o código: este checklist envelhece.
 
 ## Placar
 
 | Requisito | Status | Onde / o que falta |
 | --- | --- | --- |
-| API FastAPI/Flask | ⚠️ | `api/` com health, chats, keys, MCP e A2A. Falta: schema de resposta em `GET /chats` (hoje `list[dict]`), versionamento e ownership no `DELETE /chats/{id}` |
+| API FastAPI/Flask | ⚠️ | `api/` com health, chats, keys, MCP e A2A. `GET /chats` tipado (`ChatSummaryResponse`), `DELETE /chats/{id}` com ownership (403). Falta: versionamento |
 | Multiagente (mín. 5 agentes) | ✅ | 10 nós (`graph/names.py`) |
 | LangChain pra criar agentes | ✅ | `graph/agents.py` |
 | LangGraph pra orquestrar | ✅ | `graph/builder.py`, com `input_schema`/`output_schema` e contrato `AsyncNode[R]` |
@@ -19,35 +19,53 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding/relevância, até 2 retentativas |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
 | SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 8 painéis |
-| SRE: custo 100 e 1000 usuários/semana | ❌ | Tokens são coletados; falta virar estimativa documentada |
-| SRE: índice de erros | ⚠️ | Contadores existem; falta fórmula, janela e relatório |
-| SRE: custo/ROI | ❌ | Falta valor de resolução, premissas e cálculo reproduzível |
-| SRE: custo por resolução | ❌ | Depende de definir "resolução" |
+| SRE: custo 100 e 1000 usuários/semana | ⚠️ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
+| SRE: índice de erros | ⚠️ | `evals/sre_report.py` define fórmula (`error`/total de `frigus_graph_runs_total`); falta validar contra scrape real |
+| SRE: custo/ROI | ⚠️ | `evals/sre_report.py` calcula; `VALOR_POR_RESOLUCAO_USD` é placeholder até ter dado de negócio real |
+| SRE: custo por resolução | ⚠️ | `evals/sre_report.py`: resolução = `frigus_graph_runs_total{outcome="success"}`, custo pela tabela `PRECOS_POR_1M_TOKENS` |
 | Desenho de arquitetura | ✅ | README — Mermaid + `assets/diagrama-agentes.png` |
-| Extra: Redis fila/ranking | ❌ | Redis só faz cache (perfil, guardrail), rate limit, sessão A2A e api-key. **Cache não conta** pro requisito |
+| Extra: Redis fila/ranking | ✅ | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados (`ZINCRBY`/`ZREVRANGE`) |
 | Extra: Neo4j | ❌ | Só `.cypher` em `infra/neo4j/cql/`. Sem driver no `pyproject.toml`, sem conexão, sem traversal |
+| Avaliação da disciplina | ⚠️ | Métricas de runtime movidas pra `observability/`; `evals/` agora só avaliação offline (`sre_report.py` + `scenarios.py`/`run_scenarios.py`). Harness nunca rodou de ponta a ponta (sem Docker no ar) |
 
 ## P0 — o que mais pesa na nota
 
-1. **Relatórios de SRE** (4 itens ❌/⚠️ num bloco só). Nada disso precisa de código novo de
-   produção: é script em `evals/` lendo os contadores que já existem. Definir antes:
-   - o que conta como "resolução" (turno que terminou sem bloqueio do guardrail? Juiz aprovado?);
-   - preço por 1k tokens do provider em uso, por modelo (`llm_rapido` vs `llm_especialista`);
-   - volume e distribuição de domínios dos dois cenários (100 e 1000 usuários/semana).
+1. ~~**Relatórios de SRE**~~ — feito em `evals/sre_report.py`: script que lê os contadores
+   Prometheus (`frigus_llm_tokens_total`, `frigus_graph_runs_total`, `frigus_rate_limit_rejections_total`)
+   via HTTP API e calcula custo total, índice de erros, custo por resolução, ROI e a projeção
+   para 100/1000 usuários/semana. Definições assumidas documentadas no docstring do módulo:
+   resolução = `outcome="success"` no grafo; preços por modelo em `PRECOS_POR_1M_TOKENS` (lista
+   pública, conferir antes de usar em relatório oficial); volume/usuário e valor por resolução
+   são placeholders (`MENSAGENS_POR_USUARIO_SEMANA`, `VALOR_POR_RESOLUCAO_USD`) até existir dado
+   real — trocar essas constantes quando houver. Falta rodar contra o Prometheus real (scrape
+   acumulado, não só métricas de um processo local) pra virar o relatório final da disciplina.
 
-2. **Escolher UMA superfície A2A.** `a2a.py` (SDK) e `api/routes/a2a.py` (manual) coexistem
-   e podem divergir. Enquanto as duas existirem, nenhum teste prova o contrato real.
+2. ~~**Escolher UMA superfície A2A.**~~ — feito: `a2a.py` (SDK) removido, só resta
+   `api/routes/a2a.py` (manual). Decisão registrada no AGENTS.md ("Estrutura").
 
-3. **Redis com fila ou ranking.** O enunciado pede um dos dois; cache e rate limit não contam.
-   Ideia que cabe no domínio sem inventar dado: ranking de itens mais desperdiçados por estoque
-   (`ZINCRBY` no `discard`), que já tem fonte de dado real em `stock_movements`/`discard`.
+3. ~~**Redis com fila ou ranking.**~~ — feito: `infra/redis/ranking.py` (`ZINCRBY`/`ZREVRANGE`),
+   alimentado por `estoque_repository.descartar` → `graph/tools/estoque/repo.py:discard_product`
+   (falha no Redis não derruba o descarte, que já commitou no Postgres) e exposto como tool
+   `ranking_desperdicio` no domínio financeiro. Testado em `tests/infra/redis/test_ranking.py`,
+   `tests/tools/estoque/test_repo.py` e `tests/tools/financeiro/test_repo.py`.
 
 ## P1
 
-1. **`GET /chats` sem schema** (`list[dict]`) e ownership no `DELETE /chats/{id}` (hoje devolve
-   202 pra não-dono; não vaza dado porque `encerrar_sessao` é escopado, mas o status mente).
-2. **Migrar `compras`** — último domínio em SQL cru (5 `get_conn`).
+1. ~~**`GET /chats` sem schema**~~ — feito: `ChatSummaryResponse` (chat_id, resume, created_at,
+   updated_at), sem vazar `messages`/`user_id` crus do Mongo. ~~**Ownership no `DELETE /chats/{id}`**~~
+   — feito: chama `validar_ownership` antes de agendar `encerrar_sessao`, 403 pra não-dono
+   (testado em `test_chats.py`).
+2. ~~**Migrar `compras`**~~ — feito: `repositories/compras_repository.py` (SQLAlchemy +
+   `@transacional`), `graph/tools/compras/repo.py` chama o repository em vez de SQL cru.
+   O pool `psycopg2` (`infra/postgres/connection.py`) e `next_id` cursor-based
+   (`infra/postgres/helpers.py`) foram removidos — nada mais usa SQL cru no projeto.
+   `health.py` (`/health/ready`) trocado pra usar a session SQLAlchemy. Testado só com mock
+   do repository (`tests/tools/compras/test_repo.py`), igual todo o resto do projeto — sem
+   Docker no ar não deu pra validar contra Postgres real; considerar isso antes de fechar
+   o requisito como 100%.
 3. **MCP ponta a ponta** com cliente externo.
+4. **Rodar `evals/run_scenarios.py` de ponta a ponta** contra infra viva (Docker + API keys) e
+   guardar o relatório — hoje só o `--demo` (lógica pura de match/agregação) foi validado.
 
 ## P2 — extras
 
@@ -64,11 +82,15 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 
 ## Dívida registrada: `evals/` mente o nome
 
-A nota anterior decidiu que métricas de runtime **não** deveriam morar em `evals/`.
-Hoje moram: `evals/metrics.py` e `evals/metrics_callback.py` são importados por **13 módulos de
-runtime**, incluindo todos os nós do grafo. E o harness de avaliação offline não existe.
-Ou move pra `observability/` e deixa `evals/` pra avaliação, ou reescreve a decisão. Enquanto
-não resolver, o item "Avaliação da disciplina" não pode ser marcado como feito.
+~~Resolvida~~ — `metrics.py`/`metrics_callback.py` movidos pra `src/frigus_ai/observability/`
+(13 imports de runtime atualizados, `git mv` preservando histórico). `evals/` agora só tem
+avaliação offline: `sre_report.py` (custo/erro/ROI, já existia) e o harness novo
+(`scenarios.py` + `run_scenarios.py`, 7 cenários cobrindo os 5 domínios + guardrail). Decisão
+registrada no AGENTS.md ("Estrutura").
+
+O harness em si ainda não rodou de ponta a ponta — precisa de infra viva (Postgres/Mongo/Redis/
+Qdrant + API keys), que não estava disponível na sessão em que foi escrito. Só o `--demo`
+(lógica de match de palavra-chave e agregação, sem tocar em infra) foi validado.
 
 ## Critério de evidência
 

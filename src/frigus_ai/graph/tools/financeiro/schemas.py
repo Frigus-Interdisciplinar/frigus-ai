@@ -8,3 +8,7 @@ class MesArgs(BaseModel):
 
 class EvolucaoDesperdicioArgs(BaseModel):
     meses: int = Field(default=6, ge=1, le=60, description="Quantos meses (contando o atual) considerar na série histórica.")
+
+
+class RankingDesperdicioArgs(BaseModel):
+    limit: int = Field(default=5, ge=1, le=20, description="Quantos produtos retornar, do mais pro menos desperdiçado.")

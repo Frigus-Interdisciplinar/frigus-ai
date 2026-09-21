@@ -22,6 +22,7 @@ from frigus_ai.schemas.chat import (
     _ROLE_MAP,
     ChatCreateResponse,
     ChatMessageResponse,
+    ChatSummaryResponse,
     MessageCreate,
     MessageResponse,
 )
@@ -93,8 +94,17 @@ async def get_messages(chat_id: str, user_id: CurrentUserDep) -> list[MessageRes
 
 
 @router.get("")
-async def list_chats(user_id: CurrentUserDep) -> list[dict]:
-    return await chat_service.listar_chats(user_id)
+async def list_chats(user_id: CurrentUserDep) -> list[ChatSummaryResponse]:
+    chats = await chat_service.listar_chats(user_id)
+    return [
+        ChatSummaryResponse(
+            chat_id=c["session_id"],
+            resume=c.get("resume", ""),
+            created_at=c["created_at"],
+            updated_at=c["updated_at"],
+        )
+        for c in chats
+    ]
 
 
 @router.delete("/{chat_id}", status_code=status.HTTP_202_ACCEPTED)
@@ -104,6 +114,11 @@ async def close_chat(
     """
     202 porque `encerrar_sessao` dispara duas chamadas de LLM (resumo da conversa +
     atualização do perfil) que ninguém precisa esperar — vão pro background.
+
+    Ownership checado aqui, e não só dentro de `encerrar_sessao`: sem isso a rota
+    devolve 202 mesmo pra chat de outro usuário — o valor não vaza (a busca é
+    escopada por user_id), mas o status mente sobre o que aconteceu.
     """
 
+    await chat_service.validar_ownership(chat_id, user_id)
     background_tasks.add_task(chat_service.encerrar_sessao, chat_id, user_id)

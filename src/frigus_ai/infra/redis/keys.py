@@ -38,3 +38,7 @@ def _chave_api_key(user_id: int) -> str:
 
 def _chave_api_key_lookup(hashed_key: str) -> str:
     return f"auth:api-key:{hashed_key}"
+
+
+def _chave_ranking_desperdicio(stock_id: int) -> str:
+    return f"ranking:desperdicio:{stock_id}"

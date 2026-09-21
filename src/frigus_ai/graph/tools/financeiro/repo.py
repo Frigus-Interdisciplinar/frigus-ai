@@ -6,9 +6,11 @@ from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.financeiro.schemas import (
     EvolucaoDesperdicioArgs,
     MesArgs,
+    RankingDesperdicioArgs,
 )
 from frigus_ai.graph.tools.response import Response
 from frigus_ai.infra.postgres.context import current_stock_id
+from frigus_ai.infra.redis import ranking
 from frigus_ai.logging import Logging
 from frigus_ai.repositories import financeiro_repository
 
@@ -116,6 +118,22 @@ class FinanceiroRepo(ToolSet):
         logger.info("QUERY OK | evolucao_desperdicio | meses=%s pontos=%s", meses, len(serie))
         return Response.ok(serie=serie)
 
+    @Logging.log_tool
+    def ranking_desperdicio(self, limit: int = 5) -> dict:
+        """
+        Retorna os produtos mais descartados por desperdício (quantidade acumulada,
+        todo o histórico), do maior pro menor.
+        """
+
+        try:
+            top = ranking.top_desperdicio(current_stock_id(), limit)
+        except Exception as e:
+            logger.error("QUERY ERRO | ranking_desperdicio | %s", e)
+            return Response.error(e)
+
+        logger.info("QUERY OK | ranking_desperdicio | total=%s", len(top))
+        return Response.ok(ranking=[{"product_name": p, "quantidade": q} for p, q in top])
+
     def as_tools(self) -> list[BaseTool]:
         return [
             StructuredTool.from_function(
@@ -129,6 +147,11 @@ class FinanceiroRepo(ToolSet):
                 self.evolucao_desperdicio,
                 name="evolucao_desperdicio",
                 args_schema=EvolucaoDesperdicioArgs,
+            ),
+            StructuredTool.from_function(
+                self.ranking_desperdicio,
+                name="ranking_desperdicio",
+                args_schema=RankingDesperdicioArgs,
             ),
         ]
 

@@ -2,9 +2,10 @@ import asyncio
 
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from frigus_ai.infra.mongo.connection import mongo
-from frigus_ai.infra.postgres.connection import get_conn
+from frigus_ai.infra.postgres.connection import postgres
 from frigus_ai.infra.qdrant.connection import get_qdrant_client
 from frigus_ai.infra.redis.connection import get_client
 from frigus_ai.logging import Logging
@@ -23,9 +24,8 @@ def _verificar_dependencias() -> dict[str, bool]:
     checks: dict[str, bool] = {}
 
     try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1;")
+        with postgres.session() as s:
+            s.execute(text("SELECT 1;"))
         checks["postgres"] = True
     except Exception:
         checks["postgres"] = False

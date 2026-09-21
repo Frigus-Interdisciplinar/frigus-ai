@@ -1,10 +1,10 @@
 from langchain_core.messages import AIMessage
 
-from frigus_ai.evals.metrics import medir_node
 from frigus_ai.graph.agents import receitas_app
 from frigus_ai.graph.names import RECEITAS
 from frigus_ai.graph.nodes.contexto import mensagens_do_turno, responder
 from frigus_ai.graph.state import Estado, FaqUpdate
+from frigus_ai.observability.metrics import medir_node
 
 
 @medir_node(RECEITAS)

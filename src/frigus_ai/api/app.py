@@ -6,7 +6,7 @@ from frigus_ai.api.exception_handler import register_exception_handlers
 from frigus_ai.api.lifespan import lifespan
 from frigus_ai.api.middleware import adicionar_middleware
 from frigus_ai.api.routes import a2a_router, chats_router, health_router, keys_router
-from frigus_ai.api.routes.mcp import montar_app as montar_app_mcp
+from frigus_ai.mcp import montar_app as montar_app_mcp
 
 app = FastAPI(
     title="Frigus.AI",

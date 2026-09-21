@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: SecretStr = SecretStr("")
     QDRANT_COLLECTION_NAME: str
 
+    PROMETHEUS_URL: str = ""
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

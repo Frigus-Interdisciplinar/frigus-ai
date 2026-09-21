@@ -140,9 +140,20 @@ def test_update_quantidade_negativa_preserva_a_mensagem_de_dominio(monkeypatch):
     assert "negativa" in resultado["message"]
 
 
+def _fake_descarte(stock_product_id=9, product_name="Leite", quantidade_perdida=3):
+    return {
+        "stock_product_id": stock_product_id,
+        "product_name": product_name,
+        "quantidade_perdida": quantidade_perdida,
+    }
+
+
 def test_discard_repassa_motivo_e_contexto(monkeypatch):
     captura: dict = {}
-    _fingir(monkeypatch, "descartar", retorno=9, captura=captura)
+    _fingir(monkeypatch, "descartar", retorno=_fake_descarte(), captura=captura)
+    monkeypatch.setattr(
+        "frigus_ai.graph.tools.estoque.repo.ranking.registrar_descarte", lambda *a, **kw: None
+    )
 
     with session_context(**CONTEXTO):
         resultado = EstoqueRepo().discard_product(product_name="Leite", reason="Estragado")
@@ -158,6 +169,55 @@ def test_discard_erro_vira_response_error(monkeypatch):
 
     with session_context(**CONTEXTO):
         assert EstoqueRepo().discard_product(stock_product_id=1)["status"] == "error"
+
+
+def test_discard_alimenta_o_ranking_de_desperdicio(monkeypatch):
+    _fingir(monkeypatch, "descartar", retorno=_fake_descarte(quantidade_perdida=3))
+    capturado: dict = {}
+
+    def _fake_registrar(stock_id, product_name, quantidade):
+        capturado["args"] = (stock_id, product_name, quantidade)
+
+    monkeypatch.setattr(
+        "frigus_ai.graph.tools.estoque.repo.ranking.registrar_descarte", _fake_registrar
+    )
+
+    with session_context(**CONTEXTO):
+        EstoqueRepo().discard_product(stock_product_id=9, reason="Vencido")
+
+    assert capturado["args"] == (42, "Leite", 3)
+
+
+def test_discard_sem_quantidade_nao_alimenta_o_ranking(monkeypatch):
+    _fingir(monkeypatch, "descartar", retorno=_fake_descarte(quantidade_perdida=0))
+
+    def _nao_deveria(*args, **kwargs):
+        raise AssertionError("não deveria registrar ranking pra item já zerado")
+
+    monkeypatch.setattr(
+        "frigus_ai.graph.tools.estoque.repo.ranking.registrar_descarte", _nao_deveria
+    )
+
+    with session_context(**CONTEXTO):
+        resultado = EstoqueRepo().discard_product(stock_product_id=9)
+
+    assert resultado["status"] == "ok"
+
+
+def test_discard_falha_no_ranking_nao_derruba_o_descarte(monkeypatch):
+    """Redis é estatística — o descarte no Postgres já deu certo, não pode virar erro."""
+
+    _fingir(monkeypatch, "descartar", retorno=_fake_descarte())
+
+    def _falha(*args, **kwargs):
+        raise RuntimeError("redis fora do ar")
+
+    monkeypatch.setattr("frigus_ai.graph.tools.estoque.repo.ranking.registrar_descarte", _falha)
+
+    with session_context(**CONTEXTO):
+        resultado = EstoqueRepo().discard_product(stock_product_id=9)
+
+    assert resultado["status"] == "ok"
 
 
 def test_as_tools_expoe_as_quatro_tools():

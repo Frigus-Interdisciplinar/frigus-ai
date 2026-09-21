@@ -13,23 +13,29 @@ O que é *detecção de ataque* (jailbreak, pedido de dado interno) continua em
 
 import re
 import uuid
+from typing import NamedTuple
 
 type MapaPII = dict[str, str]
-type PIIPattern = tuple[str, str]
 
+
+class PIIPattern(NamedTuple):
+    tipo: str
+    padrao: str
+    redige_na_saida: bool = True  # False = contato: só a entrada anonimiza, a saída não redige
+
+
+# Fonte única — `redige_na_saida=False` marca contato (email/telefone). `PII_USUARIO` deriva
+# daqui por filtro, sem lista duplicada.
+PII: list[PIIPattern] = [
+    PIIPattern("CPF",       r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}"),
+    PIIPattern("CNPJ",      r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"),
+    PIIPattern("SENHA",     r"(?i)senha[:\s]+\S+"),
+    PIIPattern("EMAIL",     r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", redige_na_saida=False),
+    PIIPattern("TELEFONE",  r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}",                   redige_na_saida=False),
+]
 
 # PII do usuário — redigida na entrada E na saída.
-PII_USUARIO: list[PIIPattern] = [
-    ("CPF",   r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}"),
-    ("CNPJ",  r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"),
-    ("SENHA", r"(?i)senha[:\s]+\S+"),
-]
-
-# Conjunto completo: o do usuário + contatos, que só são anonimizados na entrada.
-PII: list[PIIPattern] = PII_USUARIO + [
-    ("EMAIL",    r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
-    ("TELEFONE", r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}"),
-]
+PII_USUARIO: list[PIIPattern] = [p for p in PII if p.redige_na_saida]
 
 
 def anonimizar_entrada(texto: str) -> tuple[str, MapaPII]:
@@ -37,9 +43,9 @@ def anonimizar_entrada(texto: str) -> tuple[str, MapaPII]:
 
     mapa: MapaPII = {}
 
-    for tipo, padrao in PII:
-        for valor in re.findall(padrao, texto):
-            token = f"[PII_{tipo}_{uuid.uuid4().hex[:6]}]"
+    for pii in PII:
+        for valor in re.findall(pii.padrao, texto):
+            token = f"[PII_{pii.tipo}_{uuid.uuid4().hex[:6]}]"
             mapa[token] = valor
             texto = texto.replace(valor, token, 1)
 
@@ -62,8 +68,8 @@ def desanonimizar_saida(texto: str, mapa: MapaPII, restaurar: bool = False) -> s
 def redigir_pii(texto: str, padroes: list[PIIPattern] | None = None) -> str:
     """Apaga PII que o modelo tenha gerado por conta própria (não veio do mapa da entrada)."""
 
-    for tipo, padrao in padroes if padroes is not None else PII:
-        texto = re.sub(padrao, f"[{tipo} OMITIDO]", texto)
+    for pii in padroes if padroes is not None else PII:
+        texto = re.sub(pii.padrao, f"[{pii.tipo} OMITIDO]", texto)
 
     return texto
 

@@ -7,7 +7,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from guard import SecurityConfig, SecurityMiddleware
 
-from frigus_ai.evals.metrics import ACTIVE_REQUESTS, HTTP_DURATION, HTTP_REQUESTS
+from frigus_ai.observability.metrics import (
+    ACTIVE_REQUESTS,
+    HTTP_DURATION,
+    HTTP_REQUESTS,
+)
 from frigus_ai.settings import settings
 
 type CallNext = Callable[[Request], Awaitable[Response]]

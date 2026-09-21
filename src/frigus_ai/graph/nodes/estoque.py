@@ -1,8 +1,8 @@
-from frigus_ai.evals.metrics import medir_node
 from frigus_ai.graph.agents import estoque_app
 from frigus_ai.graph.names import ESTOQUE
 from frigus_ai.graph.nodes.contexto import mensagens_do_turno, responder
 from frigus_ai.graph.state import EspecialistaUpdate, Estado
+from frigus_ai.observability.metrics import medir_node
 
 
 @medir_node(ESTOQUE)

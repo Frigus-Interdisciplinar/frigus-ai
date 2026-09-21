@@ -8,46 +8,11 @@ from frigus_ai.graph.tools.compras.schemas import (
     QueryShoppingListArgs,
 )
 from frigus_ai.graph.tools.response import Response
-from frigus_ai.infra.postgres.connection import get_conn
 from frigus_ai.infra.postgres.context import current_stock_id
-from frigus_ai.infra.postgres.helpers import next_id
 from frigus_ai.logging import Logging
+from frigus_ai.repositories import compras_repository
 
 logger = Logging.get_logger("pg_compras")
-
-
-def _get_or_create_open_list(cur, stock_id: int) -> int:
-    cur.execute(
-        "SELECT id FROM shopping_lists WHERE stock_id = %s AND status = 'Aberta' ORDER BY date DESC LIMIT 1;",
-        (stock_id,)
-    )
-    row = cur.fetchone()
-    if row:
-        return row[0]
-
-    list_id = next_id(cur, "shopping_lists")
-    cur.execute(
-        "INSERT INTO shopping_lists (id, stock_id, status) VALUES (%s, %s, 'Aberta');",
-        (list_id, stock_id)
-    )
-    return list_id
-
-
-def _find_or_create_product(cur, name: str, category: str | None, storage_place: str | None) -> int | None:
-    cur.execute("SELECT id FROM products WHERE LOWER(name) = LOWER(%s) LIMIT 1;", (name,))
-    row = cur.fetchone()
-    if row:
-        return row[0]
-
-    if not category or not storage_place:
-        return None
-
-    product_id = next_id(cur, "products")
-    cur.execute(
-        "INSERT INTO products (id, name, category, storage_place, unit_price) VALUES (%s, %s, %s, %s, 0);",
-        (product_id, name, category, storage_place)
-    )
-    return product_id
 
 
 class ComprasRepo(ToolSet):
@@ -58,18 +23,13 @@ class ComprasRepo(ToolSet):
         criando uma nova se necessário. Retorna o ID da lista aberta.
         """
 
-        stock_id = current_stock_id()
+        try:
+            list_id = compras_repository.criar_lista_aberta(current_stock_id())
+        except Exception as e:
+            logger.error("CREATE_LIST ERRO | %s", e)
+            return Response.error(e)
 
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                try:
-                    list_id = _get_or_create_open_list(cur, stock_id)
-                    conn.commit()
-                    return Response.ok(shopping_list_id=list_id)
-                except Exception as e:
-                    conn.rollback()
-                    logger.error("CREATE_LIST ERRO | %s", e)
-                    return Response.error(e)
+        return Response.ok(shopping_list_id=list_id)
 
     @Logging.log_tool
     def add_shopping_list_product(
@@ -85,40 +45,20 @@ class ComprasRepo(ToolSet):
         Se o item já estiver na lista, soma a quantidade em vez de duplicar.
         """
 
-        stock_id = current_stock_id()
+        try:
+            final_id, final_quantity = compras_repository.adicionar_item(
+                current_stock_id(), product_name, category, storage_place, quantity
+            )
+        except Exception as e:
+            logger.error("ADD_ITEM ERRO | %s", e)
+            return Response.error(e)
 
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                try:
-                    list_id = _get_or_create_open_list(cur, stock_id)
-                    product_id = _find_or_create_product(cur, product_name, category, storage_place)
+        logger.info(
+            "ADD_ITEM OK | shopping_list_product_id=%s product=%s quantity=%s",
+            final_id, product_name, final_quantity,
+        )
 
-                    if product_id is None:
-                        return Response.error("Produto não encontrado no catálogo; informe category e storage_place para cadastrá-lo.")
-
-                    new_id = next_id(cur, "shopping_list_products")
-                    cur.execute(
-                        """
-                        INSERT INTO shopping_list_products (id, list_id, product_id, status, quantity)
-                        VALUES (%s, %s, %s, 'Pendente', %s)
-                        ON CONFLICT (list_id, product_id)
-                        DO UPDATE SET quantity = shopping_list_products.quantity + EXCLUDED.quantity,
-                                      status = 'Pendente'
-                        RETURNING id, quantity;
-                        """,
-                        (new_id, list_id, product_id, quantity)
-                    )
-                    final_id, final_quantity = cur.fetchone()
-                    conn.commit()
-
-                    logger.info("ADD_ITEM OK | shopping_list_product_id=%s product=%s quantity=%s", final_id, product_name, final_quantity)
-
-                    return Response.ok(shopping_list_product_id=final_id, quantity=final_quantity)
-
-                except Exception as e:
-                    conn.rollback()
-                    logger.error("ADD_ITEM ERRO | %s", e)
-                    return Response.error(e)
+        return Response.ok(shopping_list_product_id=final_id, quantity=final_quantity)
 
     @Logging.log_tool
     def query_shopping_list(self, status: str | None = None) -> dict:
@@ -128,47 +68,15 @@ class ComprasRepo(ToolSet):
         Sem filtro de status, retorna itens Pendente e Comprado (oculta Removido).
         """
 
-        stock_id = current_stock_id()
+        try:
+            itens = compras_repository.consultar_lista(current_stock_id(), status)
+        except Exception as e:
+            logger.error("QUERY ERRO | query_shopping_list | %s", e)
+            return Response.error(e)
 
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                try:
-                    query = """
-                        SELECT slp.id, p.name, p.category, slp.quantity, slp.status
-                        FROM shopping_list_products slp
-                        JOIN shopping_lists sl ON sl.id = slp.list_id
-                        JOIN products p ON p.id = slp.product_id
-                        WHERE sl.stock_id = %s AND sl.status = 'Aberta'
-                    """
-                    params: list = [stock_id]
+        logger.info("QUERY OK | query_shopping_list | total=%s", len(itens))
 
-                    if status:
-                        query += " AND slp.status = %s"
-                        params.append(status)
-                    else:
-                        query += " AND slp.status != 'Removido'"
-
-                    cur.execute(query, params)
-                    rows = cur.fetchall()
-
-                    itens = [
-                        {
-                            "shopping_list_product_id": row[0],
-                            "product_name":             row[1],
-                            "category":                 row[2],
-                            "quantity":                 row[3],
-                            "status":                   row[4],
-                        }
-                        for row in rows
-                    ]
-
-                    logger.info("QUERY OK | query_shopping_list | total=%s", len(itens))
-
-                    return Response.ok(total_records=len(itens), itens=itens)
-
-                except Exception as e:
-                    logger.error("QUERY ERRO | query_shopping_list | %s", e)
-                    return Response.error(e)
+        return Response.ok(total_records=len(itens), itens=itens)
 
     @Logging.log_tool
     def mark_purchased(
@@ -183,65 +91,20 @@ class ComprasRepo(ToolSet):
         Localização por ID direto ou por nome do produto na lista aberta do usuário.
         """
 
-        stock_id = current_stock_id()
+        if shopping_list_product_id is None and not product_name:
+            return Response.error("Informe shopping_list_product_id ou product_name.")
 
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                try:
-                    target_id = shopping_list_product_id
+        try:
+            target_id = compras_repository.marcar_status(
+                current_stock_id(), shopping_list_product_id, product_name, status
+            )
+        except Exception as e:
+            logger.error("MARK ERRO | %s", e)
+            return Response.error(e)
 
-                    if target_id is None:
-                        if not product_name:
-                            return Response.error("Informe shopping_list_product_id ou product_name.")
+        logger.info("MARK OK | shopping_list_product_id=%s status=%s", target_id, status)
 
-                        cur.execute(
-                            """
-                            SELECT slp.id
-                            FROM shopping_list_products slp
-                            JOIN shopping_lists sl ON sl.id = slp.list_id
-                            JOIN products p ON p.id = slp.product_id
-                            WHERE sl.stock_id = %s AND sl.status = 'Aberta' AND p.name ILIKE %s
-                            LIMIT 1;
-                            """,
-                            (stock_id, f"%{product_name}%")
-                        )
-                        row = cur.fetchone()
-                        if not row:
-                            return Response.error("Item não encontrado na lista de compras aberta.")
-                        target_id = row[0]
-
-                    # O EXISTS impede que um shopping_list_product_id vindo do LLM
-                    # altere item de outra lista/estoque — o caminho por product_name
-                    # já filtra por stock_id, o caminho por ID não filtrava nada.
-                    cur.execute(
-                        """
-                        UPDATE shopping_list_products slp
-                        SET status = %s
-                        WHERE slp.id = %s
-                          AND EXISTS (
-                              SELECT 1 FROM shopping_lists sl
-                              WHERE sl.id = slp.list_id
-                                AND sl.stock_id = %s
-                                AND sl.status = 'Aberta'
-                          );
-                        """,
-                        (status, target_id, stock_id)
-                    )
-
-                    if cur.rowcount == 0:
-                        conn.rollback()
-                        return Response.error("Item não encontrado na lista de compras aberta.")
-
-                    conn.commit()
-
-                    logger.info("MARK OK | shopping_list_product_id=%s status=%s", target_id, status)
-
-                    return Response.ok(shopping_list_product_id=target_id, status=status)
-
-                except Exception as e:
-                    conn.rollback()
-                    logger.error("MARK ERRO | %s", e)
-                    return Response.error(e)
+        return Response.ok(shopping_list_product_id=target_id, status=status)
 
     @Logging.log_tool
     def generate_shopping_list_from_low_stock(self) -> dict:
@@ -250,61 +113,15 @@ class ComprasRepo(ToolSet):
         quantidade mínima configurada (minimal_quantity em stock_products).
         """
 
-        stock_id = current_stock_id()
+        try:
+            adicionados = compras_repository.gerar_por_estoque_baixo(current_stock_id())
+        except Exception as e:
+            logger.error("GENERATE ERRO | %s", e)
+            return Response.error(e)
 
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                try:
-                    cur.execute(
-                        """
-                        SELECT p.id, p.name, p.category, sp.quantity, sp.minimal_quantity
-                        FROM stock_products sp
-                        JOIN products p ON p.id = sp.product_id
-                        WHERE sp.stock_id = %s
-                          AND sp.minimal_quantity IS NOT NULL
-                          AND sp.quantity <= sp.minimal_quantity;
-                        """,
-                        (stock_id,)
-                    )
-                    baixos = cur.fetchall()
+        logger.info("GENERATE OK | total_adicionados=%s", len(adicionados))
 
-                    if not baixos:
-                        return Response.ok(total_adicionados=0, itens=[])
-
-                    list_id = _get_or_create_open_list(cur, stock_id)
-                    adicionados = []
-
-                    for product_id, name, category, quantidade, minimo in baixos:
-                        sugerida = max(minimo - quantidade, 1)
-                        new_id = next_id(cur, "shopping_list_products")
-                        cur.execute(
-                            """
-                            INSERT INTO shopping_list_products (id, list_id, product_id, status, quantity)
-                            VALUES (%s, %s, %s, 'Pendente', %s)
-                            ON CONFLICT (list_id, product_id)
-                            DO UPDATE SET quantity = shopping_list_products.quantity + EXCLUDED.quantity
-                            RETURNING id, quantity;
-                            """,
-                            (new_id, list_id, product_id, sugerida)
-                        )
-                        item_id, quantidade_final = cur.fetchone()
-                        adicionados.append({
-                            "shopping_list_product_id": item_id,
-                            "product_name": name,
-                            "category": category,
-                            "quantity": quantidade_final,
-                        })
-
-                    conn.commit()
-
-                    logger.info("GENERATE OK | total_adicionados=%s", len(adicionados))
-
-                    return Response.ok(total_adicionados=len(adicionados), itens=adicionados)
-
-                except Exception as e:
-                    conn.rollback()
-                    logger.error("GENERATE ERRO | %s", e)
-                    return Response.error(e)
+        return Response.ok(total_adicionados=len(adicionados), itens=adicionados)
 
     def as_tools(self) -> list[BaseTool]:
         return [

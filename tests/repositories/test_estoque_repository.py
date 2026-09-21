@@ -21,8 +21,9 @@ DATA_DO_DESCARTE = datetime(2026, 8, 20, 10, 30, tzinfo=UTC)
 
 
 class _FakeSession:
-    def __init__(self, item):
+    def __init__(self, item, product_name="Leite"):
         self._item = item
+        self._product_name = product_name
         self.adicionados: list = []
 
     def scalars(self, _stmt):
@@ -31,8 +32,13 @@ class _FakeSession:
     def first(self):
         return self._item
 
-    def scalar(self, _stmt):
-        return 0  # proximo_id -> COALESCE(MAX(id), 0)
+    def scalar(self, stmt):
+        # Só dois formatos de `select` passam por `.scalar()` aqui: o lookup de nome do
+        # produto (descartar) e o `proximo_id` -> COALESCE(MAX(id), 0). Distingue pela
+        # coluna selecionada, não pela ordem de chamada.
+        if list(stmt.selected_columns.keys()) == ["name"]:
+            return self._product_name
+        return 0
 
     def add(self, obj):
         self.adicionados.append(obj)
@@ -126,7 +132,10 @@ def test_descarte_grava_a_saida_com_a_data_do_discard():
 
     repo, sessao = _repo(_item(4))
 
-    assert repo.descartar(42, 7, 5, None, "Estragado") == 5
+    resultado = repo.descartar(42, 7, 5, None, "Estragado")
+    assert resultado == {
+        "stock_product_id": 5, "product_name": "Leite", "quantidade_perdida": 4
+    }
 
     (descarte,) = sessao.descartes()
     (movimento,) = sessao.movimentos()

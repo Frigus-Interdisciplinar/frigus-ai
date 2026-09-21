@@ -1,10 +1,10 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
-from frigus_ai.evals.metrics import medir_node
 from frigus_ai.graph.agents import orquestrador_app
 from frigus_ai.graph.names import ORQUESTRADOR
 from frigus_ai.graph.nodes.contexto import responder
 from frigus_ai.graph.state import Estado, OrquestradorUpdate
+from frigus_ai.observability.metrics import medir_node
 
 
 @medir_node(ORQUESTRADOR)

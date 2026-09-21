@@ -21,16 +21,15 @@ from frigus_ai.exceptions import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
 from frigus_ai.infra.postgres.helpers import proximo_id
 from frigus_ai.infra.postgres.models import (
+    AJUSTE,
+    ENTRADA,
+    SAIDA,
+    VENCIDO,
     Discard,
     Product,
     StockMovement,
     StockProduct,
 )
-
-ENTRADA = "Entrada"
-SAIDA = "Saída"
-AJUSTE = "Ajuste"
-VENCIDO = "Vencido"
 
 
 class ProdutoNovo(TypedDict):
@@ -56,6 +55,12 @@ class ItemEstoque(TypedDict):
     expire_date:      str
     product_status:   str | None
     unit_price:       float
+
+
+class DescarteInfo(TypedDict):
+    stock_product_id: int
+    product_name: str
+    quantidade_perdida: int
 
 
 class FiltrosEstoque(TypedDict):
@@ -266,28 +271,35 @@ class _EstoquePostgresRepo(PostgresRepo):
         stock_product_id: int | None,
         product_name: str | None,
         reason: str,
-    ) -> int:
+    ) -> DescarteInfo:
         """
         Zera o item e grava o descarte. `discard` não tem coluna de quantidade, então o
         volume perdido vai em `stock_movements` com a MESMA data do descarte — é por
         (stock_product_id, date) que `repositories/financeiro_repository.py` casa os dois
         pra calcular o valor desperdiçado. Mudar essa data quebra o financeiro.
+
+        Devolve também nome do produto e quantidade perdida — `graph/tools/estoque/repo.py`
+        usa isso pra alimentar `infra/redis/ranking.py` (produto mais desperdiçado).
         """
 
         item = _localizar(s, stock_id, stock_product_id, product_name)
+        nome_produto = s.scalar(select(Product.name).where(Product.id == item.product_id))
+        quantidade_perdida = item.quantity
 
         descarte = Discard(id=proximo_id(s, Discard), stock_product_id=item.id, reason=reason)
         s.add(descarte)
         s.flush()          # o DEFAULT do banco preenche `date`...
         s.refresh(descarte)  # ...e o refresh traz o valor pro objeto
 
-        if item.quantity > 0:
-            _registrar_movimento(s, item.id, user_id, SAIDA, item.quantity, descarte.date)
+        if quantidade_perdida > 0:
+            _registrar_movimento(s, item.id, user_id, SAIDA, quantidade_perdida, descarte.date)
 
         item.quantity = 0
         item.product_status = VENCIDO
 
-        return item.id
+        return DescarteInfo(
+            stock_product_id=item.id, product_name=nome_produto, quantidade_perdida=quantidade_perdida
+        )
 
 
 _estoque = _EstoquePostgresRepo()
@@ -320,11 +332,12 @@ def descartar(
     stock_product_id: int | None,
     product_name: str | None,
     reason: str,
-) -> int:
+) -> DescarteInfo:
     return _estoque.descartar(stock_id, user_id, stock_product_id, product_name, reason)
 
 
 __all__ = [
+    "DescarteInfo",
     "FiltrosEstoque",
     "ItemEstoque",
     "ProdutoNovo",

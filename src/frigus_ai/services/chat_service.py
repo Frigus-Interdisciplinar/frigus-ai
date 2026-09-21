@@ -14,7 +14,7 @@ from frigus_ai.repositories.chat_repository import ChatDocument
 from frigus_ai.schemas.models import ChatMessage, Role
 from frigus_ai.services import runner
 from frigus_ai.services.user_service import user_service
-from frigus_ai.types import ChatID, novo_chat_id
+from frigus_ai.types import novo_chat_id
 
 logger = Logging.get_logger(__name__)
 
@@ -39,7 +39,7 @@ class ChatService:
 
         return await user_service.resolver_stock_id(user_id)
 
-    async def criar_chat(self, user_id: int) -> ChatID:
+    async def criar_chat(self, user_id: int) -> str:
         await self.iniciar_sessao(user_id)
         chat_id = novo_chat_id()
         await chat_repository.criar_chat(chat_id, user_id)

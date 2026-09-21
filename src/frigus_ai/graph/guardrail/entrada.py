@@ -1,6 +1,5 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
-from frigus_ai.evals.metrics import GUARDRAIL_DECISIONS, medir_node
 from frigus_ai.graph.guardrail.cache import (
     categoria_em_cache,
     fingerprint_do_prompt,
@@ -19,6 +18,7 @@ from frigus_ai.graph.nodes.contexto import perguntar, podar_historico
 from frigus_ai.graph.prompts import load_sections
 from frigus_ai.graph.state import Estado, GuardrailEntradaUpdate
 from frigus_ai.logging import Logging
+from frigus_ai.observability.metrics import GUARDRAIL_DECISIONS, medir_node
 from frigus_ai.privacy import anonimizar_entrada
 
 logger = Logging.get_logger(__name__)

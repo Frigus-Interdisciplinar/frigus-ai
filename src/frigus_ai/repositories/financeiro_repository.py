@@ -17,14 +17,13 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
 from frigus_ai.infra.postgres.models import (
+    ENTRADA,
+    SAIDA,
     Discard,
     Product,
     StockMovement,
     StockProduct,
 )
-
-ENTRADA = "Entrada"
-SAIDA = "Saída"
 
 
 class PontoDesperdicio(TypedDict):

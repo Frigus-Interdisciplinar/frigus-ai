@@ -2,7 +2,6 @@ import re
 
 from langchain_core.messages import AIMessage
 
-from frigus_ai.evals.metrics import ROUTER_DECISIONS, medir_node
 from frigus_ai.graph.agents import router_app
 from frigus_ai.graph.names import ROTEADOR
 from frigus_ai.graph.nodes.contexto import responder
@@ -14,6 +13,7 @@ from frigus_ai.graph.state import (
     RouterUpdate,
 )
 from frigus_ai.logging import Logging
+from frigus_ai.observability.metrics import ROUTER_DECISIONS, medir_node
 
 log = Logging.get_logger(__name__)
 

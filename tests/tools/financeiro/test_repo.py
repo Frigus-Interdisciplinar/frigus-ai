@@ -93,6 +93,35 @@ def test_valor_descartado_ok_e_erro(monkeypatch):
         assert FinanceiroRepo().valor_descartado()["status"] == "error"
 
 
+def test_ranking_desperdicio_ok(monkeypatch):
+    from frigus_ai.graph.tools.financeiro import repo as modulo_repo
+
+    monkeypatch.setattr(
+        modulo_repo.ranking, "top_desperdicio", lambda stock_id, limit: [("Leite", 5.0), ("Pão", 2.0)]
+    )
+
+    with session_context(user_id=7, stock_id=42):
+        resultado = FinanceiroRepo().ranking_desperdicio()
+
+    assert resultado["status"] == "ok"
+    assert resultado["ranking"] == [
+        {"product_name": "Leite", "quantidade": 5.0},
+        {"product_name": "Pão", "quantidade": 2.0},
+    ]
+
+
+def test_ranking_desperdicio_erro_vira_response_error(monkeypatch):
+    from frigus_ai.graph.tools.financeiro import repo as modulo_repo
+
+    def _falha(stock_id, limit):
+        raise RuntimeError("redis fora do ar")
+
+    monkeypatch.setattr(modulo_repo.ranking, "top_desperdicio", _falha)
+
+    with session_context(user_id=7, stock_id=42):
+        assert FinanceiroRepo().ranking_desperdicio()["status"] == "error"
+
+
 def test_evolucao_desperdicio_ok_e_erro(monkeypatch):
     _fingir(monkeypatch, "evolucao_desperdicio", [{"mes": "2026-08", "valor_descartado": 3.0}])
 

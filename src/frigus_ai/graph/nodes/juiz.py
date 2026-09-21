@@ -2,13 +2,13 @@ import re
 
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 
-from frigus_ai.evals.metrics import medir_node
 from frigus_ai.graph.llm import llm_juiz
 from frigus_ai.graph.names import JUIZ
 from frigus_ai.graph.nodes.contexto import perguntar
 from frigus_ai.graph.prompts import load_prompt, load_sections
 from frigus_ai.graph.state import Estado, JuizUpdate
 from frigus_ai.logging import Logging
+from frigus_ai.observability.metrics import medir_node
 
 logger = Logging.get_logger(__name__)
 

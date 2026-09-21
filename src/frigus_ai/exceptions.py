@@ -59,6 +59,22 @@ class QuantidadeNegativa(EstoqueError):
         super().__init__("Quantidade final não pode ser negativa.")
 
 
+class ComprasError(FrigusError):
+    """Erro base das operações de compras (repositories/compras_repository.py)."""
+
+
+class ItemDeCompraNaoEncontrado(ComprasError):
+    def __init__(self) -> None:
+        super().__init__("Nenhum item da lista de compras encontrado para os filtros fornecidos.")
+
+
+class ProdutoNaoCadastrado(ComprasError):
+    def __init__(self) -> None:
+        super().__init__(
+            "Produto não encontrado no catálogo; informe category e storage_place para cadastrá-lo."
+        )
+
+
 class SpoonacularError(FrigusError):
     """Erro base das chamadas à API da Spoonacular."""
 

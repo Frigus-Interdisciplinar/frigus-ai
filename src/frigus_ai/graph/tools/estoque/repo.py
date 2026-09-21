@@ -15,6 +15,7 @@ from frigus_ai.graph.tools.estoque.schemas import (
 )
 from frigus_ai.graph.tools.response import Response
 from frigus_ai.infra.postgres.context import current_stock_id, current_user_id
+from frigus_ai.infra.redis import ranking
 from frigus_ai.logging import Logging
 from frigus_ai.repositories import estoque_repository
 from frigus_ai.repositories.estoque_repository import FiltrosEstoque, ProdutoNovo
@@ -153,16 +154,28 @@ class EstoqueRepo(ToolSet):
         """
 
         try:
-            item_id = estoque_repository.descartar(
+            descarte = estoque_repository.descartar(
                 current_stock_id(), current_user_id(), stock_product_id, product_name, reason
             )
         except Exception as e:
             logger.error("DISCARD ERRO | stock_product_id=%s | %s", stock_product_id, e)
             return Response.error(e)
 
-        logger.info("DISCARD OK | stock_product_id=%s reason=%s", item_id, reason)
+        logger.info(
+            "DISCARD OK | stock_product_id=%s reason=%s", descarte["stock_product_id"], reason
+        )
 
-        return Response.ok(stock_product_id=item_id, reason=reason)
+        # Estatística do ranking, não a fonte de verdade do desperdício (essa é o Postgres
+        # acima, já commitado) — falha no Redis não pode derrubar um descarte que já deu certo.
+        try:
+            if descarte["quantidade_perdida"] > 0:
+                ranking.registrar_descarte(
+                    current_stock_id(), descarte["product_name"], descarte["quantidade_perdida"]
+                )
+        except Exception as e:
+            logger.warning("RANKING ERRO | stock_product_id=%s | %s", descarte["stock_product_id"], e)
+
+        return Response.ok(stock_product_id=descarte["stock_product_id"], reason=reason)
 
     def as_tools(self) -> list[BaseTool]:
         return [

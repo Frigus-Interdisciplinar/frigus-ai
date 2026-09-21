@@ -9,11 +9,24 @@ então elas não aparecem como DROP num futuro `alembic revision --autogenerate`
 
 from .base import Base
 from .compras import ShoppingList, ShoppingListProduct
-from .estoque import Discard, Product, StockMovement, StockProduct
+from .estoque import (
+    AJUSTE,
+    ENTRADA,
+    SAIDA,
+    VENCIDO,
+    Discard,
+    Product,
+    StockMovement,
+    StockProduct,
+)
 from .identity import Group, Stock, User, UserGroup
 from .receitas import Recipe, RecipeIngredient, RecipeSuggestion
 
 __all__ = [
+    "AJUSTE",
+    "ENTRADA",
+    "SAIDA",
+    "VENCIDO",
     "Base",
     "Discard",
     "Group",
