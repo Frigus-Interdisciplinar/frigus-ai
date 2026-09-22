@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from frigus_ai import mcp as mcp_server
 from frigus_ai.api import auth
+from frigus_ai.api import lifespan as lifespan_module
 from frigus_ai.api.app import app
 from frigus_ai.infra.postgres.context import current_stock_id, current_user_id
 
@@ -36,6 +37,18 @@ def cliente():
             return 99
 
         mp.setattr(mcp_server.user_service, "resolver_stock_id", _resolver_stock_id)
+
+        # O lifespan de verdade compila o grafo e cria índices no MongoDB
+        # (`fluxo_agentes.get()`); como este teste sobe a app inteira via `with
+        # TestClient(...)`, precisa de stub aqui também pra não precisar de Mongo real.
+        async def _get():
+            return None
+
+        async def _aclose():
+            return None
+
+        mp.setattr(lifespan_module.fluxo_agentes, "get", _get)
+        mp.setattr(lifespan_module.fluxo_agentes, "aclose", _aclose)
 
         # base_url com host:porta porque o SDK liga proteção contra DNS rebinding por
         # padrão e o allowlist é `localhost:*` — o "testserver" do TestClient dá 421.

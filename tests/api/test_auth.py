@@ -23,8 +23,13 @@ def cliente(monkeypatch):
         _get_history.chamado_com = (session_id, user_id)
         return []
 
+    async def _validar_ownership(chat_id, user_id):
+        """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
+        return
+
     monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
     monkeypatch.setattr(rotas.chat_service, "get_history", _get_history)
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _validar_ownership)
     return TestClient(app), _get_history
 
 

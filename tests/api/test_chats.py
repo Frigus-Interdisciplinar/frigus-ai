@@ -26,8 +26,13 @@ def cliente(monkeypatch):
     async def _obter_ou_criar_padrao():
         return 1
 
+    async def _validar_ownership(chat_id, user_id):
+        """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
+        return
+
     monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
     monkeypatch.setattr(rotas.chat_service, "garantir_limite", _garantir_limite)
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _validar_ownership)
     monkeypatch.setattr(user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
     # raise_server_exceptions=False: o handler de `Exception` genérico
     # (api/exception_handler.py) vira o `error_handler` do ServerErrorMiddleware, que
