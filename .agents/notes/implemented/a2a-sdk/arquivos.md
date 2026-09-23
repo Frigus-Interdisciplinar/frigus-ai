@@ -1,5 +1,12 @@
 # Migração A2A SDK
 
+> **Nota obsoleta — arquivada em 2026-09-23.** O `a2a-sdk` foi removido do projeto: o
+> dispatcher JSON-RPC da SDK sempre responde HTTP 200 com o erro embutido no corpo, perdendo o
+> 429 (rate limit) e 401 (auth) de transporte que o contrato manual (`api/routes/a2a.py`) já
+> entrega e testa. Os tipos da SDK (`AgentCard` etc.) também são mensagens protobuf, não
+> Pydantic. Decisão registrada em `AGENTS.md` ("Estrutura"). Nada abaixo se aplica ao código
+> atual — mantido só como histórico da tentativa.
+
 ## Feito
 
 - Dependência `a2a-sdk[fastapi]` adicionada.

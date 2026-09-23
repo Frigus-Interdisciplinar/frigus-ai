@@ -1,5 +1,14 @@
 # Gaps restantes: Frigus.AI x assessor-ai
 
+> **Nota obsoleta — arquivada em 2026-09-23.** Descrevia gaps contra uma integração A2A via
+> `a2a-sdk` (`src/frigus_ai/a2a/`), removida do repo — decisão registrada em `AGENTS.md`
+> ("Estrutura"), ver também `implemented/a2a-sdk/arquivos.md`. Também referencia
+> `services/chat/service.py` (pacote) e `services/types.py`, que hoje são o módulo flat
+> `services/chat_service.py` e `frigus_ai/types.py`. A migração `ToolSet`→`*Repo` descrita na
+> seção "Tools/repositories" terminou (ver `implemented/tools-repos/arquivos.md`). Nada aqui
+> reflete o código atual — fonte de verdade agora é
+> `pending/requisitos-disciplina/arquivos.md`. Conteúdo original abaixo só como histórico.
+
 Esta nota é o mapa de trabalho principal para a próxima sessão.
 
 ## Gaps críticos

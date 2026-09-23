@@ -1,5 +1,14 @@
 # Migração ToolSet para Repo
 
+> **Nota atualizada e arquivada em 2026-09-23.** O item que faltava — migrar `compras` — foi
+> feito (`repositories/compras_repository.py`, SQLAlchemy + `@transacional`; ver
+> `pending/requisitos-disciplina/arquivos.md`). `receitas`/`financeiro`/`estoque`/`compras`
+> estão todos migrados; SQL cru sumiu do projeto. Os arquivos `*/toolset.py` continuam no repo
+> como alias de compatibilidade (`ComprasToolSet = ComprasRepo` etc.) — hoje só `faq` e
+> `spoonacular` ainda têm teste (`test_toolset.py`) contra o nome antigo; `compras`/`estoque`/
+> `financeiro`/`receitas` não têm import nenhum fora do próprio arquivo, candidatos a remoção
+> numa sessão futura, com autorização explícita (`CLAUDE.md`).
+
 ## Feito
 
 - Implementações principais foram movidas para `repo.py`.
@@ -28,11 +37,12 @@
 
 ## Falta fazer
 
-- Migrar `compras`, o último domínio Postgres em SQL cru, para `PostgresRepo`/SQLAlchemy.
-  `receitas`, `financeiro` e `estoque` já estão migrados.
-- Garantir `Response`, escopo por `session_context` e `as_tools()` em todos os domínios.
-- Remover imports de `toolset.py` após atualizar testes e chamadores.
-- Apagar fachadas `toolset.py` somente com autorização explícita.
+- ~~Migrar `compras`~~ — feito: `repositories/compras_repository.py`, mesmo padrão de
+  `receitas`/`financeiro`/`estoque` (SQLAlchemy + `@transacional`). Pool `psycopg2` cru
+  removido do projeto.
+- Remover `*/toolset.py` de `compras`/`estoque`/`financeiro`/`receitas` (sem import fora do
+  próprio arquivo hoje). `faq`/`spoonacular` ainda têm teste contra o nome antigo — mexer
+  neles primeiro ou junto. Só com autorização explícita (`CLAUDE.md`).
 - Revisar models SQLAlchemy por domínio sem copiar IDs/tabelas do assessor cegamente.
 
 ## Arquivos

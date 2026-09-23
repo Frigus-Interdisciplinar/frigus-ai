@@ -1,6 +1,6 @@
 # Requisitos da disciplina — o que falta
 
-Conferido contra o código em `refactor/structure` (suíte: 197 passed).
+Conferido contra o código em `fix/broken-tests` (suíte: 232 passed) em 2026-09-23.
 Antes de reportar item como pendente, confira o código: este checklist envelhece.
 
 ## Placar
@@ -11,10 +11,10 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | Multiagente (mín. 5 agentes) | ✅ | 10 nós (`graph/names.py`) |
 | LangChain pra criar agentes | ✅ | `graph/agents.py` |
 | LangGraph pra orquestrar | ✅ | `graph/builder.py`, com `input_schema`/`output_schema` e contrato `AsyncNode[R]` |
-| Sessões por usuário | ⚠️ | `thread_id=session_id` no `MongoDBSaver` + histórico no Mongo. Ownership fechado em `send_message`, `get_messages` e `/stream`; falta no `DELETE` |
-| Memória de longo prazo | ✅ | Perfil no Mongo (`user_profiles`), regenerado do resumo no `encerrar_sessao` |
+| Sessões por usuário | ⚠️ | `thread_id=session_id` no `MongoDBSaver` + histórico no Mongo. Ownership fechado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono) |
+| Memória de longo prazo | ⚠️ | Fatos estruturados (`alergias`/`preferencias`/`restricoes`/`habitos`) em Mongo (`user_fatos`), extraídos automaticamente a cada 10 mensagens; `restricoes` normalizado pra vocabulário canônico. Perfil comportamental em texto livre (`user_profiles`) foi removido — nunca era lido pelo grafo. `fatos` ainda não é injetado de volta no prompt do chat |
 | MCP | ⚠️ | `mcp.py` expõe as tools com `X-API-Key`. Falta validação externa ponta a ponta |
-| A2A | ⚠️ | **Duas superfícies vivas**: `a2a.py` (SDK) e `api/routes/a2a.py` (manual). Escolher uma |
+| A2A | ✅ | Superfície única em `api/routes/a2a.py` (contrato manual, `a2a-sdk` removido — decisão em `AGENTS.md`) |
 | RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding/relevância, até 2 retentativas |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
@@ -25,7 +25,7 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | SRE: custo por resolução | ⚠️ | `evals/sre_report.py`: resolução = `frigus_graph_runs_total{outcome="success"}`, custo pela tabela `PRECOS_POR_1M_TOKENS` |
 | Desenho de arquitetura | ✅ | README — Mermaid + `assets/diagrama-agentes.png` |
 | Extra: Redis fila/ranking | ✅ | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados (`ZINCRBY`/`ZREVRANGE`) |
-| Extra: Neo4j | ❌ | Só `.cypher` em `infra/neo4j/cql/`. Sem driver no `pyproject.toml`, sem conexão, sem traversal |
+| Extra: Neo4j | ⚠️ | `neomodel` no `pyproject.toml`, conexão lazy, models (`User`/`Ingredient`/`Recipe`), tools de preferências e traversal (`sugerir_receitas_compativeis`) já expostas ao LLM. Falta sync automático Postgres→Neo4j (produtos/receitas) e mapear `fatos`→relações do grafo |
 | Avaliação da disciplina | ⚠️ | Métricas de runtime movidas pra `observability/`; `evals/` agora só avaliação offline (`sre_report.py` + `scenarios.py`/`run_scenarios.py`). Harness nunca rodou de ponta a ponta (sem Docker no ar) |
 
 ## P0 — o que mais pesa na nota
@@ -69,16 +69,21 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 
 ## P2 — extras
 
-1. **Neo4j.** Sem driver ainda. Recomendação: driver oficial + Cypher num `Neo4jRepo` espelhando
-   o `PostgresRepo` — **não** usar OGM (neomodel). O requisito é "pergunta de negócio respondida
-   por traversal", e um OGM esconde exatamente o traversal que está sendo avaliado.
-   Atenção à regra do AGENTS.md: o traversal tem que rodar sobre dado que o sistema coleta
-   (produtos/receitas/ingredientes), **não** sobre preferências — o perfil no Mongo é texto livre.
-2. **Perfil estruturado (Mongo + Qdrant).** Discussão da sessão: dá pra mesclar — Mongo como
-   fonte da verdade com chaves obrigatórias, Qdrant pra busca semântica sobre as notas livres.
-   Bloqueio: `prompts/perfil.md` manda o LLM gerar **texto livre de até 6 linhas**; sem mudar o
-   prompt pra emitir estrutura, não há chave nenhuma pra gravar. Ordem: prompt → Mongo com
-   schema → Qdrant só se a busca semântica provar ganho.
+1. ~~**Neo4j: tool de traversal.**~~ — feito: `sugerir_receitas_compativeis` exposta dentro de
+   `RECEITAS_TOOLS`. Falta real: sync automático Postgres→Neo4j (nunca existiu, só seed manual
+   em `cql/`) e mapear `fatos` (`user_fatos`) pras relações `ALLERGIC_TO`/`PREFERS`/`DISLIKES` —
+   ver `.agents/notes/pending/neo4j/arquivos.md`.
+2. ~~**Perfil estruturado (Mongo + Qdrant).**~~ — decisão revisada: em vez de mesclar o perfil
+   texto-livre com Mongo+Qdrant, o perfil foi **removido** (nunca era lido pelo grafo) e a
+   memória ficou só em `fatos` (`user_fatos`), já estruturado. `restricoes` normalizado pra
+   vocabulário canônico (`schemas/models.py:RESTRICOES_CANONICAS`). Falta real: injetar `fatos`
+   de volta no prompt do chat (candidato: Orquestrador) e, só depois, avaliar Qdrant/embedding
+   pra busca semântica — ver `.agents/notes/pending/memoria-fatos/arquivos.md`.
+3. **IDs seguros contra concorrência.** Domínios Postgres ainda resolvem próximo ID por
+   `MAX(id) + 1` em vez de sequence/identity ou outro mecanismo transacional seguro — race
+   condition sob concorrência real (dois inserts simultâneos podem calcular o mesmo próximo ID).
+   Não bloqueia a nota, mas é debt técnico real; considerar antes de declarar "IDs seguros" em
+   qualquer relatório.
 
 ## Dívida registrada: `evals/` mente o nome
 

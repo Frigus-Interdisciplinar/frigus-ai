@@ -28,12 +28,12 @@ coisa; a nota diz o que fazer primeiro.
 
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ⚠️ Parcial | `src/frigus_ai/api/` — health, chats, keys, MCP e A2A, com autenticação/rate limit condicionais. `GET /chats` tipado (`ChatSummaryResponse`) e `DELETE /chats/{id}` checa ownership (403 pra não-dono). Falta versionamento |
-| Multiagente, mínimo 5 agentes | ✅ Feito | 10 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, orquestrador, juiz (`graph/names.py`) |
+| API FastAPI/Flask | ⚠️ Parcial | `src/frigus_ai/api/` — health, chats, keys, MCP e A2A, com autenticação/rate limit condicionais. `GET /chats` tipado (`ChatSummaryResponse`) e `DELETE /chats/{id}` checa ownership (403 pra não-dono). Validação de ownership em `POST /a2a`. Falta versionamento |
+| Multiagente, mínimo 5 agentes | ✅ Feito | 11 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, visão, orquestrador, juiz (`graph/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
-| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no `MongoDBSaver` + histórico em Mongo. Ownership checado em `send_message`, `get_messages` e `/stream`; falta no `DELETE` e no A2A |
-| Memória de longo prazo | ✅ Feito | Perfil comportamental persistente em Mongo (`user_profiles`), recuperado por `user_id` e usado no fluxo de chat |
+| Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no `MongoDBSaver` + histórico em Mongo. Ownership checado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono antes de entrar na sessão) |
+| Memória de longo prazo | ⚠️ Parcial | Fatos estruturados (`alergias`/`preferencias`/`restricoes`/`habitos`) persistidos em Mongo (`user_fatos`, `repositories/fatos_repository.py`), extraídos automaticamente do chat e expostos via `GET/PUT /profile`. Perfil comportamental em texto livre (`user_profiles`) foi removido — nunca era lido pelo grafo, e a decisão foi ir direto para fatos estruturados em vez de reconsertar o texto livre. `fatos` em si também ainda não é lido de volta pelo prompt do chat, só usado na extração/merge |
 | MCP | ⚠️ Parcial | `src/frigus_ai/mcp.py` expõe as tools com autenticação por `X-API-Key`; falta validação externa ponta a ponta |
 | A2A | ⚠️ Parcial | Superfície única e consolidada em `src/frigus_ai/api/routes/a2a.py` (contrato manual, com auth real por `X-API-Key`). A integração alternativa via `a2a-sdk` foi removida: o dispatcher da SDK sempre responde HTTP 200 e embute erro no corpo JSON-RPC, perdendo o 429/401 de transporte que o contrato manual já entrega |
 | RAG com fonte externa indicada | ✅ Feito | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
@@ -46,8 +46,9 @@ coisa; a nota diz o que fazer primeiro.
 | Observabilidade/SRE — custo por resolução | ⚠️ Parcial | `evals/sre_report.py` define resolução = `frigus_graph_runs_total{outcome="success"}` e calcula custo/resolução a partir da tabela de preços por modelo |
 | Desenho de arquitetura de alto nível | ✅ Feito | README.md — diagrama Mermaid + `assets/diagrama-agentes.png` |
 | Extra: Redis com fila ou ranking | ✅ Feito | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados por `ZINCRBY`/`ZREVRANGE`, alimentado em `discard_product` e exposto como tool (`ranking_desperdicio`, domínio financeiro) |
-| Extra: Neo4j | ❌ Pendente | Só `.cypher` em `infra/neo4j/cql/`; sem driver no `pyproject.toml`, sem conexão e sem traversal. Usar driver oficial, **não** OGM (ver nota de requisitos) |
-| Extra: complexidade do projeto | Em andamento | 5 domínios de negócio + guardrail duplo + juiz + RAG + integrações MCP/A2A + ranking Redis já são acima da média; Neo4j é o principal extra restante |
+| Extra: Neo4j | ⚠️ Parcial | `neomodel` (OGM) no `pyproject.toml`, conexão lazy em `infra/neo4j/connection.py`, models `User`/`Ingredient`/`Recipe` com relações (`PREFERS`/`DISLIKES`/`ALLERGIC_TO`/`REQUIRES`/`SIMILAR_TO`). Tools de preferências (`graph/tools/preferencias/`, CRUD + traversal `sugerir_receitas_compativeis`) agora expostas ao LLM dentro do toolset de receitas (`RECEITAS_TOOLS`) — antes existiam mas não estavam ligadas a nenhum node. `definir_preferencia` cria o node do usuário no grafo na primeira preferência (não há sync automático Postgres → Neo4j de usuário). Falta: sync automático de `products`/`recipes` do Postgres pro grafo (nunca existiu script pra isso, só seed manual em `infra/neo4j/cql/`) e mapear fatos (`user_fatos`, ver memória incremental) pras relações do grafo |
+| Extra: visão computacional (foto da geladeira) | ⚠️ Parcial | `POST /stock/foto` (`api/routes/stock.py`) + node `visao_node` (`graph/nodes/visao.py`, `with_structured_output` no Gemini Flash, bypassa o roteador via `imagem_b64` no estado). Só descreve o que reconheceu, em linguagem natural — não escreve no estoque; usuário confirma via `POST /stock/items` numa mensagem separada. Limite de 8MB no upload. Falta: `thread_id` da foto some depois de uso (checkpoint com a imagem em base64 fica órfão no Mongo pra sempre, ver nota abaixo) |
+| Extra: complexidade do projeto | Em andamento | 6 domínios de negócio + guardrail duplo + juiz + RAG + integrações MCP/A2A + ranking Redis + Neo4j + visão já são acima da média |
 
 ### Checklist por matéria/entrega
 
@@ -55,12 +56,12 @@ coisa; a nota diz o que fazer primeiro.
 |---|---|---|
 | Sistemas Multiagentes | Grafo LangGraph, 5+ especialistas, router, guardrails e juiz com retentativas | Avaliação reproduzível de qualidade e grounding |
 | API e integrações | FastAPI, health, chats, autenticação condicional, MCP e A2A manual (superfície única); ownership checado em `send_message`, `get_messages`, `/stream` e `DELETE /chats/{id}`; `GET /chats` tipado | Versionamento |
-| Persistência | PostgreSQL, MongoDB, Redis e Qdrant lazy; histórico, perfil e checkpoint; todos os domínios (`receitas`, `financeiro`, `estoque`, `compras`) em SQLAlchemy + `@transacional`; pool `psycopg2` removido | IDs seguros contra concorrência e validação real com Docker |
+| Persistência | PostgreSQL, MongoDB, Redis e Qdrant lazy; histórico, fatos estruturados e checkpoint; todos os domínios (`receitas`, `financeiro`, `estoque`, `compras`) em SQLAlchemy + `@transacional`; pool `psycopg2` removido | IDs seguros contra concorrência e validação real com Docker |
 | MCP | Tools em `src/frigus_ai/mcp.py`, contexto de usuário/estoque e testes MCP | Teste externo/ponta a ponta e documentação de cliente |
 | A2A | Contrato manual único em `api/routes/a2a.py`, com autenticação real por `X-API-Key` (`api/auth.py`); `a2a-sdk` removido do código (decisão registrada abaixo em "Estrutura") | Persistir sessão A2A além do `contextId` in-memory, se necessário |
 | Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, Prometheus e dashboard Grafana; `evals/sre_report.py` calcula custo, índice de erros, custo/resolução e ROI a partir dos contadores | Validar contra scrape real acumulado (não só um processo local) e substituir os placeholders (volume de mensagens/usuário, valor por resolução) por dado real |
 | Avaliação da disciplina | Métricas de runtime movidas pra `observability/`; `evals/` agora só tem `sre_report.py` (custo/erro/ROI) e o harness de cenários (`evals/scenarios.py` + `run_scenarios.py`) | Rodar o harness contra infra viva (Docker + API keys) e produzir o relatório final |
-| Extras | RAG, arquitetura documentados e ranking de desperdício em Redis (`infra/redis/ranking.py`) | Neo4j com traversal demonstrável |
+| Extras | RAG, arquitetura documentados, ranking de desperdício em Redis (`infra/redis/ranking.py`), Neo4j conectado (models + tools de preferências + traversal `sugerir_receitas_compativeis`) e visão computacional (`POST /stock/foto`, `graph/nodes/visao.py`) | Sync automático Postgres → Neo4j (produtos/receitas); limpar `imagem_b64` do checkpoint da thread de foto |
 
 **Importante:** a escola não paga API de IA generativa — por isso o projeto já usa só providers com
 tier gratuito viável (Gemini, Groq) e Claude/Anthropic como opcional (`ANTHROPIC_API_KEY` tem
@@ -77,12 +78,11 @@ default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
 - PostgreSQL (via Docker) para estoque/compras/receitas/financeiro, acessado via SQLAlchemy
   (`infra/postgres/connection.py`, `@transacional`; schema `dataload`, DDL fornecido em
   `data/sql/schema.sql`)
-- MongoDB para histórico de conversa (`repositories/chat_repository.py`) e perfil comportamental
-  (`repositories/user_repository.py`, coleção `user_profiles`) e checkpoint do LangGraph
+- MongoDB para histórico de conversa (`repositories/chat_repository.py`), fatos estruturados do
+  usuário (`repositories/fatos_repository.py`, coleção `user_fatos`) e checkpoint do LangGraph
   (`MongoDBSaver`, coleções `graph_checkpoints`/`graph_checkpoint_writes`)
 - Qdrant para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf` (`graph/tools/faq/`)
-- Redis para cache do perfil comportamental, rate limit de chat e ranking de desperdício
-  (`src/frigus_ai/infra/redis/`)
+- Redis para rate limit de chat e ranking de desperdício (`src/frigus_ai/infra/redis/`)
 - Prometheus/LangSmith para observabilidade operacional; avaliações offline e relatórios da
   disciplina devem ficar em `evals/`, separados do runtime
 - `pytest` (`tests/`, espelhando a estrutura do pacote) + `ruff` (lint) + CI no GitHub Actions
@@ -106,7 +106,8 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 │                         spoonacular — cada uma com schemas.py + repo.py
 ├── repositories/        persistência: Postgres via SQLAlchemy (@transacional) e Mongo
 ├── services/            casos de uso (chat_service, user_service, api_key_service, runner)
-├── infra/               conexões lazy: postgres (pool + engine + models), mongo, redis, qdrant, neo4j
+├── infra/               conexões lazy: postgres (pool + engine + models), mongo, redis, qdrant,
+│                         neo4j, spoonacular
 ├── api/                 app.py, routes, schemas, auth, middleware e handlers da API FastAPI
 ├── observability/       métricas Prometheus de runtime (metrics.py, metrics_callback.py)
 ├── evals/               avaliação offline: sre_report.py (custo/erro/ROI) e o harness de cenários
@@ -176,10 +177,9 @@ reais com métricas Prometheus nem commitar segredos.
   o nome das funções.
 
 - **Não construa infra para dado que o sistema não coleta.** Antes de propor integração nova, grepe
-  o schema e as tools atrás da entrada dela. Casos já barrados por essa regra: resolução de produto
+  o schema e as tools atrás da entrada dela. Caso já barrado por essa regra: resolução de produto
   por código de barras (não existe coluna de código de barras em `data/sql/schema.sql`, e a leitura
-  de NF-e é stub) e o grafo de preferências no Neo4j (`DISLIKES`/`ALLERGIC_TO` não são campo em
-  lugar nenhum — o perfil no Mongo é texto livre).
+  de NF-e é stub).
 
 - Código de domínio (nomes de função, variáveis, docstrings de tool, mensagens ao usuário) é em
   **português**; nomes de classes/tipos de infraestrutura (`Settings`, `Model`, `Route`) em inglês.
