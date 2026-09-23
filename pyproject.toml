@@ -26,6 +26,7 @@ dependencies = [
     # Persistência
     "psycopg2-binary>=2.9",
     "pymongo>=4.12,<4.17",
+    "neomodel>=5.5",
     # Config / utilitários
     "pydantic[email]>=2.13",
     "pydantic-settings>=2.14",

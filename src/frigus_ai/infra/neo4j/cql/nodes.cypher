@@ -15,45 +15,23 @@ CREATE CONSTRAINT recipe_id_unique IF NOT EXISTS
 FOR (r:Recipe)
 REQUIRE r.id IS UNIQUE;
 
-CREATE (:User {
-  id: 'user-1',
-  name: 'Davi'
-});
+MERGE (u:User {id: 'user-1'})
+  ON CREATE SET u.name = 'Davi';
 
-CREATE (:Ingredient {
-  id: 'ingredient-1',
-  name: 'Frango',
-  category: 'proteina'
-});
+MERGE (i:Ingredient {id: 'ingredient-1'})
+  ON CREATE SET i.name = 'Frango', i.category = 'proteina';
 
-CREATE (:Ingredient {
-  id: 'ingredient-2',
-  name: 'Tomate',
-  category: 'vegetal'
-});
+MERGE (i:Ingredient {id: 'ingredient-2'})
+  ON CREATE SET i.name = 'Tomate', i.category = 'vegetal';
 
-CREATE (:Ingredient {
-  id: 'ingredient-3',
-  name: 'Arroz',
-  category: 'grao'
-});
+MERGE (i:Ingredient {id: 'ingredient-3'})
+  ON CREATE SET i.name = 'Arroz', i.category = 'grao';
 
-CREATE (:Ingredient {
-  id: 'ingredient-4',
-  name: 'Coentro',
-  category: 'tempero'
-});
+MERGE (i:Ingredient {id: 'ingredient-4'})
+  ON CREATE SET i.name = 'Coentro', i.category = 'tempero';
 
-CREATE (:Recipe {
-  id: 'recipe-1',
-  name: 'Frango com tomate',
-  preparation_time_minutes: 30,
-  difficulty: 'facil'
-});
+MERGE (r:Recipe {id: 'recipe-1'})
+  ON CREATE SET r.name = 'Frango com tomate', r.preparation_time_minutes = 30, r.difficulty = 'facil';
 
-CREATE (:Recipe {
-  id: 'recipe-2',
-  name: 'Arroz com frango',
-  preparation_time_minutes: 25,
-  difficulty: 'facil'
-});
+MERGE (r:Recipe {id: 'recipe-2'})
+  ON CREATE SET r.name = 'Arroz com frango', r.preparation_time_minutes = 25, r.difficulty = 'facil';

@@ -75,6 +75,15 @@ class ProdutoNaoCadastrado(ComprasError):
         )
 
 
+class PreferenciasError(FrigusError):
+    """Erro base das operações de preferências (repositories/preferencias_repository.py)."""
+
+
+class IngredienteNaoEncontrado(PreferenciasError):
+    def __init__(self, nome: str) -> None:
+        super().__init__(f"Ingrediente {nome!r} não encontrado.")
+
+
 class SpoonacularError(FrigusError):
     """Erro base das chamadas à API da Spoonacular."""
 

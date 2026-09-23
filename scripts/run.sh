@@ -36,7 +36,7 @@ start_local_stack() {
         echo "Docker Desktop pronto."
     fi
 
-    echo "Subindo serviços via docker compose (postgres, mongo, redis, qdrant)..."
+    echo "Subindo serviços via docker compose (postgres, mongo, redis, qdrant, neo4j)..."
     docker compose -f "$COMPOSE_FILE" up -d
 }
 

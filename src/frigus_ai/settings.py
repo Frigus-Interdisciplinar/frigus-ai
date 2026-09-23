@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     POSTGRES_URI: str
     MONGODB_URI: str
+    NEO4J_URI: str
 
     LANGSMITH_TRACING: bool
     LANGSMITH_API_KEY: SecretStr
