@@ -7,6 +7,7 @@ devolva stack trace pro cliente, incluindo as que ninguém lembrou de proteger.
 """
 
 from collections.abc import Awaitable, Callable
+from typing import NamedTuple
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -15,8 +16,14 @@ from frigus_ai.exceptions import (
     ChatDeOutroUsuario,
     ChatError,
     ChatNaoEncontrado,
+    EstoqueAtualNaoDefinido,
     FalhaNoAgente,
+    FrigusError,
+    ItemDeCompraNaoEncontrado,
+    ItemDeEstoqueNaoEncontrado,
     LimiteDeMensagensExcedido,
+    ProdutoNaoCadastrado,
+    QuantidadeNegativa,
 )
 from frigus_ai.infra.redis.keys import CHAT_TTL_TIME
 from frigus_ai.logging import Logging
@@ -24,10 +31,21 @@ from frigus_ai.schemas.errors import ErrorCode, ErrorResponse
 
 logger = Logging.get_logger(__name__)
 
-_MAPA: list[tuple[type[ChatError], int, ErrorCode]] = [
-    (ChatNaoEncontrado,  status.HTTP_404_NOT_FOUND, ErrorCode.CHAT_NAO_ENCONTRADO),
-    (ChatDeOutroUsuario, status.HTTP_403_FORBIDDEN,  ErrorCode.CHAT_DE_OUTRO_USUARIO),
-    (FalhaNoAgente,      status.HTTP_502_BAD_GATEWAY, ErrorCode.FALHA_NO_AGENTE),
+class MapaExcecao(NamedTuple):
+    excecao: type[FrigusError]
+    status_code: int
+    code: ErrorCode
+
+
+_MAPA: list[MapaExcecao] = [
+    MapaExcecao(ChatNaoEncontrado,          status.HTTP_404_NOT_FOUND,            ErrorCode.CHAT_NAO_ENCONTRADO),
+    MapaExcecao(ChatDeOutroUsuario,         status.HTTP_403_FORBIDDEN,            ErrorCode.CHAT_DE_OUTRO_USUARIO),
+    MapaExcecao(FalhaNoAgente,              status.HTTP_502_BAD_GATEWAY,          ErrorCode.FALHA_NO_AGENTE),
+    MapaExcecao(ItemDeEstoqueNaoEncontrado, status.HTTP_404_NOT_FOUND,            ErrorCode.ESTOQUE_ITEM_NAO_ENCONTRADO),
+    MapaExcecao(QuantidadeNegativa,         status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.QUANTIDADE_NEGATIVA),
+    MapaExcecao(ItemDeCompraNaoEncontrado,  status.HTTP_404_NOT_FOUND,            ErrorCode.COMPRA_ITEM_NAO_ENCONTRADO),
+    MapaExcecao(ProdutoNaoCadastrado,       status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.PRODUTO_NAO_CADASTRADO),
+    MapaExcecao(EstoqueAtualNaoDefinido,    status.HTTP_409_CONFLICT,             ErrorCode.ESTOQUE_NAO_DEFINIDO),
 ]
 
 
@@ -47,8 +65,6 @@ def _handler(status_code: int, code: ErrorCode) -> Callable[[Request, Exception]
 
 
 async def _handle_limite(request: Request, exc: Exception) -> JSONResponse:
-    # Único erro do mapa com header próprio — o cliente HTTP usa `Retry-After` pra saber
-    # quando tentar de novo em vez de martelar a rota (mesma janela do Redis: chat/cache.py).
     return _resposta(
         status.HTTP_429_TOO_MANY_REQUESTS,
         str(exc),
@@ -58,8 +74,6 @@ async def _handle_limite(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def _handle_inesperado(request: Request, exc: Exception) -> JSONResponse:
-    # Última linha de defesa: loga o traceback real e devolve texto genérico — `str(exc)`
-    # de uma exceção não prevista pode carregar query, connection string ou payload.
     logger.exception(f"Erro não tratado em {request.method} {request.url.path}")
 
     return _resposta(status.HTTP_500_INTERNAL_SERVER_ERROR, "Erro interno inesperado.", ErrorCode.ERRO_INTERNO)

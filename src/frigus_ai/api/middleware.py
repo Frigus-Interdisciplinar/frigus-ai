@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
-from guard import SecurityConfig, SecurityMiddleware
+from guard import SecurityConfig, SecurityDecorator, SecurityMiddleware
 
 from frigus_ai.observability.metrics import (
     ACTIVE_REQUESTS,
@@ -19,7 +19,6 @@ type CallNext = Callable[[Request], Awaitable[Response]]
 
 def security_config() -> SecurityConfig:
     return SecurityConfig(
-        # settings.REDIS_URL já é `str` aqui (assessor_ai usa SecretStr, este projeto não).
         redis_url=settings.REDIS_URL,
         enable_rate_limiting=settings.API_KEY_AUTH_ENABLED,
         enable_cors=True,
@@ -29,6 +28,10 @@ def security_config() -> SecurityConfig:
         cors_allow_credentials=False,
         cors_expose_headers=["X-Custom-Header"],
     )
+
+
+_config = security_config()
+guard = SecurityDecorator(_config)
 
 
 def _route_template(request: Request) -> str:
@@ -64,7 +67,7 @@ async def observar_http(request: Request, call_next: CallNext) -> Response:
 def adicionar_middleware(app: FastAPI) -> None:
     app.middleware("http")(observar_http)
     if settings.API_KEY_AUTH_ENABLED:
-        app.add_middleware(SecurityMiddleware, config=security_config())
+        app.add_middleware(SecurityMiddleware, config=_config)
 
 
-__all__ = ["adicionar_middleware", "observar_http", "security_config"]
+__all__ = ["adicionar_middleware", "guard", "observar_http", "security_config"]
