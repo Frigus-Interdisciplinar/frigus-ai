@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
 from frigus_ai.api.routes import a2a as rotas
-from frigus_ai.exceptions import LimiteDeMensagensExcedido
+from frigus_ai.exceptions import ChatDeOutroUsuario, LimiteDeMensagensExcedido
 from frigus_ai.services.user_service import user_service
 
 
@@ -36,8 +36,13 @@ def cliente(monkeypatch):
     async def _obter_ou_criar_padrao():
         return 1
 
+    async def _validar_ownership(session_id, user_id):
+        """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
+        return
+
     monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
     monkeypatch.setattr(rotas.chat_service, "send_message", _send_message)
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _validar_ownership)
     monkeypatch.setattr(user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
     return TestClient(app), _send_message
 
@@ -81,6 +86,22 @@ def test_sem_context_id_abre_sessao_nova_e_devolve_o_id(cliente):
     gerado = corpo["result"]["contextId"]
     assert gerado
     assert send_message.chamado_com[1] == gerado
+
+
+def test_context_id_de_outro_usuario_vira_403(cliente, monkeypatch):
+    """contextId é controlado por quem chama — sem checar dono, o A2A deixa
+    qualquer chamador entrar na sessão de outro usuário via `session_id`."""
+
+    client, _ = cliente
+
+    async def _de_outro(session_id, user_id):
+        raise ChatDeOutroUsuario(session_id)
+
+    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _de_outro)
+
+    r = client.post("/a2a", json=_rpc(params=_mensagem("oi", CHAT_ID)))
+
+    assert r.status_code == 403
 
 
 def test_metodo_nao_suportado_vira_erro_jsonrpc_e_nao_500(cliente):
