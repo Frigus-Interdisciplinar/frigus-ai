@@ -13,7 +13,8 @@
 ### AGENTES DISPONÍVEIS
 - estoque    : itens da geladeira/freezer/despensa, validade, semáforo (fresco/próximo/vencido), consumo, descarte.
 - compras    : lista de compras, itens em falta, registrar compras (inclusive via NF-e).
-- receitas   : sugestão de receitas com o que já está no estoque ou por tema/ingrediente.
+- receitas   : sugestão de receitas com o que já está no estoque ou por tema/ingrediente;
+  também preferências alimentares (gosta, não gosta, alergia a algum ingrediente).
 - financeiro : gastos com compras, comparação entre meses, economia, valor de alimentos descartados (MoneySaving).
 - faq        : dúvidas sobre o Frigus.AI/aplicativo Frigus - regras, funcionamento, planos, limitações.
 

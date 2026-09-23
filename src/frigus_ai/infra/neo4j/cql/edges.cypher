@@ -7,51 +7,41 @@
 
 MATCH (u:User {id: 'user-1'})
 MATCH (i:Ingredient {id: 'ingredient-1'})
-CREATE (u)-[:PREFERS]->(i);
+MERGE (u)-[:PREFERS]->(i);
 
 MATCH (u:User {id: 'user-1'})
 MATCH (i:Ingredient {id: 'ingredient-4'})
-CREATE (u)-[:DISLIKES]->(i);
+MERGE (u)-[:DISLIKES]->(i);
 
 MATCH (u:User {id: 'user-1'})
 MATCH (i:Ingredient {id: 'ingredient-4'})
-CREATE (u)-[:ALLERGIC_TO]->(i);
+MERGE (u)-[:ALLERGIC_TO]->(i);
 
 MATCH (r:Recipe {id: 'recipe-1'})
 MATCH (i:Ingredient {id: 'ingredient-1'})
-CREATE (r)-[:REQUIRES {
-  quantity: 300,
-  unit: 'g'
-}]->(i);
+MERGE (r)-[rel:REQUIRES]->(i)
+  ON CREATE SET rel.quantity = 300, rel.unit = 'g';
 
 MATCH (r:Recipe {id: 'recipe-1'})
 MATCH (i:Ingredient {id: 'ingredient-2'})
-CREATE (r)-[:REQUIRES {
-  quantity: 2,
-  unit: 'unidade'
-}]->(i);
+MERGE (r)-[rel:REQUIRES]->(i)
+  ON CREATE SET rel.quantity = 2, rel.unit = 'unidade';
 
 MATCH (r:Recipe {id: 'recipe-1'})
 MATCH (i:Ingredient {id: 'ingredient-3'})
-CREATE (r)-[:REQUIRES {
-  quantity: 1,
-  unit: 'xicara'
-}]->(i);
+MERGE (r)-[rel:REQUIRES]->(i)
+  ON CREATE SET rel.quantity = 1, rel.unit = 'xicara';
 
 MATCH (r:Recipe {id: 'recipe-2'})
 MATCH (i:Ingredient {id: 'ingredient-1'})
-CREATE (r)-[:REQUIRES {
-  quantity: 250,
-  unit: 'g'
-}]->(i);
+MERGE (r)-[rel:REQUIRES]->(i)
+  ON CREATE SET rel.quantity = 250, rel.unit = 'g';
 
 MATCH (r:Recipe {id: 'recipe-2'})
 MATCH (i:Ingredient {id: 'ingredient-3'})
-CREATE (r)-[:REQUIRES {
-  quantity: 2,
-  unit: 'xicara'
-}]->(i);
+MERGE (r)-[rel:REQUIRES]->(i)
+  ON CREATE SET rel.quantity = 2, rel.unit = 'xicara';
 
 MATCH (r1:Recipe {id: 'recipe-1'})
 MATCH (r2:Recipe {id: 'recipe-2'})
-CREATE (r1)-[:SIMILAR_TO]->(r2);
+MERGE (r1)-[:SIMILAR_TO]->(r2);

@@ -5,6 +5,7 @@ from .estoque import estoque_repo
 from .estoque.schemas import QueryStockArgs
 from .faq import faq_repo
 from .financeiro import financeiro_repo
+from .preferencias import preferencias_repo
 from .receitas import receitas_repo
 from .spoonacular import spoonacular_repo
 
@@ -16,6 +17,10 @@ RECEITAS_TOOLS = [
         estoque_repo.query_stock, name="query_stock", args_schema=QueryStockArgs
     ),
     *spoonacular_repo.as_tools(),
+    # Preferências (Neo4j) moram no mesmo especialista de receitas: é quem já responde
+    # "o que eu posso comer" e "sou alérgico a X" é a mesma conversa de comida, não uma
+    # rota própria — ver .agents/notes/pending/memoria-fatos/arquivos.md.
+    *preferencias_repo.as_tools(),
 ]
 FAQ_TOOLS = faq_repo.as_tools()
 FINANCEIRO_TOOLS = financeiro_repo.as_tools()

@@ -1,6 +1,5 @@
 // Ordem de execução: 1. nodes.cypher  2. edges.cypher  3. queries.cypher
-// Atenção: como está tudo com CREATE, executar nodes.cypher ou edges.cypher
-// novamente vai criar duplicados.
+// nodes.cypher/edges.cypher usam MERGE — rodar de novo não duplica.
 
 MATCH (n)
 RETURN n;

@@ -27,6 +27,7 @@ os.environ.setdefault("SIGNUP_SECRET", "")
 
 os.environ.setdefault("POSTGRES_URI", "postgresql://test:test@localhost:5432/test")
 os.environ.setdefault("MONGODB_URI", "mongodb://localhost:27017")
+os.environ.setdefault("NEO4J_URI", "bolt://neo4j:test@localhost:7687")
 
 os.environ.setdefault("LANGSMITH_TRACING", "false")
 os.environ.setdefault("LANGSMITH_PROJECT", "frigus-ai-test")

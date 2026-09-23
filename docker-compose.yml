@@ -46,6 +46,23 @@ services:
       timeout: 5s
       retries: 10
 
+  neo4j:
+    image: neo4j:5-community
+    container_name: frigus_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/frigus123
+    ports:
+      - "7474:7474" # console web (http://localhost:7474)
+      - "7687:7687" # bolt (usado pelo neomodel)
+    volumes:
+      - frigus_neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   qdrant:
     image: qdrant/qdrant:v1.19.0
     container_name: frigus_qdrant
@@ -93,6 +110,7 @@ volumes:
   frigus_postgres_data:
   frigus_mongo_data:
   frigus_redis_data:
+  frigus_neo4j_data:
   frigus_qdrant_data:
   frigus_prometheus_data:
   frigus_grafana_data:
