@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import time
-from typing import cast
+from typing import NamedTuple, cast
 
 import httpx
 from langchain_core.tools import BaseTool, StructuredTool
@@ -9,10 +9,9 @@ from langchain_core.tools import BaseTool, StructuredTool
 from frigus_ai.exceptions import ApiKeyNaoConfiguradaError, CotaExcedidaError
 from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.response import Response, ToolResponse
-from frigus_ai.logging import Logging
+from frigus_ai.infra.spoonacular.connection import spoonacular
 from frigus_ai.settings import settings
 
-from .connection import spoonacular
 from .schemas import (
     FindRecipesByIngredientsArgs,
     GetRecipeInformationArgs,
@@ -20,38 +19,48 @@ from .schemas import (
     ReceitaPorIngrediente,
 )
 
-logger = Logging.get_logger("spoonacular")
-
 _TTL_SEGUNDOS = 3600
-_ParamValue = str | int | float | bool | None
+_MAX_CACHE_ENTRIES = 128
+
+type _Path = str
+type _ParamValue = str | int | float | bool | None
+
+
+class _Param(NamedTuple):
+    nome: str
+    valor: _ParamValue
+
+
+type _Params = tuple[_Param, ...]
+
+
+class _ChaveCache(NamedTuple):
+    path: _Path
+    params: _Params
+    janela: int
 
 
 class _CachedGet:
     def __init__(self) -> None:
-        self._cache: dict[tuple[str, tuple[tuple[str, _ParamValue], ...], int], object] = {}
+        self._cache: dict[_ChaveCache, object] = {}
 
-    async def __call__(
-        self,
-        path: str,
-        params: tuple[tuple[str, _ParamValue], ...],
-        janela: int,
-    ) -> object:
-        chave = (path, params, janela)
+    async def __call__(self, path: _Path, params: _Params, janela: int) -> object:
+        chave = _ChaveCache(path, params, janela)
         if chave in self._cache:
             return self._cache[chave]
 
-        resposta: object = spoonacular.connect().get(path, params=dict(params), timeout=10)
+        resposta = spoonacular.connect().get(path, params=dict(params), timeout=10)
         if inspect.isawaitable(resposta):
             resposta = await resposta
 
         resposta_http = cast(httpx.Response, resposta)
         resposta_http.raise_for_status()
-        dados = resposta_http.json()
 
-        if len(self._cache) >= 128:
+        if len(self._cache) >= _MAX_CACHE_ENTRIES:
             self._cache.pop(next(iter(self._cache)))
-        self._cache[chave] = dados
-        return dados
+        self._cache[chave] = resposta_http.json()
+
+        return self._cache[chave]
 
     def cache_clear(self) -> None:
         self._cache.clear()
@@ -60,11 +69,11 @@ class _CachedGet:
 _get = _CachedGet()
 
 
-async def _chamar(path: str, params: dict[str, _ParamValue]) -> object:
+async def _chamar(path: _Path, params: dict[str, _ParamValue]) -> object:
     if not settings.SPOONACULAR_API_KEY:
         raise ApiKeyNaoConfiguradaError
 
-    chave = tuple(sorted(params.items()))
+    chave: _Params = tuple(_Param(nome, valor) for nome, valor in sorted(params.items()))
 
     try:
         return await _get(path, chave, int(time.time()) // _TTL_SEGUNDOS)
@@ -75,7 +84,6 @@ async def _chamar(path: str, params: dict[str, _ParamValue]) -> object:
 
 
 class SpoonacularRepo(ToolSet):
-    @Logging.log_tool
     async def find_recipes_by_ingredients(
         self,
         ingredients: list[str],
@@ -89,29 +97,22 @@ class SpoonacularRepo(ToolSet):
         contagem de ingredientes usados e faltando, e o nome dos que faltam.
         """
 
-        try:
-            dados = await _chamar(
-                "/recipes/findByIngredients",
-                {
-                    "ingredients": ",".join(ingredients),
-                    "number": number,
-                    "ranking": ranking,
-                    "ignorePantry": ignore_pantry,
-                },
-            )
+        dados = await _chamar(
+            "/recipes/findByIngredients",
+            {
+                "ingredients": ",".join(ingredients),
+                "number": number,
+                "ranking": ranking,
+                "ignorePantry": ignore_pantry,
+            },
+        )
 
-            receitas = [
-                ReceitaPorIngrediente.model_validate(r).model_dump()
-                for r in cast(list[object], dados)
-            ]
+        receitas = [
+            ReceitaPorIngrediente.model_validate(r).model_dump() for r in cast(list[object], dados)
+        ]
 
-            return Response.ok(total=len(receitas), receitas=receitas)
+        return Response.ok(total=len(receitas), receitas=receitas)
 
-        except Exception as e:
-            logger.error("ERRO | find_recipes_by_ingredients | %s", e)
-            return Response.error(e)
-
-    @Logging.log_tool
     async def get_recipe_information(
         self,
         recipe_id: int,
@@ -122,17 +123,12 @@ class SpoonacularRepo(ToolSet):
         unidade, tempo de preparo, porções e modo de preparo.
         """
 
-        try:
-            dados = await _chamar(
-                f"/recipes/{recipe_id}/information",
-                {"includeNutrition": include_nutrition},
-            )
+        dados = await _chamar(
+            f"/recipes/{recipe_id}/information",
+            {"includeNutrition": include_nutrition},
+        )
 
-            return Response.ok(**ReceitaDetalhada.model_validate(dados).model_dump())
-
-        except Exception as e:
-            logger.error("ERRO | get_recipe_information | %s", e)
-            return Response.error(e)
+        return Response.ok(**ReceitaDetalhada.model_validate(dados).model_dump())
 
     def as_tools(self) -> list[BaseTool]:
         def find_sync(**kwargs):
