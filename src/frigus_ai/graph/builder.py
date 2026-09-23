@@ -15,6 +15,7 @@ from frigus_ai.graph.names import (
     ORQUESTRADOR,
     RECEITAS,
     ROTEADOR,
+    VISAO,
 )
 from frigus_ai.graph.nodes import (
     no_compras,
@@ -27,6 +28,7 @@ from frigus_ai.graph.nodes import (
     no_orquestrador,
     no_receitas,
     no_roteador,
+    no_visao,
 )
 from frigus_ai.graph.state import (
     AsyncNode,
@@ -50,6 +52,10 @@ type GrafoFrigus = CompiledStateGraph[Estado, None, EntradaGrafo, SaidaGrafo]
 def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     if estado.get("mensagem_bloqueada"):
         return Route.FIM
+    # O roteador decide por texto e não sabe lidar com imagem: turno com foto pula
+    # direto pra visão, sem passar pelo LLM de roteamento.
+    if estado.get("imagem_b64"):
+        return VISAO
     return ROTEADOR
 
 
@@ -80,6 +86,7 @@ def _construir_grafo() -> StateGraph:
     financeiro:        AsyncNode[EspecialistaUpdate]     = no_financeiro
     receitas:          AsyncNode[FaqUpdate]              = no_receitas
     faq:               AsyncNode[FaqUpdate]              = no_faq
+    visao:             AsyncNode[EspecialistaUpdate]     = no_visao
     orquestrador:      AsyncNode[OrquestradorUpdate]     = no_orquestrador
     juiz:              AsyncNode[JuizUpdate]             = no_juiz
     guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]   = no_guardrail_saida
@@ -93,6 +100,7 @@ def _construir_grafo() -> StateGraph:
     grafo.add_node(RECEITAS,          receitas)
     grafo.add_node(FAQ,               faq)
     grafo.add_node(FINANCEIRO,        financeiro)
+    grafo.add_node(VISAO,             visao)
     grafo.add_node(ORQUESTRADOR,      orquestrador)
     grafo.add_node(JUIZ,              juiz)
     grafo.add_node(GUARDRAIL_SAIDA,   guardrail_saida)
@@ -105,6 +113,7 @@ def _construir_grafo() -> StateGraph:
         path_map = {
             Route.FIM: END,
             ROTEADOR:  ROTEADOR,
+            VISAO:     VISAO,
         },
     )
 
@@ -121,10 +130,11 @@ def _construir_grafo() -> StateGraph:
         },
     )
 
-    # Estoque/Compras/Financeiro produzem JSON estruturado -> Orquestrador formata em linguagem natural
+    # Estoque/Compras/Financeiro/Visão produzem JSON estruturado -> Orquestrador formata em linguagem natural
     grafo.add_edge(ESTOQUE,      ORQUESTRADOR)
     grafo.add_edge(COMPRAS,      ORQUESTRADOR)
     grafo.add_edge(FINANCEIRO,   ORQUESTRADOR)
+    grafo.add_edge(VISAO,        ORQUESTRADOR)
     grafo.add_edge(ORQUESTRADOR, JUIZ)
 
     # Receitas/FAQ já respondem em linguagem natural -> vão direto para o Juiz

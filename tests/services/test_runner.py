@@ -8,16 +8,25 @@ sempre com "Sem resposta".
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from frigus_ai.schemas.execution import AnswerReady, NodeStarted, RunFinished
 from frigus_ai.services import runner
 
 
 class _FakeGrafo:
+    """
+    Emula o formato de `astream_events(version="v2")`: um `on_chain_start` seguido de
+    `on_chain_end` (com `output` = o update que o node devolveu) por node — o mesmo
+    shape que `runner.executar_stream` filtra por nome (`_NOMES_DE_NODE`).
+    """
+
     def __init__(self, updates):
         self._updates = updates
 
-    async def astream(self, estado, config, stream_mode):
+    async def astream_events(self, estado, config, version):
         for update in self._updates:
-            yield update
+            for nome, output in update.items():
+                yield {"event": "on_chain_start", "name": nome, "data": {}}
+                yield {"event": "on_chain_end", "name": nome, "data": {"output": output}}
 
 
 class _FakeFluxoAgentes:
@@ -48,6 +57,18 @@ def test_extrair_resposta_sem_mensagens():
     assert runner._extrair_resposta({}) is None
 
 
+def test_estado_inicial_sem_imagem_nao_tem_a_chave():
+    estado = runner._estado_inicial("oi", 1)
+
+    assert "imagem_b64" not in estado
+
+
+def test_estado_inicial_com_imagem_inclui_a_chave():
+    estado = runner._estado_inicial("analise a foto", 1, imagem_b64="ZmFrZQ==")
+
+    assert estado["imagem_b64"] == "ZmFrZQ=="
+
+
 async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):
     _usar_grafo(monkeypatch, [
         {"guardrail_entrada_node": {"messages": [HumanMessage(content="oi")]}},
@@ -56,12 +77,14 @@ async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):
         {"guardrail_saida_node": {"messages": [AIMessage(content="resposta final")]}},
     ])
 
-    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1, "")]
+    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
 
-    assert [nome for tipo, nome in eventos if tipo == "no"] == [
+    nos_iniciados = [e.node for e in eventos if isinstance(e, NodeStarted)]
+    assert nos_iniciados == [
         "guardrail_entrada_node", "roteador_node", "estoque_node", "guardrail_saida_node"
     ]
-    assert eventos[-1] == ("resposta", "resposta final")
+    assert AnswerReady(content="resposta final") in eventos
+    assert isinstance(eventos[-1], RunFinished)
 
 
 async def test_stream_usa_a_ultima_resposta_quando_o_grafo_para_antes_do_fim(monkeypatch):
@@ -71,14 +94,16 @@ async def test_stream_usa_a_ultima_resposta_quando_o_grafo_para_antes_do_fim(mon
         {"guardrail_entrada_node": {"messages": [AIMessage(content="bloqueado")]}},
     ])
 
-    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1, "")]
+    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
 
-    assert eventos[-1] == ("resposta", "bloqueado")
+    assert AnswerReady(content="bloqueado") in eventos
+    assert isinstance(eventos[-1], RunFinished)
 
 
-async def test_stream_sem_nenhuma_resposta_nao_devolve_none(monkeypatch):
+async def test_stream_sem_nenhuma_resposta_nao_devolve_answer_ready(monkeypatch):
     _usar_grafo(monkeypatch, [{"roteador_node": {"rota": "fim"}}])
 
-    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1, "")]
+    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
 
-    assert eventos[-1] == ("resposta", "Sem resposta.")
+    assert not any(isinstance(e, AnswerReady) for e in eventos)
+    assert isinstance(eventos[-1], RunFinished)

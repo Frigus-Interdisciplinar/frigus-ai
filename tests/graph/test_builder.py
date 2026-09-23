@@ -77,7 +77,7 @@ async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
         EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")])
     )
 
-    # SaidaGrafo não expõe rota/mapa_pii/perfil — só o histórico de mensagens.
+    # SaidaGrafo não expõe rota/mapa_pii — só o histórico de mensagens.
     assert set(saida) == {"messages"}
     assert saida["messages"][-1].content == "Você tem leite na geladeira."
     assert agentes["estoque"].chamadas == 1
@@ -123,3 +123,43 @@ async def test_agentes_chamados_acumula_sem_ser_semeado_na_entrada(grafo):
         "juiz_node",
         "guardrail_saida_node",
     ]
+
+
+async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypatch):
+    """`decidir_apos_guardrail_entrada` desvia direto pra Visão quando há `imagem_b64` —
+    o roteador (LLM de texto) nunca roda nesse turno."""
+
+    from frigus_ai.graph import state as state_mod
+    from frigus_ai.graph.nodes import visao as visao_mod
+
+    inventario = state_mod.InventarioGeladeira(
+        items=[
+            state_mod.ItemIdentificado(
+                product_name="Leite integral",
+                quantity=1,
+                unit="litro",
+                category="Laticínio",
+                storage_place="Geladeira",
+            )
+        ],
+        confidence=0.9,
+    )
+
+    class _FakeLLMVisao:
+        async def ainvoke(self, _mensagens):
+            return inventario
+
+    monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
+
+    compilar, agentes = grafo
+    app = compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])
+
+    await app.ainvoke(
+        EntradaGrafo(
+            messages=[HumanMessage(content="analise esta foto")],
+            imagem_b64="ZmFrZQ==",
+        )
+    )
+
+    assert agentes["router"].chamadas == 0
+    assert agentes["orquestrador"].chamadas == 1

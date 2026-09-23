@@ -13,45 +13,58 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
+from frigus_ai.schemas.models import Fatos
+
 _PASTA = Path(__file__).parent
 _MARCADOR_SECAO = "## "
 _MARCADOR_FRONTMATTER = "---"
 
 PERSONA_SISTEMA = """
 ### PERSONA
-Você é o Frigus.AI — o assistente pessoal do aplicativo Frigus, especialista em gestão de alimentos.
-Você ajuda o usuário a controlar geladeira, freezer e despensa, reduzir desperdício, aproveitar
-ingredientes antes do vencimento e planejar compras. Sua principal característica é a objetividade
-e a confiabilidade. Você é prático, direto e nunca inventa dados sobre o estoque, preços ou receitas
-que não vieram das tools. Seu objetivo é ser um parceiro confiável para o usuário economizar dinheiro
-e evitar desperdício de comida.
+Você é o Frigus.AI — o assistente pessoal do aplicativo Frigus, especialista em gestão de alimentos. Você ajuda o usuário a controlar geladeira, freezer e despensa, reduzir desperdício, aproveitar ingredientes antes do vencimento e planejar compras. Sua principal característica é a objetividade e a confiabilidade. Você é prático, direto e nunca inventa dados sobre o estoque, preços ou receitas que não vieram das tools. Seu objetivo é ser um parceiro confiável para o usuário economizar dinheiro e evitar desperdício de comida.
 """
 
 def contexto_temporal() -> str:
-    """
-    Montado a cada chamada, nunca no import: como constante de módulo, um processo
-    de API vivo continuava dizendo "hoje" com a data em que subiu — e "o que vence
-    hoje" é o core do domínio. Por isso `load_prompt` também não pode ser cacheado.
-    """
-
+    """Montado a cada chamada, nunca no import: como constante de módulo, um processo de API vivo continuava dizendo "hoje" com a data em que subiu — e "o que vence hoje" é o core do domínio. Por isso `load_prompt` também não pode ser cacheado."""
     agora = datetime.now(UTC).astimezone()
 
     return f"""
 ### CONTEXTO TEMPORAL
 Data e hora atual (fornecida pelo sistema): {agora.strftime("%A, %d de %B de %Y — %H:%M:%S %Z")}
-Use esta referência para interpretar "hoje", "ontem", "essa semana",
-calcular datas relativas e preencher timestamps nas operações.
+Use esta referência para interpretar "hoje", "ontem", "essa semana", calcular datas relativas e preencher timestamps nas operações.
 """
 
 OBRIGATORIEDADE_TOOLS = """
 ### OBRIGATORIEDADE DE TOOLS
-- TODA resposta que contenha produtos, quantidades, preços, datas de validade ou receitas DEVE
-  ser precedida de uma chamada de tool nesta mesma execução.
-- NUNCA use valores do histórico de conversa como fonte de dados — histórico
-  serve apenas para entender o contexto da pergunta.
-- Se a tool retornar erro ou nenhum resultado, informe isso no campo "resposta".
-  Jamais invente um produto, preço ou data substituta.
+- TODA resposta que contenha produtos, quantidades, preços, datas de validade ou receitas DEVE ser precedida de uma chamada de tool nesta mesma execução.
+- NUNCA use valores do histórico de conversa como fonte de dados — histórico serve apenas para entender o contexto da pergunta.
+- Se a tool retornar erro ou nenhum resultado, informe isso no campo "resposta". Jamais invente um produto, preço ou data substituta.
 """
+
+CONTEXTO_FACTOS = """
+### CONTEXTO DE FATOS ESTRUTURADOS
+Estes são fatos sobre o usuário extraídos da conversa (alergias, preferências, restrições alimentares e hábitos). Use estas informações para personalizar a resposta, filtrar opções e evitar sugerir itens que conflitam com o perfil do usuário.
+
+- Alergias: {alergias}
+- Preferências: {preferencias}
+- Restrições: {restricoes}
+- Hábitos: {habitos}
+
+Se algum campo estiver vazio, ignore-o e não inclua na resposta. Não invente ou alucine fatos que não estejam nesta lista.
+"""
+
+def _formatar_fatos(fatos: Fatos) -> str:
+    """Formata objeto Fatos em texto para inclusão no prompt."""
+    alergias = ", ".join(fatos.alergias) if fatos.alergias else "nenhuma"
+    preferencias = ", ".join(fatos.preferencias) if fatos.preferencias else "nenhuma"
+    restricoes = ", ".join(fatos.restricoes) if fatos.restricoes else "nenhuma"
+    habitos = ", ".join(fatos.habitos) if fatos.habitos else "nenhuma"
+    return CONTEXTO_FACTOS.format(
+        alergias=alergias,
+        preferencias=preferencias,
+        restricoes=restricoes,
+        habitos=habitos,
+    )
 
 
 def _parse_frontmatter(texto: str) -> tuple[dict[str, str], str]:
@@ -110,9 +123,13 @@ def load_sections(nome_arquivo: str) -> dict[str, str]:
     return secoes
 
 
-def load_prompt(nome_arquivo: str) -> str:
+def load_prompt(nome_arquivo: str, fatos: Fatos | None = None) -> str:
     """System prompt completo: persona + contexto temporal +
-    [obrigatoriedade de tools, se o frontmatter marcar] + papel + [shots]."""
+    [obrigatoriedade de tools, se o frontmatter marcar] + papel + [shots].
+
+    Se `fatos` for fornecido, inclui uma seção CONTEXTO DE FATOS estruturados
+    no final do prompt para que o LLM possa usar essas informações na resposta.
+    """
 
     metadados, secoes = _ler(nome_arquivo + ".md")
 
@@ -125,6 +142,9 @@ def load_prompt(nome_arquivo: str) -> str:
 
     if secoes.get("shots"):
         partes.append(secoes["shots"])
+
+    if fatos is not None:
+        partes.append(_formatar_fatos(fatos))
 
     return "\n\n".join(partes)
 

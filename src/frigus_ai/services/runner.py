@@ -1,14 +1,34 @@
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
+from typing import cast, get_args
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from frigus_ai.graph.builder import fluxo_agentes
-from frigus_ai.graph.state import EntradaGrafo
+from frigus_ai.graph.names import NodeLiteral
+from frigus_ai.graph.state import EntradaGrafo, RouteLiteral
 from frigus_ai.infra.postgres.context import session_context
+from frigus_ai.logging import Logging
 from frigus_ai.observability.metrics import GRAPH_DURATION, GRAPH_RUNS
 from frigus_ai.observability.metrics_callback import PrometheusCallbackHandler
+from frigus_ai.schemas.execution import (
+    AnswerReady,
+    ExecutionEvent,
+    NodeFinished,
+    NodeStarted,
+    RouteSelected,
+    RunFailed,
+    RunFinished,
+    RunStarted,
+)
+
+logger = Logging.get_logger(__name__)
+
+# Nomes registrados via StateGraph.add_node() — event["name"] do astream_events bate com essa
+# string exata pro evento de início/fim do node em si (metadata["langgraph_node"] é herdado por
+# todo runnable filho, event["name"] não é: por isso filtramos por name, não por metadata).
+_NOMES_DE_NODE = frozenset(get_args(NodeLiteral))
 
 
 def _extrair_resposta(estado: Mapping[str, object]) -> str | None:
@@ -26,7 +46,9 @@ def _extrair_resposta(estado: Mapping[str, object]) -> str | None:
     return None
 
 
-def _estado_inicial(conteudo: str, stock_id: int | None, perfil_usuario: str) -> EntradaGrafo:
+def _estado_inicial(
+    conteudo: str, stock_id: int | None, imagem_b64: str | None = None
+) -> EntradaGrafo:
     """
     Só os campos de `EntradaGrafo`: o resto do `Estado` é interno do grafo. `agentes_chamados`
     parte vazio pelo reducer e `tentativas_juiz` é zerado pelo roteador a cada turno.
@@ -34,11 +56,14 @@ def _estado_inicial(conteudo: str, stock_id: int | None, perfil_usuario: str) ->
 
     mensagens: list[AnyMessage] = [HumanMessage(content=conteudo)]
 
-    return EntradaGrafo(
+    entrada = EntradaGrafo(
         messages=mensagens,
-        perfil_usuario=perfil_usuario,
         stock_id=stock_id,
     )
+    if imagem_b64:
+        entrada["imagem_b64"] = imagem_b64
+
+    return entrada
 
 
 def _config(session_id: str, user_id: int) -> RunnableConfig:
@@ -57,7 +82,7 @@ async def executar(
     session_id: str,
     user_id: int,
     stock_id: int | None,
-    perfil_usuario: str,
+    imagem_b64: str | None = None,
 ) -> str | None:
     inicio = time.perf_counter()
     outcome = "error"
@@ -68,7 +93,7 @@ async def executar(
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
             estado_final = await grafo.ainvoke(
-                _estado_inicial(conteudo, stock_id, perfil_usuario),
+                _estado_inicial(conteudo, stock_id, imagem_b64),
                 config=_config(session_id, user_id),
             )
 
@@ -84,34 +109,65 @@ async def executar_stream(
     session_id: str,
     user_id: int,
     stock_id: int | None,
-    perfil_usuario: str,
-) -> AsyncIterator[tuple[str, str]]:
+    imagem_b64: str | None = None,
+) -> AsyncIterator[ExecutionEvent]:
     """
-    Emite `("no", nome_do_no)` a cada nó concluído e `("resposta", texto)` no fim.
+    Mesma execução de `executar()`, mas emite a timeline de nodes em tempo real via
+    `astream_events` — consumida pelo painel de grafo do frontend.
 
-    É progresso por nó, não token a token: quem produz o texto final é o
-    `guardrail_saida`, que reescreve a resposta inteira depois que o LLM termina
-    (`agents/nodes/guardrail/saida.py`) — não há token final pra streamar antes disso.
+    Sem streaming de token da resposta final: quem responde (`guardrail_saida`, ou o
+    roteador/guardrail de entrada respondendo direto em `Route.FIM`) só está seguro
+    de mostrar depois de processar o texto inteiro, não em fragmentos — daí
+    `AnswerReady` chegar pronta, não como uma sequência de deltas.
     """
 
-    resposta = None
+    yield RunStarted()
+
     inicio = time.perf_counter()
     outcome = "error"
+    resposta_final: str | None = None
 
     try:
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
-            async for update in grafo.astream(
-                _estado_inicial(conteudo, stock_id, perfil_usuario),
+
+            async for event in grafo.astream_events(
+                _estado_inicial(conteudo, stock_id, imagem_b64),
                 config=_config(session_id, user_id),
-                stream_mode="updates",
+                version="v2",
             ):
-                for no, delta in update.items():
-                    yield "no", no
-                    resposta = _extrair_resposta(delta or {}) or resposta
+                nome = event.get("name")
+                if nome not in _NOMES_DE_NODE:
+                    continue
+
+                tipo = event.get("event")
+
+                if tipo == "on_chain_start":
+                    yield NodeStarted(node=cast(NodeLiteral, nome))
+                    continue
+
+                if tipo != "on_chain_end":
+                    continue
+
+                output = event.get("data", {}).get("output")
+
+                if isinstance(output, dict):
+                    if (rota := output.get("rota")) is not None:
+                        yield RouteSelected(route=cast(RouteLiteral, rota))
+
+                    resposta_final = _extrair_resposta(output) or resposta_final
+
+                yield NodeFinished(node=cast(NodeLiteral, nome))
 
         outcome = "success"
-        yield "resposta", resposta or "Sem resposta."
+
+        if resposta_final is not None:
+            yield AnswerReady(content=resposta_final)
+
+        yield RunFinished()
+    except Exception:
+        logger.exception(f"Falha durante streaming da execução do agente | session_id={session_id}")
+        yield RunFailed(message="Não foi possível processar a mensagem.")
     finally:
         GRAPH_RUNS.labels(outcome=outcome).inc()
         GRAPH_DURATION.labels(outcome=outcome).observe(time.perf_counter() - inicio)

@@ -1,8 +1,8 @@
 """
 Persistência crua da coleção `agent_chats`: histórico de mensagens e resumo de sessão
 no Mongo. Sem decisão de negócio nem chamada de LLM — isso fica em
-`services/chat_service.py` (que orquestra resumo + atualização de perfil ao encerrar
-a sessão).
+`services/chat_service.py` (que atualiza o resumo periodicamente durante a conversa,
+ver `_talvez_atualizar_memoria`).
 """
 
 import asyncio
@@ -118,6 +118,15 @@ class ChatRepository:
     def _buscar_documento_completo(self, session_id: str, user_id: int) -> ChatDocument | None:
         return self._collection().find_one({"session_id": session_id, "user_id": user_id})
 
+    def _contar_mensagens(self, session_id: str, user_id: int) -> int:
+        # `$size` via aggregate, não `find_one` + `len(doc["messages"])`: não transfere
+        # o array inteiro (que só cresce) só pra saber o tamanho.
+        resultado = list(self._collection().aggregate([
+            {"$match": {"session_id": session_id, "user_id": user_id}},
+            {"$project": {"total": {"$size": "$messages"}}},
+        ]))
+        return resultado[0]["total"] if resultado else 0
+
     async def criar_chat(self, session_id: str, user_id: int) -> None:
         await asyncio.to_thread(self._criar_documento, session_id, user_id)
 
@@ -148,6 +157,9 @@ class ChatRepository:
 
     async def salvar_resumo(self, resumo: str, session_id: str, user_id: int) -> None:
         await asyncio.to_thread(self._inserir_resumo, resumo, session_id, user_id)
+
+    async def contar_mensagens(self, session_id: str, user_id: int) -> int:
+        return await asyncio.to_thread(self._contar_mensagens, session_id, user_id)
 
 
 _chat_repository = ChatRepository()
@@ -238,3 +250,7 @@ async def buscar_documento_completo(session_id: str, user_id: int) -> ChatDocume
 
 async def salvar_resumo(resumo: str, session_id: str, user_id: int) -> None:
     await _chat_repository.salvar_resumo(resumo, session_id, user_id)
+
+
+async def contar_mensagens(session_id: str, user_id: int) -> int:
+    return await _chat_repository.contar_mensagens(session_id, user_id)

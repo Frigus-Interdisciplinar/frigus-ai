@@ -72,14 +72,13 @@ async def send_message(
 async def stream_message(
     chat_id: str, payload: MessageCreate, user_id: DonoComLimiteDep
 ) -> AsyncIterable[ServerSentEvent]:
-    """Um evento `no` por agente concluído, um evento `resposta` no fim."""
+    """Timeline de execução do agente (`schemas/execution.py`) — um evento por
+    node iniciado/concluído, rota escolhida e resposta final."""
 
     stock_id = await chat_service.iniciar_sessao(user_id)
 
-    async for tipo, valor in chat_service.stream_message(
-        payload.content, chat_id, user_id, stock_id
-    ):
-        yield ServerSentEvent(data={tipo: valor}, event=tipo)
+    async for evento in chat_service.stream_message(payload.content, chat_id, user_id, stock_id):
+        yield ServerSentEvent(data=evento, event=evento.type)
 
 
 @router.get("/{chat_id}/messages")
@@ -112,8 +111,9 @@ async def close_chat(
     chat_id: str, user_id: CurrentUserDep, background_tasks: BackgroundTasks
 ) -> None:
     """
-    202 porque `encerrar_sessao` dispara duas chamadas de LLM (resumo da conversa +
-    atualização do perfil) que ninguém precisa esperar — vão pro background.
+    202 porque `encerrar_sessao` pode disparar chamada de LLM (fatos/resumo do rabo
+    de mensagens que o ciclo periódico ainda não cobriu, ver `_talvez_atualizar_memoria`)
+    que ninguém precisa esperar — vai pro background.
 
     Ownership checado aqui, e não só dentro de `encerrar_sessao`: sem isso a rota
     devolve 202 mesmo pra chat de outro usuário — o valor não vaza (a busca é
