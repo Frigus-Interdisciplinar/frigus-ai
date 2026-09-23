@@ -4,6 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 
+from frigus_ai.graph.state import InventarioGeladeira
 from frigus_ai.models import API_KEYS, BUILDERS, PROVIDER_MAP, Model
 
 
@@ -39,6 +40,8 @@ def build_llm(
     return BUILDERS[provider](**kwargs)
 
 
+_llm_visao_base  = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.1)
+llm_visao        = _llm_visao_base.with_structured_output(InventarioGeladeira) if _llm_visao_base else None
 llm_gemini       = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.7, top_p=0.95)
 llm_groq         = build_llm(model=Model.LLAMA_3_3_VERSATILE, temperature=0.7)
 llm_rapido       = build_llm(model=Model.LLAMA_3_3_VERSATILE, temperature=0.0)
@@ -56,6 +59,7 @@ __all__ = [
     "llm_juiz",
     "llm_openrouter",
     "llm_rapido",
+    "llm_visao",
 ]
 
 

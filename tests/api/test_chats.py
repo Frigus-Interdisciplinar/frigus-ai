@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from frigus_ai.api.app import app
 from frigus_ai.api.routes import chats as rotas
 from frigus_ai.exceptions import ChatDeOutroUsuario, LimiteDeMensagensExcedido
+from frigus_ai.schemas.execution import AnswerReady, NodeStarted
 from frigus_ai.services.user_service import user_service
 
 CHAT_ID = "chat-de-teste"
@@ -151,9 +152,9 @@ def test_list_chats_devolve_schema_tipado(cliente, monkeypatch):
 
 def test_stream_devolve_eventos_por_no_e_resposta(cliente, monkeypatch):
     async def _stream(conteudo, chat_id, user_id, stock_id):
-        yield "no", "roteador_node"
-        yield "no", "estoque_node"
-        yield "resposta", f"eco: {conteudo}"
+        yield NodeStarted(node="roteador_node")
+        yield NodeStarted(node="estoque_node")
+        yield AnswerReady(content=f"eco: {conteudo}")
 
     monkeypatch.setattr(rotas.chat_service, "stream_message", _stream)
 
@@ -164,8 +165,8 @@ def test_stream_devolve_eventos_por_no_e_resposta(cliente, monkeypatch):
         assert r.headers["content-type"].startswith("text/event-stream")
         corpo = "".join(r.iter_text())
 
-    assert corpo.count("event: no") == 2
-    assert "event: resposta" in corpo
+    assert corpo.count("event: node_started") == 2
+    assert "event: answer_ready" in corpo
     assert "eco: oi" in corpo
 
 

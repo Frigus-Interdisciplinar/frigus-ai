@@ -4,8 +4,10 @@ from typing import Annotated, Literal, NotRequired, TypedDict, get_args
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
+from pydantic import BaseModel, Field
 
 from frigus_ai.graph.names import NodeLiteral
+from frigus_ai.graph.tools.estoque.schemas import Category, StoragePlace
 from frigus_ai.privacy import MapaPII
 
 RouteLiteral = Literal[
@@ -40,8 +42,8 @@ class Route:
 class EntradaGrafo(MessagesState):
     """Único formato aceito ao iniciar um turno — impede injetar campos internos do estado."""
 
-    perfil_usuario: NotRequired[str]
     stock_id:       NotRequired[int | None]
+    imagem_b64:     NotRequired[str]
 
 
 class Estado(MessagesState):
@@ -52,8 +54,8 @@ class Estado(MessagesState):
     pergunta_original:     NotRequired[str]
     mapa_pii:              NotRequired[MapaPII]
     mensagem_bloqueada:    NotRequired[str | None]
-    perfil_usuario:        NotRequired[str]
     stock_id:              NotRequired[int | None]
+    imagem_b64:            NotRequired[str]
 
     # Juiz (LLM-as-judge)
     tentativas_juiz:    NotRequired[int]
@@ -63,7 +65,7 @@ class Estado(MessagesState):
 
 
 class SaidaGrafo(MessagesState):
-    """Único formato devolvido ao chamador — não expõe mapa_pii, perfil, rota etc."""
+    """Único formato devolvido ao chamador — não expõe mapa_pii, rota etc."""
 
 
 class RouterUpdate(TypedDict):
@@ -117,6 +119,26 @@ class GuardrailSaidaUpdate(TypedDict):
     messages:         list[AnyMessage]
 
 
+class ItemIdentificado(BaseModel):
+    """Um item que a Visão (`graph/nodes/visao.py`) reconheceu numa foto. `category`/
+    `storage_place` reaproveitam os `Literal` de `graph/tools/estoque/schemas.py` —
+    os MESMOS valores que `POST /stock/items` aceita. Como o `with_structured_output`
+    vira function-calling/JSON-schema pro provider, o modelo fica proibido de emitir
+    um valor fora da lista (não é checagem depois, é restrição na própria geração)."""
+
+    product_name: str = Field(description="Nome do produto (ex.: 'Leite integral').")
+    quantity: float = Field(description="Quantidade estimada (ex.: 3, 0.5, 500).")
+    unit: str = Field(description="Unidade da quantidade (ex.: 'un', 'kg', 'litro', 'g').")
+    category: Category
+    storage_place: StoragePlace
+    expiring_soon: bool = Field(default=False, description="Parece perto do vencimento pela aparência.")
+
+
+class InventarioGeladeira(BaseModel):
+    items: list[ItemIdentificado]
+    confidence: float = Field(description="Confiança geral da identificação, de 0.0 a 1.0.")
+
+
 # Contrato dos nodes: `Estado -> Awaitable[R]`, R sendo o Update específico de cada node
 # (RouterUpdate, EspecialistaUpdate, ...). Não é Protocol de propósito — os nodes de hoje são
 # funções puras, sem atributo/método extra que justifique uma classe; Protocol só valeria a pena
@@ -136,6 +158,8 @@ __all__ = [
     "FaqUpdate",
     "GuardrailEntradaUpdate",
     "GuardrailSaidaUpdate",
+    "InventarioGeladeira",
+    "ItemIdentificado",
     "JuizUpdate",
     "OrquestradorUpdate",
     "Route",

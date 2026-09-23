@@ -1,15 +1,10 @@
 import hashlib
 
 API_KEY_TTL_TIME = 3600 * 24 * 30
-PROFILE_TTL_TIME = 3600
 CHAT_TTL_TIME = 60
 SESSION_TTL_TIME = 3600 * 24
 GUARDRAIL_TTL_TIME = 3600 * 24
 N_MESSAGES_ACCEPTED = 10
-
-
-def _chave_perfil(user_id: int) -> str:
-    return f"user:{user_id}:profile"
 
 
 def _chave_mensagem(user_id: int) -> str:

@@ -43,7 +43,7 @@ async def _rodar_cenario(cenario: Cenario, user_id: int, stock_id: int | None) -
     inicio = time.perf_counter()
 
     try:
-        resposta = await runner.executar(cenario["pergunta"], session_id, user_id, stock_id, "")
+        resposta = await runner.executar(cenario["pergunta"], session_id, user_id, stock_id)
         erro = None
     except Exception as e:
         resposta, erro = None, str(e)

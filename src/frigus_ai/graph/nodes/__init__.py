@@ -8,6 +8,7 @@ from .juiz import no_juiz
 from .orquestrador import no_orquestrador
 from .receitas import no_receitas
 from .router import no_roteador
+from .visao import no_visao
 
 __all__ = [
     "no_compras",
@@ -20,4 +21,5 @@ __all__ = [
     "no_orquestrador",
     "no_receitas",
     "no_roteador",
+    "no_visao",
 ]

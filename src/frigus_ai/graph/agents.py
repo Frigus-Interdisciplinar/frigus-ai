@@ -13,6 +13,8 @@ from frigus_ai.graph.tools import (
     FINANCEIRO_TOOLS,
     RECEITAS_TOOLS,
 )
+from frigus_ai.infra.postgres.context import current_user_id
+from frigus_ai.repositories import fatos_repository
 
 
 def _montar(nome: str, model, tools: list | None = None):
@@ -25,7 +27,14 @@ def _montar(nome: str, model, tools: list | None = None):
 
     @dynamic_prompt
     def _prompt(request) -> str:
-        return load_prompt(nome)
+        # Middleware síncrono: repository direto (o `user_service` é async). user_id vem do
+        # `session_context` do runner, o mesmo que as tools usam. Fatos são opcionais —
+        # sem sessão ou com Mongo fora, o agente segue sem personalização.
+        try:
+            fatos = fatos_repository.buscar_fatos(current_user_id())
+        except Exception:
+            fatos = None
+        return load_prompt(nome, fatos=fatos)
 
     return create_agent(model=model, tools=tools or [], middleware=[_prompt])
 

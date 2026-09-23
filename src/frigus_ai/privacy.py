@@ -1,11 +1,11 @@
 """
 Anonimização de PII — módulo neutro, sem dependência de nenhuma camada.
 
-Vive aqui, e não em `graph/nodes/guardrail/`, porque tem consumidores em três camadas
-diferentes: o guardrail (entrada e saída), a persistência de mensagens em
-`repositories/chat_repository.py` e a redação de perfil em `services/user_service.py`.
-Enquanto morava dentro do guardrail, repository e service importavam de `graph/nodes/` —
-inversão de dependência (a persistência não deveria saber que existe um grafo).
+Vive aqui, e não em `graph/nodes/guardrail/`, porque tem consumidores em duas camadas
+diferentes: o guardrail (entrada e saída) e a persistência de mensagens em
+`repositories/chat_repository.py`. Enquanto morava dentro do guardrail, o repository
+importava de `graph/nodes/` — inversão de dependência (a persistência não deveria
+saber que existe um grafo).
 
 O que é *detecção de ataque* (jailbreak, pedido de dado interno) continua em
 `graph/nodes/guardrail/padroes.py`: aquilo só o guardrail usa.
