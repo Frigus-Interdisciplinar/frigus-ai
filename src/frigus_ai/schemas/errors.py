@@ -10,6 +10,11 @@ class ErrorCode(StrEnum):
     FALHA_NO_AGENTE = "falha_no_agente"
     ERRO_INTERNO = "erro_interno"
     ERRO_NO_CHAT = "erro_no_chat"
+    ESTOQUE_ITEM_NAO_ENCONTRADO = "estoque_item_nao_encontrado"
+    QUANTIDADE_NEGATIVA = "quantidade_negativa"
+    COMPRA_ITEM_NAO_ENCONTRADO = "compra_item_nao_encontrado"
+    PRODUTO_NAO_CADASTRADO = "produto_nao_cadastrado"
+    ESTOQUE_NAO_DEFINIDO = "estoque_nao_definido"
 
 
 class ErrorResponse(BaseModel):

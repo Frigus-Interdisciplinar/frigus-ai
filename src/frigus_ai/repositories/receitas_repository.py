@@ -20,6 +20,12 @@ from frigus_ai.infra.postgres.models import (
 )
 
 
+class RecipeSummary(TypedDict):
+    recipe_id: int
+    name: str
+    description: str | None
+
+
 class RecipeSuggestionInfo(TypedDict):
     recipe_id: int
     name: str
@@ -45,6 +51,19 @@ class RecipeDetails(TypedDict):
 
 
 class _ReceitasPostgresRepo(PostgresRepo):
+    @transacional
+    def listar_receitas(self, s: Session, limit: int) -> list[RecipeSummary]:
+        stmt = (
+            select(Recipe.id, Recipe.name, Recipe.description)
+            .where(Recipe.active.is_(True))
+            .order_by(Recipe.name)
+            .limit(limit)
+        )
+        return [
+            {"recipe_id": recipe_id, "name": name, "description": description}
+            for recipe_id, name, description in s.execute(stmt)
+        ]
+
     @transacional
     def match_recipes_to_stock(self, s: Session, stock_id: int, limit: int) -> list[RecipeSuggestionInfo]:
         """
@@ -149,9 +168,24 @@ class _ReceitasPostgresRepo(PostgresRepo):
 _receitas = _ReceitasPostgresRepo()
 
 
+def listar_receitas(limit: int) -> list[RecipeSummary]:
+    return _receitas.listar_receitas(limit)
+
+
 def match_recipes_to_stock(stock_id: int, limit: int) -> list[RecipeSuggestionInfo]:
     return _receitas.match_recipes_to_stock(stock_id, limit)
 
 
 def get_recipe_details(recipe_id: int) -> RecipeDetails | None:
     return _receitas.get_recipe_details(recipe_id)
+
+
+__all__ = [
+    "IngredienteInfo",
+    "RecipeDetails",
+    "RecipeSuggestionInfo",
+    "RecipeSummary",
+    "get_recipe_details",
+    "listar_receitas",
+    "match_recipes_to_stock",
+]
