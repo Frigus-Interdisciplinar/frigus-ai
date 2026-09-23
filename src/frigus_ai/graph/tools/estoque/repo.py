@@ -24,7 +24,6 @@ logger = Logging.get_logger("pg_estoque")
 
 
 class EstoqueRepo(ToolSet):
-    @Logging.log_tool
     def add_stock_product(
         self,
         product_name: str,
@@ -43,26 +42,18 @@ class EstoqueRepo(ToolSet):
         em vez de criar um novo registro (evita duplicidade).
         """
 
-        try:
-            validade = date.fromisoformat(expire_date)
-            dados = ProdutoNovo(
-                product_name=product_name,
-                category=category,
-                storage_place=storage_place,
-                quantity=quantity,
-                minimal_quantity=minimal_quantity,
-                expire_date=validade,
-                product_status=compute_product_status(validade),
-                unit_price=unit_price,
-            )
-            item_id, quantidade = estoque_repository.adicionar_produto(current_stock_id(), dados)
-        except Exception as e:
-            logger.error("INSERT ERRO | %s", e)
-            return Response.error(e)
-
-        logger.info(
-            "INSERT OK | stock_product_id=%s product=%s quantity=%s", item_id, product_name, quantidade
+        validade = date.fromisoformat(expire_date)
+        dados = ProdutoNovo(
+            product_name=product_name,
+            category=category,
+            storage_place=storage_place,
+            quantity=quantity,
+            minimal_quantity=minimal_quantity,
+            expire_date=validade,
+            product_status=compute_product_status(validade),
+            unit_price=unit_price,
         )
+        item_id, quantidade = estoque_repository.adicionar_produto(current_stock_id(), dados)
 
         return Response.ok(
             stock_product_id=item_id,
@@ -70,7 +61,6 @@ class EstoqueRepo(ToolSet):
             product_status=dados["product_status"],
         )
 
-    @Logging.log_tool
     def query_stock(
         self,
         storage_place: str | None = None,
@@ -96,17 +86,9 @@ class EstoqueRepo(ToolSet):
             product_name=product_name,
         )
 
-        try:
-            itens = estoque_repository.consultar_estoque(current_stock_id(), filtros)
-        except Exception as e:
-            logger.error("QUERY ERRO | query_stock | %s", e)
-            return Response.error(e)
-
-        logger.info("QUERY OK | query_stock | total=%s", len(itens))
-
+        itens = estoque_repository.consultar_estoque(current_stock_id(), filtros)
         return Response.ok(total_records=len(itens), itens=itens)
 
-    @Logging.log_tool
     def update_stock_quantity(
         self,
         stock_product_id: int | None = None,
@@ -126,20 +108,12 @@ class EstoqueRepo(ToolSet):
         if delta is None and novo_valor is None:
             return Response.error("Informe 'delta' ou 'novo_valor'.")
 
-        try:
-            item_id, nova_quantidade = estoque_repository.atualizar_quantidade(
-                current_stock_id(), current_user_id(),
-                stock_product_id, product_name, delta, novo_valor,
-            )
-        except Exception as e:
-            logger.error("UPDATE ERRO | stock_product_id=%s | %s", stock_product_id, e)
-            return Response.error(e)
-
-        logger.info("UPDATE OK | stock_product_id=%s nova_quantidade=%s", item_id, nova_quantidade)
-
+        item_id, nova_quantidade = estoque_repository.atualizar_quantidade(
+            current_stock_id(), current_user_id(),
+            stock_product_id, product_name, delta, novo_valor,
+        )
         return Response.ok(stock_product_id=item_id, quantity=nova_quantidade)
 
-    @Logging.log_tool
     def discard_product(
         self,
         stock_product_id: int | None = None,
@@ -153,16 +127,8 @@ class EstoqueRepo(ToolSet):
         pelo agente financeiro para calcular o valor de alimentos desperdiçados.
         """
 
-        try:
-            descarte = estoque_repository.descartar(
-                current_stock_id(), current_user_id(), stock_product_id, product_name, reason
-            )
-        except Exception as e:
-            logger.error("DISCARD ERRO | stock_product_id=%s | %s", stock_product_id, e)
-            return Response.error(e)
-
-        logger.info(
-            "DISCARD OK | stock_product_id=%s reason=%s", descarte["stock_product_id"], reason
+        descarte = estoque_repository.descartar(
+            current_stock_id(), current_user_id(), stock_product_id, product_name, reason
         )
 
         # Estatística do ranking, não a fonte de verdade do desperdício (essa é o Postgres

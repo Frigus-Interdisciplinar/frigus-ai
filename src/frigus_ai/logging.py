@@ -30,6 +30,37 @@ LEVEL_COLORS: dict[str, Colors] = {
 }
 
 
+class LogType(StrEnum):
+    """Categoria da tool, só pra organizar o log — mesma ideia dos prefixos manuais
+    que cada `repo.py` inventava na mão (`"QUERY OK | ..."`, `"INSERT OK | ..."` etc),
+    só que inferida do nome do método (`_tipo_do_metodo`) em vez de escrita repetida."""
+
+    QUERY    = "QUERY"
+    MATCH    = "MATCH"
+    INSERT   = "INSERT"
+    UPDATE   = "UPDATE"
+    DELETE   = "DELETE"
+    GENERATE = "GENERATE"
+    TOOL     = "TOOL"  # fallback quando o nome não bate com nenhum prefixo conhecido
+
+
+_PREFIXOS_POR_TIPO: dict[LogType, list[str]] = {
+    LogType.QUERY:    ["get", "list", "query", "consultar", "buscar", "faq"],
+    LogType.MATCH:    ["match", "find"],
+    LogType.INSERT:   ["add", "create", "criar", "adicionar", "definir"],
+    LogType.UPDATE:   ["update", "atualizar", "mark", "marcar"],
+    LogType.DELETE:   ["discard", "descartar", "remover", "remove"],
+    LogType.GENERATE: ["gerar", "generate"],
+}
+
+
+def _tipo_do_metodo(nome: str) -> LogType:
+    for tipo, prefixos in _PREFIXOS_POR_TIPO.items():
+        if nome.startswith(tuple(prefixos)):
+            return tipo
+    return LogType.TOOL
+
+
 class Logging:
     """Setup de logger colorido + decorators de log das tools, tudo num lugar só."""
 
@@ -63,17 +94,21 @@ class Logging:
         def decorator(func):
             logger = Logging.get_logger("pg_tools")
             log_rotina = getattr(logger, DebugLevel(level).value.lower())
+            tipo = _tipo_do_metodo(func.__name__)
 
             def registrar_resultado(result, elapsed):
                 status = result.get("status", "unknown") if isinstance(result, dict) else "unknown"
                 if status == "error":
-                    logger.error("ERRO     | %s | elapsed=%.3fs", func.__name__, elapsed)
+                    mensagem = result.get("message", "") if isinstance(result, dict) else ""
+                    logger.error(
+                        "%-8s ERRO     | %s | elapsed=%.3fs | %s", tipo, func.__name__, elapsed, mensagem
+                    )
                 else:
-                    log_rotina("OK       | %s | elapsed=%.3fs", func.__name__, elapsed)
+                    log_rotina("%-8s OK       | %s | elapsed=%.3fs", tipo, func.__name__, elapsed)
 
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
-                log_rotina("CHAMANDO | %s", func.__name__)
+                log_rotina("%-8s CHAMANDO | %s", tipo, func.__name__)
 
                 start = time.perf_counter()
                 result = await func(*args, **kwargs)
@@ -83,7 +118,7 @@ class Logging:
 
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
-                log_rotina("CHAMANDO | %s", func.__name__)
+                log_rotina("%-8s CHAMANDO | %s", tipo, func.__name__)
 
                 start = time.perf_counter()
                 result = func(*args, **kwargs)
@@ -96,13 +131,17 @@ class Logging:
         return decorator(func) if func is not None else decorator
 
     @staticmethod
-    def log_classe(cls_alvo=None, *, level: DebugLevel = DebugLevel.INFO):
+    def log_classe(cls_alvo=None, *, level: DebugLevel = DebugLevel.INFO, ignore: frozenset[str] = frozenset()):
         """Aplica `log_tool` em todo método público da classe. Usável como
-        `@log_classe` ou `@log_classe(level=DebugLevel.DEBUG)`."""
+        `@log_classe` ou `@log_classe(level=DebugLevel.DEBUG)`.
+
+        `ignore` tira métodos que não são "chamadas de tool" de verdade — em
+        `ToolSet`, por exemplo, `as_tools()` só monta a lista pro LangChain, não
+        deveria logar "CHAMANDO | as_tools" toda vez que o grafo monta o agente."""
 
         def decorator(cls_alvo):
             for nome, atributo in list(vars(cls_alvo).items()):
-                if nome.startswith("_") or not inspect.isfunction(atributo):
+                if nome.startswith("_") or nome in ignore or not inspect.isfunction(atributo):
                     continue
                 setattr(cls_alvo, nome, Logging.log_tool(atributo, level=level))
             return cls_alvo
@@ -110,4 +149,4 @@ class Logging:
         return decorator(cls_alvo) if cls_alvo is not None else decorator
 
 
-__all__ = ["DebugLevel", "Logging"]
+__all__ = ["DebugLevel", "LogType", "Logging"]

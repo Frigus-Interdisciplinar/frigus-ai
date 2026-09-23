@@ -4,7 +4,7 @@ from frigus_ai.infra.base import Connector
 from frigus_ai.settings import settings
 
 
-class SpoonacularConnector(Connector):
+class SpoonacularConnector(Connector[httpx.AsyncClient]):
     """
     Cliente HTTP da API da Spoonacular. Implementa o contrato `Connector`
     (`connect()`), o que dá logging automático (CHAMANDO/OK/ERRO por método)
@@ -38,6 +38,4 @@ class SpoonacularConnector(Connector):
 
 spoonacular = SpoonacularConnector()
 
-
-async def fechar_client() -> None:
-    await spoonacular.fechar_async()
+__all__ = ["SpoonacularConnector", "spoonacular"]

@@ -7,14 +7,10 @@ from frigus_ai.graph.tools.receitas.schemas import (
 )
 from frigus_ai.graph.tools.response import Response
 from frigus_ai.infra.postgres.context import current_stock_id
-from frigus_ai.logging import Logging
 from frigus_ai.repositories import receitas_repository
-
-logger = Logging.get_logger("pg_receitas")
 
 
 class ReceitasRepo(ToolSet):
-    @Logging.log_tool
     def match_recipes_to_stock(self, limit: int = 5) -> dict:
         """
         Cruza as receitas cadastradas com o estoque atual do usuário e retorna as
@@ -24,31 +20,18 @@ class ReceitasRepo(ToolSet):
         a lista ranqueada por (ingredientes disponíveis / total) e proximidade de vencimento.
         """
 
-        try:
-            sugestoes = receitas_repository.match_recipes_to_stock(current_stock_id(), limit)
-        except Exception as e:
-            logger.error("MATCH ERRO | match_recipes_to_stock | %s", e)
-            return Response.error(e)
-
-        logger.info("MATCH OK | match_recipes_to_stock | total=%s", len(sugestoes))
+        sugestoes = receitas_repository.match_recipes_to_stock(current_stock_id(), limit)
         return Response.ok(total_records=len(sugestoes), sugestoes=sugestoes)
 
-    @Logging.log_tool
     def get_recipe_details(self, recipe_id: int) -> dict:
         """
         Retorna o modo de preparo e a lista de ingredientes de uma receita específica.
         """
 
-        try:
-            detalhes = receitas_repository.get_recipe_details(recipe_id)
-        except Exception as e:
-            logger.error("QUERY ERRO | get_recipe_details | %s", e)
-            return Response.error(e)
-
+        detalhes = receitas_repository.get_recipe_details(recipe_id)
         if detalhes is None:
             return Response.error(f"Receita {recipe_id} não encontrada.")
 
-        logger.info("QUERY OK | get_recipe_details | recipe_id=%s", recipe_id)
         return Response.ok(**detalhes)
 
     def as_tools(self) -> list[BaseTool]:
