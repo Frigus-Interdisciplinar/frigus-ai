@@ -1,0 +1,69 @@
+/**
+ * Paleta do design system do Frigus (globals.css) — mesma fonte que `tui/app.tcss`
+ * usa pro terminal, aqui portada pro web. Só a variante DARK existe neste repo (a
+ * TUI usa sempre fundo escuro, então nunca precisou dos tokens claros de
+ * `globals.css`) — por isso não tem `@media (prefers-color-scheme: light)` aqui:
+ * inventar valores claros seria chute, não "puxar o design system". Se o
+ * `globals.css` de verdade tiver uma variante clara, é só adicionar depois.
+ */
+
+:root {
+  --frigus-bg-app: #0b1024;
+  --frigus-bg-surface: #131c55;
+  --frigus-border-subtle: #1f5f97;
+  --frigus-text-main: #f8f8f8;
+  --frigus-text-muted: #c9def9;
+  --frigus-primary: #2552c8;
+  --frigus-light-blue: #70a2d7;
+  --frigus-accent: #f9c968;
+
+  --ul-font-sans: "Work Sans", sans-serif;
+  --ul-font-display: "Syne", sans-serif;
+
+  --ul-radius: 0.5rem;
+  --ul-radius-sm: calc(var(--ul-radius) - 4px);
+  --ul-radius-md: calc(var(--ul-radius) - 2px);
+  --ul-radius-lg: var(--ul-radius);
+  --ul-radius-xl: calc(var(--ul-radius) + 4px);
+
+  --ul-status-success: oklch(0.75 0.15 145);
+  --ul-status-success-bg: oklch(0.25 0.06 145);
+  --ul-status-warning: oklch(0.8 0.13 75);
+  --ul-status-warning-bg: oklch(0.28 0.05 75);
+  --ul-status-error: oklch(0.7 0.18 25);
+  --ul-status-error-bg: oklch(0.28 0.07 25);
+  --ul-status-info: oklch(0.75 0.13 240);
+  --ul-status-info-bg: oklch(0.28 0.05 240);
+
+  /* Fundo/superfície: `Screen` (bg-app) x `Input`/`#logs` (bg-surface, "elevado") na TUI. */
+  --ul-background: var(--frigus-bg-app);
+  --ul-foreground: var(--frigus-text-main);
+  --ul-card: var(--frigus-bg-surface);
+  --ul-card-foreground: var(--frigus-text-main);
+  --ul-popover: var(--frigus-bg-surface);
+  --ul-popover-foreground: var(--frigus-text-main);
+
+  /* Primary = borda padrão do Input na TUI (`#2552C8`, azul "de repouso"). */
+  --ul-primary: var(--frigus-primary);
+  --ul-primary-foreground: var(--frigus-text-main);
+
+  /* Secondary = bolha do usuário na TUI (`--color-frigus-light-blue`). */
+  --ul-secondary: var(--frigus-light-blue);
+  --ul-secondary-foreground: var(--frigus-bg-app);
+
+  /* Muted = painel `#logs` na TUI: fundo bg-surface, texto ice. */
+  --ul-muted: var(--frigus-bg-surface);
+  --ul-muted-foreground: var(--frigus-text-muted);
+
+  /* Accent = bolha do assistente + foco do Input na TUI (`--color-frigus-accent`, dourado). */
+  --ul-accent: var(--frigus-accent);
+  --ul-accent-foreground: var(--frigus-bg-app);
+
+  --ul-destructive: var(--ul-status-error);
+  --ul-border: var(--frigus-border-subtle);
+  --ul-input: var(--frigus-border-subtle);
+  --ul-ring: var(--frigus-accent);
+  --ul-sidebar-background: var(--frigus-bg-app);
+  --ul-sidebar-foreground: var(--frigus-text-main);
+  --ul-sidebar-border: var(--frigus-border-subtle);
+}
