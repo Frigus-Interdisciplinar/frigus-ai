@@ -112,8 +112,6 @@ def _erro(id_req, codigo: int, mensagem: str) -> JsonRpcResponse:
     return JsonRpcResponse(id=id_req, error=JsonRpcError(code=codigo, message=mensagem))
 
 
-# exclude_none: o JSON-RPC 2.0 proíbe `result` e `error` no mesmo objeto — sem isso
-# a resposta de erro sairia com `"result": null` junto.
 @router.post("/a2a", response_model_exclude_none=True)
 async def message_send(payload: JsonRpcRequest, user_id: CurrentUserDep) -> JsonRpcResponse:
     """
@@ -136,9 +134,8 @@ async def message_send(payload: JsonRpcRequest, user_id: CurrentUserDep) -> Json
     except ValueError:
         return _erro(payload.id, -32602, "params inválidos para message/send.")
 
-    # Sem contextId o cliente está abrindo conversa nova — devolvemos o id gerado
-    # para ele reusar na próxima chamada.
     session_id = params.message.context_id or str(uuid4())
+    await chat_service.validar_ownership(session_id, user_id)
     stock_id = await chat_service.iniciar_sessao(user_id)
     resposta = await chat_service.send_message(
         params.message.texto(), session_id, user_id, stock_id
