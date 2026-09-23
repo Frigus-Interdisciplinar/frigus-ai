@@ -33,3 +33,7 @@ htmlcov/
 
 # Logs
 *.log
+
+# web (Vite/React)
+node_modules/
+*.tsbuildinfo

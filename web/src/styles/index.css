@@ -1,0 +1,73 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@theme inline {
+  --color-background: var(--ul-background);
+  --color-foreground: var(--ul-foreground);
+  --color-card: var(--ul-card);
+  --color-card-foreground: var(--ul-card-foreground);
+  --color-popover: var(--ul-popover);
+  --color-popover-foreground: var(--ul-popover-foreground);
+  --color-primary: var(--ul-primary);
+  --color-primary-foreground: var(--ul-primary-foreground);
+  --color-secondary: var(--ul-secondary);
+  --color-secondary-foreground: var(--ul-secondary-foreground);
+  --color-muted: var(--ul-muted);
+  --color-muted-foreground: var(--ul-muted-foreground);
+  --color-accent: var(--ul-accent);
+  --color-accent-foreground: var(--ul-accent-foreground);
+  --color-destructive: var(--ul-destructive);
+  --color-border: var(--ul-border);
+  --color-input: var(--ul-input);
+  --color-ring: var(--ul-ring);
+  --color-sidebar: var(--ul-sidebar-background);
+  --color-sidebar-foreground: var(--ul-sidebar-foreground);
+  --color-sidebar-border: var(--ul-sidebar-border);
+
+  --font-sans: var(--ul-font-sans);
+  --font-display: var(--ul-font-display);
+
+  --radius-sm: var(--ul-radius-sm);
+  --radius-md: var(--ul-radius-md);
+  --radius-lg: var(--ul-radius-lg);
+  --radius-xl: var(--ul-radius-xl);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+/* Grafo de execução: bola balança pra frente/trás (translateX) enquanto o node está ativo. */
+@keyframes node-squish {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+.node-squish {
+  animation: node-squish 1.1s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes edge-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.edge-flow {
+  stroke-dasharray: 6 4;
+  animation: edge-flow 0.6s linear infinite;
+}

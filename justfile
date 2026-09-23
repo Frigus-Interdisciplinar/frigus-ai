@@ -9,6 +9,11 @@ run mode="tui":
     @echo "Running the application"
     bash scripts/run.sh {{mode}}
 
+web:
+    @echo "Starting API and frontend in separate terminals"
+    Start-Process powershell -WorkingDirectory '{{justfile_directory()}}' -ArgumentList '-NoExit', '-Command', 'just run api'
+    Start-Process powershell -WorkingDirectory '{{justfile_directory()}}/web' -ArgumentList '-NoExit', '-Command', 'npm run dev'
+
 check:
     @echo "Running pre-commit checks"
     {{python}} -m ruff check
