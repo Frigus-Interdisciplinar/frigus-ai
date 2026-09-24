@@ -13,9 +13,8 @@ from .settings import settings
 
 type Provider = Literal["gemini", "groq", "claude", "openrouter"]
 class Model(StrEnum):
-    GEMINI_2_5_FLASH    = "gemini-2.5-flash"
-    LLAMA_3_3_VERSATILE = "llama-3.3-70b-versatile"
-    QWEN_2_5_PRO        = "qwen-2.5-pro"
+    GEMINI_FLASH        = "gemini-3.6-flash"
+    GPT_OSS_120B        = "openai/gpt-oss-120b"
     CLAUDE_HAIKU        = "claude-haiku-4-5"
     CLAUDE_SONNET       = "claude-sonnet-4-6"
     GLM_5_2_FREE        = "z-ai/glm-5.2:free"
@@ -23,9 +22,8 @@ class Model(StrEnum):
 
 
 PROVIDER_MAP: Final[Mapping[Model, Provider]] = {
-    Model.GEMINI_2_5_FLASH:    "gemini",
-    Model.LLAMA_3_3_VERSATILE: "groq",
-    Model.QWEN_2_5_PRO:        "groq",
+    Model.GEMINI_FLASH:        "gemini",
+    Model.GPT_OSS_120B:        "groq",
     Model.CLAUDE_HAIKU:        "claude",
     Model.CLAUDE_SONNET:       "claude",
     Model.GLM_5_2_FREE:        "openrouter",
