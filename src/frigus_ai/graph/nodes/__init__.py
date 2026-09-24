@@ -1,5 +1,3 @@
-from ..guardrail.entrada import no_guardrail_entrada
-from ..guardrail.saida import no_guardrail_saida
 from .compras import no_compras
 from .estoque import no_estoque
 from .faq import no_faq
@@ -15,8 +13,6 @@ __all__ = [
     "no_estoque",
     "no_faq",
     "no_financeiro",
-    "no_guardrail_entrada",
-    "no_guardrail_saida",
     "no_juiz",
     "no_orquestrador",
     "no_receitas",

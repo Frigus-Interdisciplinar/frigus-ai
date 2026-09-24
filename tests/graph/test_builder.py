@@ -12,6 +12,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from frigus_ai.graph import builder
+from frigus_ai.graph.guardrail.schemas import Categoria, Classificacao
 from frigus_ai.graph.state import EntradaGrafo
 
 
@@ -36,6 +37,11 @@ class _FakeLLM:
         return AIMessage(content=texto)
 
 
+class _FakeClassificador:
+    async def ainvoke(self, _entrada):
+        return Classificacao(categoria=Categoria.APROVADO, justificativa="ok")
+
+
 @pytest.fixture
 def grafo(monkeypatch):
     """Stuba tudo que faz I/O: os agentes dos nós e os LLMs de guardrail/juiz."""
@@ -57,7 +63,7 @@ def grafo(monkeypatch):
     monkeypatch.setattr(orq_mod,      "orquestrador_app", agentes["orquestrador"])
 
     # Guardrail de entrada aprova, guardrail de saída devolve o texto revisado.
-    monkeypatch.setattr(entrada_mod, "llm_guardrail", _FakeLLM(["CATEGORIA: APROVADO"]))
+    monkeypatch.setattr(entrada_mod, "llm_classificador", _FakeClassificador())
     monkeypatch.setattr(
         saida_mod, "llm_rapido", _FakeLLM(["RESPOSTA: Você tem leite na geladeira."])
     )

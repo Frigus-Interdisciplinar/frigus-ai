@@ -1,3 +1,5 @@
+import re
+
 from langchain_core.messages import AIMessage
 
 from frigus_ai.graph.guardrail.schemas import ResultadoGuardrail
@@ -19,6 +21,20 @@ logger = Logging.get_logger(__name__)
 
 _COMPLIANCE = load_sections("guardrail.md")["compliance"]
 
+_SINAIS_DE_RISCO = re.compile(
+    r"segur[oa]\s+(para|pra)\s+(o\s+)?(consumo|comer)|sem\s+(nenhum\s+)?risco"
+    r"|n[aã]o\s+(tem|h[aá])\s+risco|garant"
+    r"|sa[uú]de|nutri|dieta|diagn[oó]st|m[eé]dic|tratamento|doen[çc]a|rem[eé]dio"
+    r"|sintoma|alerg|diabet|colesterol|gr[aá]vid|emagrec"
+    r"|100\s*%|com\s+(toda\s+)?certeza|pode\s+confiar|sem\s+d[uú]vida"
+    r"|n[aã]o\s+(vai\s+)?estragar|nunca\s+(vai\s+)?estraga",
+    re.IGNORECASE,
+)
+
+
+def precisa_revisao(resposta: str) -> bool:
+    return _SINAIS_DE_RISCO.search(resposta) is not None
+
 
 def _saida_ok(conteudo: str) -> ResultadoGuardrail:
     return ResultadoGuardrail(
@@ -35,12 +51,15 @@ async def guardrail_saida(
     restaurar_pii: bool = False
 ) -> ResultadoGuardrail:
     """
-    Nunca bloqueia — sempre retorna o texto revisado. Fallback para a resposta original
-    se o LLM não seguir o formato esperado.
+    Nunca bloqueia — sempre retorna o texto revisado. Só chama o LLM quando
+    `precisa_revisao`; fallback para a resposta original se ele fugir do formato.
     """
 
     resposta = redigir_pii(resposta, PII_USUARIO)
     resposta = desanonimizar_saida(resposta, mapa_pii, restaurar=restaurar_pii)
+
+    if not precisa_revisao(resposta):
+        return _saida_ok(resposta)
 
     saida = (await perguntar(llm_rapido, _COMPLIANCE.format(resposta=resposta))).strip()
 

@@ -24,11 +24,14 @@
   ValueError se o LLM inventasse categoria fora da lista, derrubando o turno em vez de
   cair na falha aberta. Tem teste.
 
+- Classificador de entrada com `with_structured_output(Classificacao)` (schema com `Categoria`)
+  no lugar do parsing de `CATEGORIA:`. Falha aberta só em erro real (chamada ou schema), e
+  essa falha não vai pro cache.
+- Guardrail de saída só chama o LLM quando `precisa_revisao` acha termo de risco (segurança
+  alimentar, saúde/nutrição, certeza de validade); resposta limpa sai sem LLM.
+
 ## Falta fazer
 
-- O guardrail de saída chama LLM em TODA resposta pra revisar compliance, mesmo quando a
-  redação de PII por regex já resolveu. É a chamada mais cara do turno e a de payoff menos
-  claro — medir quantas respostas ele de fato altera antes de decidir se vira condicional.
 - Avaliar limiar pra pular o classificador em mensagens curtas e óbvias do domínio (sem
   perder cobertura de jailbreak, que é regex e roda sempre).
 

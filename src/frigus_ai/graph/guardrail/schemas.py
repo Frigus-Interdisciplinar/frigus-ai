@@ -6,6 +6,8 @@ cada categoria. A *detecção* (regex de PII, jailbreak, keywords) mora em `padr
 from enum import StrEnum
 from typing import Literal, Required, TypedDict
 
+from pydantic import BaseModel
+
 
 class Categoria(StrEnum):
     """O que o classificador de entrada pode devolver."""
@@ -16,6 +18,13 @@ class Categoria(StrEnum):
     ILICITO         = "ILICITO"
     POLITICO        = "POLITICO"
     CONSELHO_MEDICO = "CONSELHO_MEDICO"
+
+
+class Classificacao(BaseModel):
+    """Saída estruturada do classificador de entrada."""
+
+    categoria:     Categoria
+    justificativa: str
 
 
 Motivo = Literal[
@@ -78,6 +87,7 @@ RESPOSTAS_BLOQUEIO: dict[Categoria, RespostaBloqueio] = {
 __all__ = [
     "RESPOSTAS_BLOQUEIO",
     "Categoria",
+    "Classificacao",
     "Motivo",
     "RespostaBloqueio",
     "ResultadoGuardrail",
