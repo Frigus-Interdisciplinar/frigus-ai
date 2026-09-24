@@ -252,17 +252,23 @@ class ChatService:
         nunca reaproveitado: o checkpoint do grafo guarda `imagem_b64` (alguns MB em
         base64), e reusar uma thread faria o próximo turno de TEXTO nela ainda carregar
         essa imagem e cair de novo na Visão, em vez de ir pro roteador normal.
+
+        Como ninguém volta a essa thread, ela é apagada no fim — senão cada foto deixava
+        seus MB de base64 no Mongo pra sempre.
         """
 
         thread_id = f"visao-{user_id}-{uuid4()}"
 
-        resposta = await runner.executar(
-            "Analise esta foto da geladeira/freezer/despensa.",
-            thread_id,
-            user_id,
-            stock_id,
-            imagem_b64=b64encode(imagem).decode(),
-        )
+        try:
+            resposta = await runner.executar(
+                "Analise esta foto da geladeira/freezer/despensa.",
+                thread_id,
+                user_id,
+                stock_id,
+                imagem_b64=b64encode(imagem).decode(),
+            )
+        finally:
+            await runner.descartar_thread(thread_id)
 
         return resposta or "Não consegui analisar a foto."
 

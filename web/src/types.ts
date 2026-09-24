@@ -31,6 +31,7 @@ export type Route =
   | "faq"
   | "financeiro"
   | "fim"
+  | "visao"
   | "guardrail_entrada"
   | "guardrail_saida"
   | "juiz";

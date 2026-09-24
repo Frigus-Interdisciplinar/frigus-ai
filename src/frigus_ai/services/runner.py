@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import cast, get_args
@@ -98,6 +99,22 @@ def _config(session_id: str, user_id: int) -> RunnableConfig:
         # entre chamadas/usuários concorrentes (ver metrics_callback.py).
         "callbacks": [PrometheusCallbackHandler()],
     }
+
+
+async def descartar_thread(thread_id: str) -> None:
+    """
+    Apaga todos os checkpoints de uma thread. Pra thread descartável (foto): o MongoDBSaver
+    grava um checkpoint por passo do grafo, cada um com o `imagem_b64` inteiro — limpar o
+    campo no estado final não tiraria a imagem dos anteriores. Falha só loga: a resposta
+    já foi dada, lixo no Mongo não é motivo pra derrubar a request.
+    """
+
+    try:
+        grafo = await fluxo_agentes.get()
+        if grafo.checkpointer:
+            await asyncio.to_thread(grafo.checkpointer.delete_thread, thread_id)
+    except Exception as e:
+        logger.warning(f"Não consegui apagar a thread {thread_id}: {e}")
 
 
 async def executar(

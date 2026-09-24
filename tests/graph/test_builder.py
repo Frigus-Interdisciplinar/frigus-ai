@@ -181,3 +181,63 @@ async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypat
 
     assert agentes["router"].chamadas == 0
     assert agentes["orquestrador"].chamadas == 1
+
+
+async def test_juiz_reprovado_em_turno_de_foto_volta_pra_visao(grafo, monkeypatch):
+    """Visão seta `rota=visao` — sem isso o Juiz não tinha pra onde devolver e a resposta
+    reprovada ia direto pro guardrail de saída. O retry leva o feedback junto."""
+
+    from frigus_ai.graph import state as state_mod
+    from frigus_ai.graph.nodes import visao as visao_mod
+
+    inventario = state_mod.InventarioGeladeira(items=[], confidence=0.5)
+    prompts = []
+
+    class _FakeLLMVisao:
+        async def ainvoke(self, mensagens):
+            prompts.append(mensagens[0].content[0]["text"])
+            return inventario
+
+    monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
+
+    compilar, _ = grafo
+    app = compilar([
+        "VEREDITO: REPROVADO\nJUSTIFICATIVA: não listou os itens",
+        "VEREDITO: APROVADO\nJUSTIFICATIVA: ok",
+    ])
+
+    await app.ainvoke(
+        EntradaGrafo(messages=[HumanMessage(content="analise esta foto")], imagem_b64="ZmFrZQ==")
+    )
+
+    assert len(prompts) == 2
+    assert "[REVISÃO SOLICITADA PELO JUIZ]" not in prompts[0]
+    assert "[REVISÃO SOLICITADA PELO JUIZ]" in prompts[1]
+
+
+async def test_stream_do_runner_transmite_a_rota_da_visao(grafo, monkeypatch):
+    from frigus_ai.graph import state as state_mod
+    from frigus_ai.graph.nodes import visao as visao_mod
+    from frigus_ai.services import runner
+
+    class _FakeLLMVisao:
+        async def ainvoke(self, _mensagens):
+            return state_mod.InventarioGeladeira(items=[], confidence=0.5)
+
+    class _Fluxo:
+        def __init__(self, compilado):
+            self._compilado = compilado
+
+        async def get(self):
+            return self._compilado
+
+    monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
+    compilar, _ = grafo
+    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])))
+
+    eventos = [
+        e async for e in runner.executar_stream("foto", "visao-7-x", 7, None, imagem_b64="ZmFrZQ==")
+    ]
+
+    assert [e.route for e in eventos if e.type == "route_selected"] == ["visao"]
+    assert "visao_node" in [e.node for e in eventos if e.type == "node_started"]

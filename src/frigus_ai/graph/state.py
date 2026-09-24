@@ -14,7 +14,7 @@ type AsyncNode[R] = Callable[[Estado], Awaitable[R]]
 
 RotaEspecialista = Literal["estoque", "compras", "receitas", "faq", "financeiro"]
 RotaRoteador     = Literal[RotaEspecialista, "fim"]
-RouteLiteral     = Literal[RotaRoteador, "guardrail_entrada", "guardrail_saida", "juiz"]
+RouteLiteral     = Literal[RotaRoteador, "visao", "guardrail_entrada", "guardrail_saida", "juiz"]
 
 ROTAS_VALIDAS: frozenset[str] = frozenset(get_args(RouteLiteral))
 
@@ -29,6 +29,7 @@ class Route:
     FAQ:               RouteLiteral = "faq"
     FINANCEIRO:        RouteLiteral = "financeiro"
     FIM:               RouteLiteral = "fim"
+    VISAO:             RouteLiteral = "visao"
     GUARDRAIL_ENTRADA: RouteLiteral = "guardrail_entrada"
     GUARDRAIL_SAIDA:   RouteLiteral = "guardrail_saida"
     JUIZ:              RouteLiteral = "juiz"
@@ -90,6 +91,13 @@ class EspecialistaUpdate(TypedDict):
     agentes_chamados:      list[NodeLiteral]
     resposta_especialista: str
     dados_especialista:    str
+
+
+class VisaoUpdate(EspecialistaUpdate):
+    """Visão seta a própria rota: o roteador não roda em turno com foto, e sem `rota` o
+    Juiz não teria pra onde devolver uma resposta reprovada."""
+
+    rota: RouteLiteral
 
 
 class FaqUpdate(TypedDict):
@@ -170,4 +178,5 @@ __all__ = [
     "RouteLiteral",
     "RouterUpdate",
     "SaidaGrafo",
+    "VisaoUpdate",
 ]

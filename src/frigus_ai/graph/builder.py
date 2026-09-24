@@ -45,6 +45,7 @@ from frigus_ai.graph.state import (
     Route,
     RouterUpdate,
     SaidaGrafo,
+    VisaoUpdate,
 )
 from frigus_ai.infra.mongo.connection import mongo
 
@@ -91,7 +92,7 @@ def _construir_grafo() -> StateGraph:
     financeiro:        AsyncNode[EspecialistaUpdate]     = no_financeiro
     receitas:          AsyncNode[FaqUpdate]              = no_receitas
     faq:               AsyncNode[FaqUpdate]              = no_faq
-    visao:             AsyncNode[EspecialistaUpdate]     = no_visao
+    visao:             AsyncNode[VisaoUpdate]            = no_visao
     orquestrador:      AsyncNode[OrquestradorUpdate]     = no_orquestrador
     juiz:              AsyncNode[JuizUpdate]             = no_juiz
     guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]   = no_guardrail_saida
@@ -156,6 +157,7 @@ def _construir_grafo() -> StateGraph:
             Route.RECEITAS:   RECEITAS,
             Route.FAQ:        FAQ,
             Route.FINANCEIRO: FINANCEIRO,
+            Route.VISAO:      VISAO,
             GUARDRAIL_SAIDA:  GUARDRAIL_SAIDA,
         },
     )

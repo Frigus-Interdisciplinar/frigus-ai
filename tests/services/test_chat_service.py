@@ -195,8 +195,14 @@ async def test_analisar_foto_usa_thread_id_unico_e_nao_salva_historico(monkeypat
         chamadas.append((conteudo, session_id, user_id, stock_id, imagem_b64))
         return "Você tem leite e ovos."
 
+    descartadas = []
+
+    async def _descartar(thread_id):
+        descartadas.append(thread_id)
+
     salvou = []
     monkeypatch.setattr(runner, "executar", _executar)
+    monkeypatch.setattr(runner, "descartar_thread", _descartar)
     monkeypatch.setattr(chat_repository, "salvar_mensagens", lambda *a, **kw: salvou.append(a))
 
     resposta = await chat_service.analisar_foto(user_id=7, stock_id=1, imagem=b"fake-jpeg-bytes")
@@ -209,13 +215,19 @@ async def test_analisar_foto_usa_thread_id_unico_e_nao_salva_historico(monkeypat
     assert stock_id == 1
     assert imagem_b64 == "ZmFrZS1qcGVnLWJ5dGVz"  # base64 de b"fake-jpeg-bytes"
     assert salvou == []
+    # a thread descartável é apagada depois (o checkpoint guardava o base64 pra sempre)
+    assert descartadas == [session_id]
 
 
 async def test_analisar_foto_sem_resposta_devolve_mensagem_padrao(monkeypatch):
     async def _executar(*args, **kwargs):
         return None
 
+    async def _descartar(thread_id):
+        pass
+
     monkeypatch.setattr(runner, "executar", _executar)
+    monkeypatch.setattr(runner, "descartar_thread", _descartar)
 
     resposta = await chat_service.analisar_foto(user_id=7, stock_id=1, imagem=b"x")
 
