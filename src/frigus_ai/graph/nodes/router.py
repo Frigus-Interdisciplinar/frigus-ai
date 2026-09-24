@@ -1,15 +1,13 @@
-import re
+from collections.abc import Sequence
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from frigus_ai.graph.agents import router_app
 from frigus_ai.graph.names import ROTEADOR
-from frigus_ai.graph.nodes.contexto import responder
 from frigus_ai.graph.state import (
-    ROTAS_VALIDAS,
     Estado,
+    Roteamento,
     Route,
-    RouteLiteral,
     RouterUpdate,
 )
 from frigus_ai.logging import Logging
@@ -17,47 +15,57 @@ from frigus_ai.observability.metrics import ROUTER_DECISIONS, medir_node
 
 log = Logging.get_logger(__name__)
 
-
-def _extrair_rota(texto: str) -> RouteLiteral:
-
-    match = re.search(r"ROUTE=(\w+)", texto)
-    if not match:
-        return Route.FIM
-
-    valor = match.group(1)
-    return valor if valor in ROTAS_VALIDAS else Route.FIM  # type: ignore[return-value]
+_NAO_ENTENDI = (
+    "Não consegui entender o pedido. Posso ajudar com seu estoque, lista de compras, "
+    "receitas ou os gastos com alimentação — pode reformular?"
+)
 
 
-def _extrair_pergunta(texto: str) -> str:
+async def _rotear(mensagens: Sequence[AnyMessage]) -> Roteamento:
+    """Falha de chamada ou saída fora do schema vira `fim` com resposta genérica — o turno
+    nunca cai por causa do roteador."""
 
-    match = re.search(r"PERGUNTA_ORIGINAL=(.+)", texto)
-    if not match:
-        return ""
+    try:
+        saida = await router_app.ainvoke({"messages": list(mensagens)})
+        roteamento = saida["structured_response"]
+    except Exception as e:
+        log.warning(f"Roteador falhou, respondendo sem especialista: {e}")
+        return Roteamento(rota=Route.FIM, resposta=_NAO_ENTENDI)
 
-    return match.group(1).strip()
+    assert isinstance(roteamento, Roteamento)
+    return roteamento
+
+
+def _ultima_pergunta(mensagens: Sequence[AnyMessage]) -> str:
+    """A mensagem do usuário como chegou (já anonimizada pelo guardrail) — em vez de pedir
+    pro LLM repeti-la "sem edições" e torcer."""
+
+    for msg in reversed(mensagens):
+        if isinstance(msg, HumanMessage):
+            return msg.text
+    return ""
 
 
 @medir_node(ROTEADOR)
 async def no_roteador(estado: Estado) -> RouterUpdate:
 
-    texto    = await responder(router_app, estado["messages"])
-    rota     = _extrair_rota(texto)
-    pergunta = _extrair_pergunta(texto)
+    roteamento = await _rotear(estado["messages"])
+    pergunta   = _ultima_pergunta(estado["messages"])
 
-    log.debug(f"Rota escolhida: {rota} | pergunta: '{pergunta}'")
-    ROUTER_DECISIONS.labels(route=rota).inc()
+    log.debug(f"Rota escolhida: {roteamento.rota} | pergunta: '{pergunta}'")
+    ROUTER_DECISIONS.labels(route=roteamento.rota).inc()
 
-    if rota == Route.FIM:
+    if roteamento.rota == Route.FIM:
         return RouterUpdate(
             agentes_chamados=[ROTEADOR],
             rota=Route.FIM,
             pergunta_original=pergunta,
-            messages=[AIMessage(content=texto)],
+            messages=[AIMessage(content=roteamento.resposta or _NAO_ENTENDI)],
         )
 
     return RouterUpdate(
         agentes_chamados=[ROTEADOR],
-        rota=rota,
+        rota=roteamento.rota,
         pergunta_original=pergunta,
         tentativas_juiz=0,
     )

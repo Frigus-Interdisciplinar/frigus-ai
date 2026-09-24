@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from frigus_ai.graph import builder
 from frigus_ai.graph.guardrail.schemas import Categoria, Classificacao
-from frigus_ai.graph.state import EntradaGrafo
+from frigus_ai.graph.state import EntradaGrafo, Roteamento
 
 
 class _FakeAgente:
@@ -26,6 +26,18 @@ class _FakeAgente:
     async def ainvoke(self, entrada):
         self.chamadas += 1
         return {"messages": [*entrada["messages"], AIMessage(content=self._texto)]}
+
+
+class _FakeRoteador:
+    """Substitui o `router_app` (create_agent com `response_format`)."""
+
+    def __init__(self, roteamento):
+        self._roteamento = roteamento
+        self.chamadas = 0
+
+    async def ainvoke(self, entrada):
+        self.chamadas += 1
+        return {"messages": entrada["messages"], "structured_response": self._roteamento}
 
 
 class _FakeLLM:
@@ -54,7 +66,7 @@ def grafo(monkeypatch):
     from frigus_ai.graph.nodes import router as router_mod
 
     agentes = {
-        "router":       _FakeAgente("ROUTE=estoque\nPERGUNTA_ORIGINAL=o que tem na geladeira"),
+        "router":       _FakeRoteador(Roteamento(rota="estoque")),
         "estoque":      _FakeAgente('{"itens": ["leite"]}'),
         "orquestrador": _FakeAgente("Você tem leite na geladeira."),
     }

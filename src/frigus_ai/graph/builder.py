@@ -1,4 +1,5 @@
 import asyncio
+from typing import get_args
 
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, StateGraph
@@ -40,6 +41,7 @@ from frigus_ai.graph.state import (
     GuardrailSaidaUpdate,
     JuizUpdate,
     OrquestradorUpdate,
+    RotaEspecialista,
     Route,
     RouterUpdate,
     SaidaGrafo,
@@ -59,9 +61,12 @@ def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     return ROTEADOR
 
 
+_ESPECIALISTAS = frozenset(get_args(RotaEspecialista))
+
+
 def decidir_especialista(estado: Estado) -> str:
     rota = estado.get("rota", Route.FIM)
-    if rota not in (Route.ESTOQUE, Route.COMPRAS, Route.RECEITAS, Route.FAQ, Route.FINANCEIRO):
+    if rota not in _ESPECIALISTAS:
         return Route.FIM
     return rota
 
