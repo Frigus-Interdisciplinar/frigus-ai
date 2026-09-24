@@ -1,5 +1,14 @@
 # Plano de correção do refactor
 
+> **Nota obsoleta — arquivada em 2026-09-23.** Escrita quando a branch `refactor/structure`
+> tinha 134 testes e o contrato A2A via `a2a-sdk` ainda disputava com o manual. Hoje: 232
+> testes, SDK removido (decisão em `AGENTS.md`), MCP consolidado, `/health/ready` por
+> dependência, `compras` migrado, ranking Redis e Neo4j conectados, avaliações offline em
+> `evals/` existindo. A lista de P0/P1/P2 abaixo não reflete mais o estado real — fonte atual
+> de verdade é `pending/requisitos-disciplina/arquivos.md`. Dos itens abaixo, os que ainda são
+> reais (Docker/infra viva não validada, `MAX(id)+1` sob concorrência) já estão re-registrados
+> lá. Mantido só como histórico.
+
 Atualizado após a revisão completa da branch `refactor/structure`.
 
 ## P0 — execução e contratos

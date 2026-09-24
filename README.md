@@ -118,8 +118,8 @@ frigus-ai/
         │   ├── compras/{schemas,core}.py
         │   ├── receitas/{schemas,core}.py
         │   └── financeiro/{schemas,core}.py
-        ├── mongo/                   # agent_chats + user_profiles + checkpoints do grafo
-        ├── redis/                   # cache de perfil (perfil.py) + rate limit de chat (chat.py)
+        ├── mongo/                   # agent_chats + user_fatos + checkpoints do grafo
+        ├── redis/                   # rate limit de chat (chat.py)
         ├── qdrant/faq/              # RAG (Qdrant) sobre Frigus-Documentacao.pdf — connection/core/ingest
         └── spoonacular/             # client HTTP (httpx) da Spoonacular Food API — receitas externas
 ```
@@ -135,10 +135,10 @@ quando cada trabalho começar (ver "Próximos passos").
 |---|---|---|
 | **Estoque, compras, receitas, financeiro** | PostgreSQL (schema `dataload`) | Dados de domínio do app Frigus |
 | **Histórico de conversa do assistente** | MongoDB (`agent_chats`) | Mensagens por sessão do chatbot (distinto do chat social do app, que já existe em `conversations`/`messages` no Postgres) |
-| **Perfil comportamental** | MongoDB (`user_profiles`) | Resumo de hábitos gerado pela IA, chaveado por `users.id` |
+| **Fatos estruturados do usuário** | MongoDB (`user_fatos`) | Alergias/preferências/restrições/hábitos extraídos do chat, chaveado por `users.id` |
 | **Checkpointing do grafo** | LangGraph `MongoDBSaver` (`graph_checkpoints`/`graph_checkpoint_writes`) | Estado interno do grafo entre turnos, chaveado por `thread_id` (= `session_id`) — sobrevive a restart do processo |
 | **Busca vetorial (RAG do FAQ)** | Qdrant | Índice do `Frigus-Documentacao.pdf` (`graph/tools/faq/`) |
-| **Cache de perfil comportamental + rate limit de chat** | Redis | `tools/redis/perfil.py` (cache-aside sobre `user_profiles`) e `tools/redis/chat.py` (mensagens/minuto por usuário) |
+| **Rate limit de chat** | Redis | `tools/redis/chat.py` (mensagens/minuto por usuário) |
 
 Note que `users`, `groups`, `stocks` etc. no Postgres usam `INTEGER PRIMARY KEY` sem `SERIAL` (o DDL foi
 desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` (`tools/postgres/helpers.py::next_id`).
@@ -156,7 +156,7 @@ reaproveita ou cria um usuário local único — não há mais `DEMO_USER_ID` fi
 | `POST` | `/chats` | Cria uma sessão de chat (`chat_id` + `stock_id` resolvido) |
 | `POST` | `/chats/{chat_id}/messages` | Envia mensagem e roda o grafo. **429** + `Retry-After` se o rate limit do Redis estourar (10 msg/60s) |
 | `GET` | `/chats/{chat_id}/messages` | Histórico da sessão |
-| `DELETE` | `/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa e a atualização do perfil (duas chamadas de LLM) vão pra `BackgroundTasks`, fora do caminho da resposta |
+| `DELETE` | `/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa (chamada de LLM) vai pra `BackgroundTasks`, fora do caminho da resposta |
 | `GET` | `/health/live` | Liveness |
 | `GET` | `/health/ready` | Readiness — checa Postgres/Mongo/Redis/Qdrant, **503** se algum estiver fora |
 
