@@ -133,7 +133,12 @@ export function ChatPage() {
         <MessageList messages={messages} pensando={pensando} />
         <ChatInput onSend={handleSend} disabled={pensando} />
       </div>
-      <GraphPanel status={graph.status} timings={graph.timings} activeEdge={graph.activeEdge} />
+      <GraphPanel
+        status={graph.status}
+        timings={graph.timings}
+        activeEdge={graph.activeEdge}
+        traveled={graph.traveled}
+      />
     </div>
   );
 }
