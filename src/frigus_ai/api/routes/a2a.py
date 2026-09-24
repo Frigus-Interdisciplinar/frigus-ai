@@ -78,6 +78,17 @@ SKILLS = [
         examples=["Quanto gastei esse mês?", "Quanto joguei fora nos últimos 6 meses?"],
     ),
     AgentSkill(
+        id="planejamento_alimentar_a2a",
+        name="Plano de economia com alimentação (via Assessor)",
+        description=(
+            "Orçamento de mercado e plano pra gastar e desperdiçar menos: o Frigus envia os "
+            "próprios dados de gasto e descarte ao Assessor financeiro por A2A e devolve a "
+            "análise. Consultar os números em si fica na skill 'financeiro'."
+        ),
+        tags=["economia", "orcamento", "desperdicio", "a2a"],
+        examples=["Como eu economizo no mercado?", "Quanto devo gastar com comida por mês?"],
+    ),
+    AgentSkill(
         id="faq",
         name="FAQ do aplicativo Frigus",
         description="Responde dúvidas sobre o app Frigus a partir da documentação oficial (RAG).",

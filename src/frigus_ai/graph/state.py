@@ -12,7 +12,7 @@ from frigus_ai.privacy import MapaPII
 
 type AsyncNode[R] = Callable[[Estado], Awaitable[R]]
 
-RotaEspecialista = Literal["estoque", "compras", "receitas", "faq", "financeiro"]
+RotaEspecialista = Literal["estoque", "compras", "receitas", "faq", "financeiro", "assessor"]
 RotaRoteador     = Literal[RotaEspecialista, "fim"]
 RouteLiteral     = Literal[RotaRoteador, "visao", "guardrail_entrada", "guardrail_saida", "juiz"]
 
@@ -28,6 +28,7 @@ class Route:
     RECEITAS:          RouteLiteral = "receitas"
     FAQ:               RouteLiteral = "faq"
     FINANCEIRO:        RouteLiteral = "financeiro"
+    ASSESSOR:          RouteLiteral = "assessor"
     FIM:               RouteLiteral = "fim"
     VISAO:             RouteLiteral = "visao"
     GUARDRAIL_ENTRADA: RouteLiteral = "guardrail_entrada"
@@ -109,6 +110,11 @@ class FaqUpdate(TypedDict):
     dados_especialista:    str
 
 
+class AssessorUpdate(FaqUpdate):
+    """Assessor (A2A): texto pronto vindo de outro agente, publicado direto como FAQ/Receitas.
+    `dados_especialista` vazio = Assessor indisponível (ver `decidir_apos_assessor`)."""
+
+
 class OrquestradorUpdate(TypedDict):
     agentes_chamados:      list[NodeLiteral]
     messages:              list[AnyMessage]
@@ -160,6 +166,7 @@ class InventarioGeladeira(BaseModel):
 
 __all__ = [
     "ROTAS_VALIDAS",
+    "AssessorUpdate",
     "AsyncNode",
     "EntradaGrafo",
     "EspecialistaUpdate",

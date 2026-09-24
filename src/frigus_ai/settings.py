@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     A2A_BASE_URL: str
 
+    ASSESSOR_A2A_URL: str = ""
+    ASSESSOR_API_KEY: SecretStr = SecretStr("")
+
     QDRANT_URL: str
     QDRANT_API_KEY: SecretStr = SecretStr("")
     QDRANT_COLLECTION_NAME: str

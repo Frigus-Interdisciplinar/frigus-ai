@@ -14,6 +14,7 @@ const NODES: NodeName[] = [
   "receitas_node",
   "faq_node",
   "financeiro_node",
+  "a2a_assessor_node",
   "visao_node",
   "orquestrador_node",
   "juiz_node",
