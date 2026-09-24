@@ -11,10 +11,10 @@ from frigus_ai.graph.llm import llm_rapido
 from frigus_ai.graph.prompts import load_prompt
 from frigus_ai.infra.redis.rate_limit import can_send_message
 from frigus_ai.logging import Logging
-from frigus_ai.repositories import chat_repository
+from frigus_ai.repositories import chat_embeddings_repository, chat_repository
 from frigus_ai.repositories.chat_repository import ChatDocument
 from frigus_ai.schemas.execution import AnswerReady, ExecutionEvent, RunFailed
-from frigus_ai.schemas.models import ChatMessage, Fatos, Role
+from frigus_ai.schemas.models import ChatMessage, Fatos, Resumo, Role
 from frigus_ai.services import runner
 from frigus_ai.services.user_service import user_service
 from frigus_ai.types import novo_chat_id
@@ -24,8 +24,15 @@ logger = Logging.get_logger(__name__)
 # A cada N mensagens salvas (user + AI juntos, então N=10 é a cada 5 turnos) fatos e
 # resumo são atualizados em segundo plano — ver `_talvez_atualizar_memoria`.
 _INTERVALO_ATUALIZACAO_MEMORIA = 10
+# Menos que 2 turnos não é conversa que valha lembrar ("oi"/"olá"): nem chama LLM.
+_MINIMO_MENSAGENS_MEMORIA = 4
+# Doc antigo, sem `resumido_ate`, mandaria o histórico inteiro de uma vez pro resumidor.
+_JANELA_MAXIMA = 40
+# Chats abandonados resumidos quando o usuário abre um novo — teto pra não virar rajada.
+_PENDENTES_POR_NOVO_CHAT = 3
 
 llm_fatos = llm_rapido.with_structured_output(Fatos) if llm_rapido else None
+llm_resumo = llm_rapido.with_structured_output(Resumo) if llm_rapido else None
 
 # Referências das tarefas de fire-and-forget: sem isso, o event loop pode coletar a
 # task no meio da execução (ninguém mais segura o objeto) — padrão recomendado pela
@@ -41,16 +48,19 @@ def _disparar_em_segundo_plano(coro) -> None:
     tarefa.add_done_callback(_tarefas_em_segundo_plano.discard)
 
 
-def _atualizar_resumo(resumo_atual: str, mensagens_recentes: list[dict]) -> str:
+def _atualizar_resumo(resumo_atual: str, mensagens_recentes: list[dict]) -> Resumo | None:
+    if llm_resumo is None:  # provider sem API key configurada
+        return None
+
     logger.info("Atualizando resumo da conversa...")
 
     conversa = "\n".join(f"{msg['role']}: {msg['content']}" for msg in mensagens_recentes)
 
-    conteudo = llm_rapido.invoke(
+    resumo = llm_resumo.invoke(
         load_prompt("resumidor").format(resumo_atual=resumo_atual, mensagens=conversa)
-    ).content
-    assert isinstance(conteudo, str)  # texto puro, nunca multimodal, nesse prompt
-    return conteudo.strip()
+    )
+    assert isinstance(resumo, Resumo)
+    return resumo
 
 
 def _extrair_fatos(mensagens_recentes: list[dict], fatos_atuais: Fatos) -> Fatos | None:
@@ -80,6 +90,7 @@ class ChatService:
         await self.iniciar_sessao(user_id)
         chat_id = novo_chat_id()
         await chat_repository.criar_chat(chat_id, user_id)
+        _disparar_em_segundo_plano(self._resumir_pendentes(user_id))
         return chat_id
 
     async def validar_ownership(self, session_id: str, user_id: int) -> None:
@@ -164,30 +175,75 @@ class ChatService:
         if total % _INTERVALO_ATUALIZACAO_MEMORIA == 0:
             _disparar_em_segundo_plano(self._atualizar_memoria(session_id, user_id))
 
+    async def _resumir_pendentes(self, user_id: int) -> None:
+        """
+        Chat que o usuário abandonou sem `DELETE` (e sem bater o intervalo) nunca teria
+        resumo. Abrir um chat novo é o sinal de que os anteriores acabaram — resume o que
+        faltou neles, sem precisar de cron.
+
+        Em sequência, não em paralelo: todos atualizam os fatos do MESMO usuário, e dois
+        merges concorrentes perderiam o que o outro gravou.
+        """
+
+        try:
+            pendentes = await chat_repository.listar_pendentes_de_resumo(
+                user_id, _MINIMO_MENSAGENS_MEMORIA, _PENDENTES_POR_NOVO_CHAT
+            )
+        except Exception:
+            logger.exception(f"Falha ao listar chats pendentes de resumo | user_id={user_id}")
+            return
+
+        for session_id in pendentes:
+            await self._atualizar_memoria(session_id, user_id)
+
     async def _atualizar_memoria(self, session_id: str, user_id: int) -> None:
         """
-        Fatos e resumo lêem a mesma janela de mensagens recentes — uma leitura só do
-        documento pros dois, em vez de duas idas ao Mongo.
+        Fatos e resumo lêem as mesmas mensagens — só as que o resumo ainda não cobre
+        (`resumido_ate`) — numa leitura só do documento pros dois.
         """
 
         try:
             doc = await chat_repository.buscar_documento_completo(session_id, user_id)
-            if not doc or not doc.get("messages"):
+            if not doc:
                 return
 
-            recentes = doc["messages"][-_INTERVALO_ATUALIZACAO_MEMORIA:]
+            mensagens = doc.get("messages") or []
+            recentes = mensagens[doc.get("resumido_ate", 0):][-_JANELA_MAXIMA:]
+            if len(mensagens) < _MINIMO_MENSAGENS_MEMORIA or not recentes:
+                return
 
             fatos_atuais = await user_service.buscar_fatos(user_id)
             fatos_extraidos = await asyncio.to_thread(_extrair_fatos, recentes, fatos_atuais)
             if fatos_extraidos is not None:
                 await user_service.atualizar_fatos_por_extracao(user_id, fatos_extraidos)
 
-            resumo_atualizado = await asyncio.to_thread(
-                _atualizar_resumo, doc.get("resume", ""), recentes
+            resumo = await asyncio.to_thread(_atualizar_resumo, doc.get("resume", ""), recentes)
+            if resumo is None:
+                return
+
+            await chat_repository.salvar_resumo(
+                resumo.resumo, session_id, user_id, resumido_ate=len(mensagens)
             )
-            await chat_repository.salvar_resumo(resumo_atualizado, session_id, user_id)
         except Exception:
             logger.exception(f"Falha ao atualizar memória em segundo plano | session_id={session_id}")
+            return
+
+        await self._indexar_resumo(session_id, user_id, resumo)
+
+    async def _indexar_resumo(self, session_id: str, user_id: int, resumo: Resumo) -> None:
+        """
+        Só chat relevante vira embedding; um que deixou de ser (ou nunca foi) sai do
+        índice. Falha aqui não desfaz o resumo no Mongo: o ponto fica velho até o
+        próximo resumo daquele chat, que sobrescreve pelo mesmo ID.
+        """
+
+        try:
+            if resumo.relevante:
+                await chat_embeddings_repository.salvar_resumo(session_id, user_id, resumo.resumo)
+            else:
+                await chat_embeddings_repository.remover_resumo(session_id)
+        except Exception:
+            logger.exception(f"Falha ao indexar resumo no Qdrant | session_id={session_id}")
 
     async def analisar_foto(self, user_id: int, stock_id: int | None, imagem: bytes) -> str:
         """
@@ -196,17 +252,23 @@ class ChatService:
         nunca reaproveitado: o checkpoint do grafo guarda `imagem_b64` (alguns MB em
         base64), e reusar uma thread faria o próximo turno de TEXTO nela ainda carregar
         essa imagem e cair de novo na Visão, em vez de ir pro roteador normal.
+
+        Como ninguém volta a essa thread, ela é apagada no fim — senão cada foto deixava
+        seus MB de base64 no Mongo pra sempre.
         """
 
         thread_id = f"visao-{user_id}-{uuid4()}"
 
-        resposta = await runner.executar(
-            "Analise esta foto da geladeira/freezer/despensa.",
-            thread_id,
-            user_id,
-            stock_id,
-            imagem_b64=b64encode(imagem).decode(),
-        )
+        try:
+            resposta = await runner.executar(
+                "Analise esta foto da geladeira/freezer/despensa.",
+                thread_id,
+                user_id,
+                stock_id,
+                imagem_b64=b64encode(imagem).decode(),
+            )
+        finally:
+            await runner.descartar_thread(thread_id)
 
         return resposta or "Não consegui analisar a foto."
 
@@ -218,15 +280,12 @@ class ChatService:
     async def encerrar_sessao(self, session_id: str, user_id: int) -> None:
         """
         Fatos/resumo já são mantidos frescos periodicamente durante a conversa
-        (`_talvez_atualizar_memoria`) — aqui só cobre o rabo de mensagens que ainda não
-        bateu o intervalo. Se o total já é múltiplo de `_INTERVALO_ATUALIZACAO_MEMORIA`,
-        o último ciclo periódico já cobriu tudo: rodar de novo só repetiria a mesma
-        chamada de LLM à toa.
+        (`_talvez_atualizar_memoria`) — aqui só cobre o rabo que ainda não bateu o
+        intervalo. Se o ciclo periódico já cobriu tudo, `resumido_ate` bate com o total
+        e `_atualizar_memoria` sai sem chamar LLM.
         """
 
-        total = await chat_repository.contar_mensagens(session_id, user_id)
-        if total % _INTERVALO_ATUALIZACAO_MEMORIA != 0:
-            await self._atualizar_memoria(session_id, user_id)
+        await self._atualizar_memoria(session_id, user_id)
 
 
 service = ChatService()

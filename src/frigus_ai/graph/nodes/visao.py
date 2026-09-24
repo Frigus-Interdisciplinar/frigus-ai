@@ -16,17 +16,21 @@ from frigus_ai.exceptions import FalhaNoAgente
 from frigus_ai.graph.llm import llm_visao
 from frigus_ai.graph.names import VISAO
 from frigus_ai.graph.prompts import load_prompt
-from frigus_ai.graph.state import EspecialistaUpdate, Estado
+from frigus_ai.graph.state import Estado, Route, VisaoUpdate
 from frigus_ai.observability.metrics import medir_node
 
 
 @medir_node(VISAO)
-async def no_visao(estado: Estado) -> EspecialistaUpdate:
+async def no_visao(estado: Estado) -> VisaoUpdate:
     if llm_visao is None:
         raise FalhaNoAgente("Modelo de visão não configurado (GEMINI_API_KEY ausente).")
 
     b64 = estado["imagem_b64"]
     prompt = load_prompt("visao")
+
+    # Retry do Juiz: sem o feedback, a segunda chamada seria idêntica à reprovada.
+    if feedback := estado.get("feedback_juiz"):
+        prompt += f"\n\n[REVISÃO SOLICITADA PELO JUIZ] {feedback}"
 
     msg = HumanMessage(content=[
         {"type": "text", "text": prompt},
@@ -35,8 +39,9 @@ async def no_visao(estado: Estado) -> EspecialistaUpdate:
 
     inventario = await llm_visao.ainvoke([msg])
 
-    return EspecialistaUpdate(
+    return VisaoUpdate(
         agentes_chamados=[VISAO],
+        rota=Route.VISAO,
         resposta_especialista=inventario.model_dump_json(),
         dados_especialista=inventario.model_dump_json(),
     )

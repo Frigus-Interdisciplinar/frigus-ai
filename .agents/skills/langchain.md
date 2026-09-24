@@ -1,6 +1,6 @@
 # LangChain / LangGraph
 
-## Usar `response_format` em vez de parsear texto livre com regex — `agents/nodes/router.py` está no antipadrão hoje
+## Usar `response_format` em vez de parsear texto livre com regex — já é assim em `graph/nodes/router.py`
 
 Se um nó espera uma decisão estruturada do LLM (rota, categoria, campo extraído), não peça pro
 prompt devolver um formato tipo `ROUTE=financeiro` e depois cace isso com regex na resposta — o
@@ -9,9 +9,10 @@ um `response_format` (Pydantic model) e já resolve isso dentro do próprio loop
 tool-calling ou structured output nativo do provider, sem chamada extra de LLM), devolvendo o
 resultado tipado em `result["structured_response"]`.
 
-**Aqui:** `agents/nodes/router.py:no_roteador` faz exatamente o `DO NOT DO THIS` abaixo hoje —
-`re.search(r"ROUTE=(\w+)", texto)` sobre `router_app.invoke(...)["messages"][-1].content`. Não é uma
-pegadinha teórica, é o código atual. Migrar quando mexer nesse nó de novo.
+**Aqui:** `graph/nodes/router.py:no_roteador` fazia exatamente o `DO NOT DO THIS` abaixo
+(`re.search(r"ROUTE=(\w+)", texto)`) — migrado: `router_app` usa `response_format=Roteamento`
+(`graph/state.py`), e o guardrail de entrada usa `with_structured_output(Classificacao)` pelo
+mesmo motivo. Falha do LLM vira `fim` com resposta genérica, sem derrubar o turno.
 
 Do this:
 
@@ -35,7 +36,7 @@ saida = await router_app.ainvoke({"messages": list(estado["messages"])})
 roteamento = saida["structured_response"]  # já é um Roteamento, sem parsing manual
 ```
 
-Instead of (estado atual de `agents/nodes/router.py`):
+Instead of (como o roteador era antes):
 
 ```python
 # DO NOT DO THIS

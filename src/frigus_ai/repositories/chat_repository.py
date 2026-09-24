@@ -30,11 +30,12 @@ class ChatDocument(TypedDict):
     user_id: int
     messages: list[dict]
     resume: str
+    resumido_ate: int  # nº de mensagens já cobertas pelo `resume`; ausente em doc antigo = 0
     created_at: datetime
     updated_at: datetime
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Mensagem:
     """Formato de mensagem gravado no Mongo (`agent_chats.messages`)."""
 
@@ -107,13 +108,36 @@ class ChatRepository:
             upsert=True,
         )
 
-    def _inserir_resumo(self, resumo: str, session_id: str, user_id: int) -> None:
+    def _inserir_resumo(
+        self, resumo: str, session_id: str, user_id: int, resumido_ate: int
+    ) -> None:
         logger.info(f"Salvando resumo da sessão para session_id: {session_id}")
 
         self._collection().update_one(
             {"session_id": session_id, "user_id": user_id},
-            {"$set": {"resume": resumo}},
+            {"$set": {"resume": resumo, "resumido_ate": resumido_ate}},
         )
+
+    def _listar_pendentes_de_resumo(
+        self, user_id: int, minimo_mensagens: int, limite: int
+    ) -> list[str]:
+        """session_ids dos chats com mensagens além do que o resumo cobre — os mais
+        recentes primeiro. Chat abaixo do mínimo nem entra: não gasta LLM nem vaga."""
+
+        total = {"$size": "$messages"}
+        return [
+            doc["session_id"]
+            for doc in self._collection().aggregate([
+                {"$match": {"user_id": user_id}},
+                {"$match": {"$expr": {"$and": [
+                    {"$gte": [total, minimo_mensagens]},
+                    {"$gt": [total, {"$ifNull": ["$resumido_ate", 0]}]},
+                ]}}},
+                {"$sort": {"updated_at": -1}},
+                {"$limit": limite},
+                {"$project": {"session_id": 1}},
+            ])
+        ]
 
     def _buscar_documento_completo(self, session_id: str, user_id: int) -> ChatDocument | None:
         return self._collection().find_one({"session_id": session_id, "user_id": user_id})
@@ -155,8 +179,17 @@ class ChatRepository:
     ) -> ChatDocument | None:
         return await asyncio.to_thread(self._buscar_documento_completo, session_id, user_id)
 
-    async def salvar_resumo(self, resumo: str, session_id: str, user_id: int) -> None:
-        await asyncio.to_thread(self._inserir_resumo, resumo, session_id, user_id)
+    async def salvar_resumo(
+        self, resumo: str, session_id: str, user_id: int, resumido_ate: int
+    ) -> None:
+        await asyncio.to_thread(self._inserir_resumo, resumo, session_id, user_id, resumido_ate)
+
+    async def listar_pendentes_de_resumo(
+        self, user_id: int, minimo_mensagens: int, limite: int
+    ) -> list[str]:
+        return await asyncio.to_thread(
+            self._listar_pendentes_de_resumo, user_id, minimo_mensagens, limite
+        )
 
     async def contar_mensagens(self, session_id: str, user_id: int) -> int:
         return await asyncio.to_thread(self._contar_mensagens, session_id, user_id)
@@ -190,8 +223,8 @@ def _adicionar_mensagens(session_id: str, user_id: int, mensagens: list[Mensagem
     _chat_repository._adicionar_mensagens(session_id, user_id, mensagens)
 
 
-def _inserir_resumo(resumo: str, session_id: str, user_id: int) -> None:
-    _chat_repository._inserir_resumo(resumo, session_id, user_id)
+def _inserir_resumo(resumo: str, session_id: str, user_id: int, resumido_ate: int) -> None:
+    _chat_repository._inserir_resumo(resumo, session_id, user_id, resumido_ate)
 
 
 def _buscar_documento_completo(session_id: str, user_id: int) -> ChatDocument | None:
@@ -248,8 +281,14 @@ async def buscar_documento_completo(session_id: str, user_id: int) -> ChatDocume
     return await _chat_repository.buscar_documento_completo(session_id, user_id)
 
 
-async def salvar_resumo(resumo: str, session_id: str, user_id: int) -> None:
-    await _chat_repository.salvar_resumo(resumo, session_id, user_id)
+async def salvar_resumo(resumo: str, session_id: str, user_id: int, resumido_ate: int) -> None:
+    await _chat_repository.salvar_resumo(resumo, session_id, user_id, resumido_ate)
+
+
+async def listar_pendentes_de_resumo(
+    user_id: int, minimo_mensagens: int, limite: int
+) -> list[str]:
+    return await _chat_repository.listar_pendentes_de_resumo(user_id, minimo_mensagens, limite)
 
 
 async def contar_mensagens(session_id: str, user_id: int) -> int:

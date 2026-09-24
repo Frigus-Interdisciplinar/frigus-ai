@@ -11,7 +11,7 @@ class Role(StrEnum):
     AI = "ai"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ChatMessage:
     role: Role
     content: str
@@ -51,6 +51,14 @@ def _normalizar_restricao(valor: str) -> str:
         if _sem_acento(opcao) == alvo:
             return opcao
     return valor.strip()
+
+
+class Resumo(BaseModel):
+    """Saída do resumidor (`services/chat_service.py`). `relevante` decide se o chat vai
+    pro Qdrant: conversa sem conteúdo útil (saudação, teste) não vira embedding."""
+
+    resumo:    str
+    relevante: bool
 
 
 class Fatos(BaseModel):

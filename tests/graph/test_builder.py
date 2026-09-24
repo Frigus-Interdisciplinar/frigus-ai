@@ -11,9 +11,10 @@ saída expõe só `messages`.
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from frigus_ai.exceptions import AssessorIndisponivel
 from frigus_ai.graph import builder
 from frigus_ai.graph.guardrail.schemas import Categoria, Classificacao
-from frigus_ai.graph.state import EntradaGrafo
+from frigus_ai.graph.state import EntradaGrafo, Roteamento
 
 
 class _FakeAgente:
@@ -26,6 +27,18 @@ class _FakeAgente:
     async def ainvoke(self, entrada):
         self.chamadas += 1
         return {"messages": [*entrada["messages"], AIMessage(content=self._texto)]}
+
+
+class _FakeRoteador:
+    """Substitui o `router_app` (create_agent com `response_format`)."""
+
+    def __init__(self, roteamento):
+        self._roteamento = roteamento
+        self.chamadas = 0
+
+    async def ainvoke(self, entrada):
+        self.chamadas += 1
+        return {"messages": entrada["messages"], "structured_response": self._roteamento}
 
 
 class _FakeLLM:
@@ -54,7 +67,7 @@ def grafo(monkeypatch):
     from frigus_ai.graph.nodes import router as router_mod
 
     agentes = {
-        "router":       _FakeAgente("ROUTE=estoque\nPERGUNTA_ORIGINAL=o que tem na geladeira"),
+        "router":       _FakeRoteador(Roteamento(rota="estoque")),
         "estoque":      _FakeAgente('{"itens": ["leite"]}'),
         "orquestrador": _FakeAgente("Você tem leite na geladeira."),
     }
@@ -169,3 +182,157 @@ async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypat
 
     assert agentes["router"].chamadas == 0
     assert agentes["orquestrador"].chamadas == 1
+
+
+async def test_juiz_reprovado_em_turno_de_foto_volta_pra_visao(grafo, monkeypatch):
+    """Visão seta `rota=visao` — sem isso o Juiz não tinha pra onde devolver e a resposta
+    reprovada ia direto pro guardrail de saída. O retry leva o feedback junto."""
+
+    from frigus_ai.graph import state as state_mod
+    from frigus_ai.graph.nodes import visao as visao_mod
+
+    inventario = state_mod.InventarioGeladeira(items=[], confidence=0.5)
+    prompts = []
+
+    class _FakeLLMVisao:
+        async def ainvoke(self, mensagens):
+            prompts.append(mensagens[0].content[0]["text"])
+            return inventario
+
+    monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
+
+    compilar, _ = grafo
+    app = compilar([
+        "VEREDITO: REPROVADO\nJUSTIFICATIVA: não listou os itens",
+        "VEREDITO: APROVADO\nJUSTIFICATIVA: ok",
+    ])
+
+    await app.ainvoke(
+        EntradaGrafo(messages=[HumanMessage(content="analise esta foto")], imagem_b64="ZmFrZQ==")
+    )
+
+    assert len(prompts) == 2
+    assert "[REVISÃO SOLICITADA PELO JUIZ]" not in prompts[0]
+    assert "[REVISÃO SOLICITADA PELO JUIZ]" in prompts[1]
+
+
+async def test_plano_de_economia_vai_pro_assessor_e_passa_pelo_juiz(grafo, monkeypatch):
+    from frigus_ai.graph.nodes import assessor as assessor_mod
+    from frigus_ai.graph.nodes import router as router_mod
+
+    perguntas = []
+
+    async def _perguntar(pergunta, session_id):
+        perguntas.append((pergunta, session_id))
+        return "Seu saldo é R$ 1.200,00."
+
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(rota="assessor")))
+    monkeypatch.setattr(assessor_mod.assessor, "perguntar", _perguntar)
+
+    compilar, _ = grafo
+    app = compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])
+
+    interno = await app.ainvoke(
+        EntradaGrafo(messages=[HumanMessage(content="como economizo no mercado?")]),
+        config={"configurable": {"thread_id": "chat-9"}},
+        output_keys=["agentes_chamados", "messages"],
+    )
+
+    assert perguntas[0][1] == "chat-9"  # session_id vem do thread_id
+    assert interno["agentes_chamados"] == [
+        "guardrail_entrada_node", "roteador_node", "a2a_assessor_node",
+        "juiz_node", "guardrail_saida_node",
+    ]
+    assert interno["messages"][-1].content == "Seu saldo é R$ 1.200,00."
+
+
+async def test_assessor_fora_do_ar_responde_limpo_sem_passar_pelo_juiz(grafo, monkeypatch):
+    from frigus_ai.graph.nodes import assessor as assessor_mod
+    from frigus_ai.graph.nodes import router as router_mod
+
+    async def _fora_do_ar(pergunta, session_id):
+        raise AssessorIndisponivel("connection refused")
+
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(rota="assessor")))
+    monkeypatch.setattr(assessor_mod.assessor, "perguntar", _fora_do_ar)
+
+    compilar, _ = grafo
+    app = compilar(["VEREDITO: REPROVADO\nJUSTIFICATIVA: não deveria ser chamado"])
+
+    interno = await app.ainvoke(
+        EntradaGrafo(messages=[HumanMessage(content="como economizo no mercado?")]),
+        config={"configurable": {"thread_id": "chat-9"}},
+        output_keys=["agentes_chamados", "messages"],
+    )
+
+    assert "juiz_node" not in interno["agentes_chamados"]
+    assert interno["messages"][-1].content == assessor_mod.INDISPONIVEL
+
+
+async def test_stream_do_runner_transmite_o_caminho_do_assessor(grafo, monkeypatch):
+    """O `executar_stream` real sobre o grafo compilado: os eventos que o painel do front
+    consome saem com o nome do nó novo e com a rota escolhida pelo roteador."""
+
+    from frigus_ai.graph.nodes import assessor as assessor_mod
+    from frigus_ai.graph.nodes import router as router_mod
+    from frigus_ai.repositories import chat_embeddings_repository
+    from frigus_ai.services import runner
+
+    async def _perguntar(pergunta, session_id):
+        return "Reserve R$ 600,00 por mês."
+
+    async def _sem_conversas(user_id, pergunta, session_id_atual):
+        return []
+
+    class _Fluxo:
+        def __init__(self, compilado):
+            self._compilado = compilado
+
+        async def get(self):
+            return self._compilado
+
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(rota="assessor")))
+    monkeypatch.setattr(assessor_mod.assessor, "perguntar", _perguntar)
+    monkeypatch.setattr(chat_embeddings_repository, "buscar_resumos_relevantes", _sem_conversas)
+
+    compilar, _ = grafo
+    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])))
+
+    eventos = [e async for e in runner.executar_stream("como economizo?", "chat-9", 7, None)]
+
+    iniciados = [e.node for e in eventos if e.type == "node_started"]
+    assert iniciados == [
+        "guardrail_entrada_node", "roteador_node", "a2a_assessor_node",
+        "juiz_node", "guardrail_saida_node",
+    ]
+    assert [e.route for e in eventos if e.type == "route_selected"] == ["assessor"]
+    assert [e.content for e in eventos if e.type == "answer_ready"] == ["Reserve R$ 600,00 por mês."]
+    assert eventos[-1].type == "run_finished"
+
+
+async def test_stream_do_runner_transmite_a_rota_da_visao(grafo, monkeypatch):
+    from frigus_ai.graph import state as state_mod
+    from frigus_ai.graph.nodes import visao as visao_mod
+    from frigus_ai.services import runner
+
+    class _FakeLLMVisao:
+        async def ainvoke(self, _mensagens):
+            return state_mod.InventarioGeladeira(items=[], confidence=0.5)
+
+    class _Fluxo:
+        def __init__(self, compilado):
+            self._compilado = compilado
+
+        async def get(self):
+            return self._compilado
+
+    monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
+    compilar, _ = grafo
+    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])))
+
+    eventos = [
+        e async for e in runner.executar_stream("foto", "visao-7-x", 7, None, imagem_b64="ZmFrZQ==")
+    ]
+
+    assert [e.route for e in eventos if e.type == "route_selected"] == ["visao"]
+    assert "visao_node" in [e.node for e in eventos if e.type == "node_started"]

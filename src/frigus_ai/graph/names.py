@@ -14,6 +14,7 @@ NodeLiteral = Literal[
     "receitas_node",
     "faq_node",
     "financeiro_node",
+    "a2a_assessor_node",
     "visao_node",
     "orquestrador_node",
     "juiz_node",
@@ -27,6 +28,7 @@ COMPRAS:           NodeLiteral = "compras_node"
 RECEITAS:          NodeLiteral = "receitas_node"
 FAQ:               NodeLiteral = "faq_node"
 FINANCEIRO:        NodeLiteral = "financeiro_node"
+A2A_ASSESSOR:      NodeLiteral = "a2a_assessor_node"
 VISAO:             NodeLiteral = "visao_node"
 ORQUESTRADOR:      NodeLiteral = "orquestrador_node"
 JUIZ:              NodeLiteral = "juiz_node"
@@ -35,6 +37,7 @@ GUARDRAIL_SAIDA:   NodeLiteral = "guardrail_saida_node"
 
 
 __all__ = [
+    "A2A_ASSESSOR",
     "COMPRAS",
     "ESTOQUE",
     "FAQ",

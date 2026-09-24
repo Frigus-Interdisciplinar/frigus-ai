@@ -1,10 +1,8 @@
 from langchain_core.tools import BaseTool, StructuredTool
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.response import Response
-from frigus_ai.infra.qdrant.connection import get_qdrant_client
-from frigus_ai.models import Model
+from frigus_ai.infra.qdrant.connection import get_embeddings, get_qdrant_client
 from frigus_ai.settings import settings
 
 from .schemas import FaqRetrieverArgs, SearchResponse
@@ -19,12 +17,7 @@ class FaqRepo(ToolSet):
 
         client = get_qdrant_client()
 
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model=Model.EMBEDDING_MODEL,
-            google_api_key=settings.GEMINI_API_KEY,
-            task_type=_TASK_TYPE_QUERY,
-        )
-        vetor = embeddings.embed_query(question)
+        vetor = get_embeddings(_TASK_TYPE_QUERY).embed_query(question)
 
         pontos = client.query_points(
             collection_name=settings.QDRANT_COLLECTION_NAME,

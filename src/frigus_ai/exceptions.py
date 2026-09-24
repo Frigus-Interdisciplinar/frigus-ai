@@ -84,6 +84,14 @@ class IngredienteNaoEncontrado(PreferenciasError):
         super().__init__(f"Ingrediente {nome!r} não encontrado.")
 
 
+class AssessorError(FrigusError):
+    """Erro base das chamadas A2A ao Assessor financeiro (infra/assessor/client.py)."""
+
+
+class AssessorIndisponivel(AssessorError):
+    """Assessor não configurado, fora do ar, ou respondeu algo que não dá pra usar."""
+
+
 class SpoonacularError(FrigusError):
     """Erro base das chamadas à API da Spoonacular."""
 

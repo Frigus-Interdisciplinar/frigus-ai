@@ -9,6 +9,7 @@ PAPEL/SHOTS; `load_sections()` devolve as seções cruas, pra quem precisa de
 outra seção (TEMPLATE do Juiz) ou não quer o envelope de persona (Guardrail).
 """
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -67,6 +68,16 @@ def _formatar_fatos(fatos: Fatos) -> str:
     )
 
 
+CONTEXTO_CONVERSAS = """
+### CONVERSAS ANTERIORES RELEVANTES
+Resumos de outras conversas deste usuário parecidas com a pergunta atual. Use só como
+contexto (o que ele já pediu, decidiu ou deixou pendente) — nunca como fonte de estoque,
+preço ou validade, que mudam e só valem vindos das tools.
+
+{resumos}
+"""
+
+
 def _parse_frontmatter(texto: str) -> tuple[dict[str, str], str]:
     linhas = texto.splitlines()
 
@@ -123,12 +134,15 @@ def load_sections(nome_arquivo: str) -> dict[str, str]:
     return secoes
 
 
-def load_prompt(nome_arquivo: str, fatos: Fatos | None = None) -> str:
+def load_prompt(
+    nome_arquivo: str, fatos: Fatos | None = None, conversas: Sequence[str] = ()
+) -> str:
     """System prompt completo: persona + contexto temporal +
     [obrigatoriedade de tools, se o frontmatter marcar] + papel + [shots].
 
     Se `fatos` for fornecido, inclui uma seção CONTEXTO DE FATOS estruturados
     no final do prompt para que o LLM possa usar essas informações na resposta.
+    Ordem fixa no fim: fatos (sobre o usuário) antes de conversas (sobre o passado).
     """
 
     metadados, secoes = _ler(nome_arquivo + ".md")
@@ -145,6 +159,10 @@ def load_prompt(nome_arquivo: str, fatos: Fatos | None = None) -> str:
 
     if fatos is not None:
         partes.append(_formatar_fatos(fatos))
+
+    if conversas:
+        resumos = "\n".join(f"- {c}" for c in conversas)
+        partes.append(CONTEXTO_CONVERSAS.format(resumos=resumos))
 
     return "\n\n".join(partes)
 

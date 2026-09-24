@@ -28,23 +28,15 @@
   com Estoque/Compras. Só descreve o que viu; não escreve no estoque (decisão do
   plano original, pra não sujar o estoque com "achismo" de visão) — usuário confirma
   via `POST /stock/items` numa mensagem/chamada separada.
+- Retry do Juiz: `no_visao` devolve `rota=visao` (`VisaoUpdate`), o `path_map` do Juiz
+  tem `Route.VISAO`, e o feedback do Juiz entra no prompt da segunda chamada. `visao`
+  não é rota do roteador (`RotaRoteador`): turno com foto não passa por ele.
+- Thread da foto apagada no fim (`runner.descartar_thread`, chamado no `finally` de
+  `analisar_foto`): o MongoDBSaver grava um checkpoint por passo, cada um com o base64
+  inteiro — limpar `imagem_b64` no estado final não tiraria dos anteriores.
 
 ## Falta fazer
 
-- **`imagem_b64` não é limpo do estado**: como cada foto usa uma thread nova e
-  descartável, o checkpoint do MongoDBSaver dessa thread guarda o base64 da imagem
-  (alguns MB) PRA SEMPRE — a thread nunca é revisitada, então nada limpa esse
-  documento. Em volume, isso acumula lixo no Mongo sem controle. Corrigir exigiria ou
-  (a) `no_visao` devolver `imagem_b64=None` no update (funciona só se o campo não for
-  `Annotated` com reducer que ignora `None`) ou (b) um TTL/job de limpeza pra threads
-  `visao-*` — nenhum dos dois foi feito.
-- Sem loop de retentativa do Juiz pra Visão: `decidir_apos_juiz` (`graph/builder.py`)
-  usa `estado.get("rota", GUARDRAIL_SAIDA)` pra decidir aonde voltar se reprovado, mas
-  turno de Visão nunca passa pelo roteador, então `rota` nunca é setado — na prática,
-  se o Juiz reprovar uma resposta de Visão, ela vai direto pro guardrail de saída sem
-  segunda tentativa (não trava nem quebra, só não re-roda a visão). Aceitável por
-  enquanto; corrigir exigiria setar `rota=VISAO` em algum lugar e adicionar `VISAO` no
-  `path_map` do Juiz.
 - Só Gemini Flash — sem fallback pra Claude (que também tem visão) se o Gemini cair ou
   não tiver `GEMINI_API_KEY` configurada (hoje: levanta `FalhaNoAgente`, vira 502).
 

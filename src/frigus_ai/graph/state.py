@@ -10,19 +10,14 @@ from frigus_ai.graph.names import NodeLiteral
 from frigus_ai.graph.tools.estoque.schemas import Category, StoragePlace
 from frigus_ai.privacy import MapaPII
 
-RouteLiteral = Literal[
-    "estoque",
-    "compras",
-    "receitas",
-    "faq",
-    "financeiro",
-    "fim",
-    "guardrail_entrada",
-    "guardrail_saida",
-    "juiz",
-]
+type AsyncNode[R] = Callable[[Estado], Awaitable[R]]
+
+RotaEspecialista = Literal["estoque", "compras", "receitas", "faq", "financeiro", "assessor"]
+RotaRoteador     = Literal[RotaEspecialista, "fim"]
+RouteLiteral     = Literal[RotaRoteador, "visao", "guardrail_entrada", "guardrail_saida", "juiz"]
 
 ROTAS_VALIDAS: frozenset[str] = frozenset(get_args(RouteLiteral))
+
 
 class Route:
     """Namespace de constantes — não instanciar. Mantém o acesso Route.X, mas
@@ -33,10 +28,25 @@ class Route:
     RECEITAS:          RouteLiteral = "receitas"
     FAQ:               RouteLiteral = "faq"
     FINANCEIRO:        RouteLiteral = "financeiro"
+    ASSESSOR:          RouteLiteral = "assessor"
     FIM:               RouteLiteral = "fim"
+    VISAO:             RouteLiteral = "visao"
     GUARDRAIL_ENTRADA: RouteLiteral = "guardrail_entrada"
     GUARDRAIL_SAIDA:   RouteLiteral = "guardrail_saida"
     JUIZ:              RouteLiteral = "juiz"
+
+
+class Roteamento(BaseModel):
+    """Saída estruturada do roteador (`response_format` do `router_app`)."""
+
+    rota: RotaRoteador
+    resposta: str = Field(
+        default="",
+        description=(
+            "Só quando rota=fim: o texto para o usuário (saudação, fora de escopo ou "
+            "pedido de clarificação). Vazio quando encaminha pra um especialista."
+        ),
+    )
 
 
 class EntradaGrafo(MessagesState):
@@ -84,6 +94,13 @@ class EspecialistaUpdate(TypedDict):
     dados_especialista:    str
 
 
+class VisaoUpdate(EspecialistaUpdate):
+    """Visão seta a própria rota: o roteador não roda em turno com foto, e sem `rota` o
+    Juiz não teria pra onde devolver uma resposta reprovada."""
+
+    rota: RouteLiteral
+
+
 class FaqUpdate(TypedDict):
     """FAQ/Receitas: já respondem em linguagem natural, então também publicam em `messages`."""
 
@@ -91,6 +108,11 @@ class FaqUpdate(TypedDict):
     messages:              list[AnyMessage]
     resposta_especialista: str
     dados_especialista:    str
+
+
+class AssessorUpdate(FaqUpdate):
+    """Assessor (A2A): texto pronto vindo de outro agente, publicado direto como FAQ/Receitas.
+    `dados_especialista` vazio = Assessor indisponível (ver `decidir_apos_assessor`)."""
 
 
 class OrquestradorUpdate(TypedDict):
@@ -139,18 +161,12 @@ class InventarioGeladeira(BaseModel):
     confidence: float = Field(description="Confiança geral da identificação, de 0.0 a 1.0.")
 
 
-# Contrato dos nodes: `Estado -> Awaitable[R]`, R sendo o Update específico de cada node
-# (RouterUpdate, EspecialistaUpdate, ...). Não é Protocol de propósito — os nodes de hoje são
-# funções puras, sem atributo/método extra que justifique uma classe; Protocol só valeria a pena
-# se algum node precisasse carregar estado ou metadado além da própria chamada. Usado em
-# `graph/builder.py` pra travar, com mypy, que cada função passada a `add_node()` bate com o
-# Update esperado naquele node — sem isso, um builder que troca `no_roteador` por `no_financeiro`
-# por engano ainda tipa limpo, porque `add_node()` é permissivo demais nos stubs do LangGraph.
-type AsyncNode[R] = Callable[[Estado], Awaitable[R]]
+
 
 
 __all__ = [
     "ROTAS_VALIDAS",
+    "AssessorUpdate",
     "AsyncNode",
     "EntradaGrafo",
     "EspecialistaUpdate",
@@ -162,8 +178,12 @@ __all__ = [
     "ItemIdentificado",
     "JuizUpdate",
     "OrquestradorUpdate",
+    "RotaEspecialista",
+    "RotaRoteador",
+    "Roteamento",
     "Route",
     "RouteLiteral",
     "RouterUpdate",
     "SaidaGrafo",
+    "VisaoUpdate",
 ]

@@ -67,6 +67,14 @@ const ICON_PATHS: Record<NodeName, ReactElement> = {
       <circle cx="12" cy="12" r="3.2" />
     </>
   ),
+  // Carteira — finanças pessoais, respondidas pelo Assessor (outro agente, via A2A).
+  a2a_assessor_node: (
+    <>
+      <path d="M4 7 H18 C19.1 7 20 7.9 20 9 V18 C20 19.1 19.1 20 18 20 H5 C3.9 20 3 19.1 3 18 V6 C3 4.9 3.9 4 5 4 H16" />
+      <path d="M20 11 H16 C14.9 11 14 11.9 14 13 C14 14.1 14.9 15 16 15 H20" />
+      <circle cx="16.2" cy="13" r="0.9" fill="currentColor" stroke="none" />
+    </>
+  ),
   // Balança — juiz (LLM-as-judge).
   juiz_node: (
     <>

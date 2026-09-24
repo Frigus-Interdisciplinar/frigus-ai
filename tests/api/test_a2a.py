@@ -17,7 +17,7 @@ def test_agent_card_no_caminho_de_discovery_do_a2a():
     assert card["protocolVersion"]
     assert card["defaultInputModes"] == ["text/plain"]
     assert {s["id"] for s in card["skills"]} == {
-        "estoque", "compras", "receitas", "financeiro", "faq"
+        "estoque", "compras", "receitas", "financeiro", "planejamento_alimentar_a2a", "faq"
     }
 
 

@@ -1,4 +1,5 @@
 import asyncio
+from typing import get_args
 
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, StateGraph
@@ -7,6 +8,7 @@ from langgraph.graph.state import CompiledStateGraph
 from frigus_ai.graph.guardrail.entrada import no_guardrail_entrada
 from frigus_ai.graph.guardrail.saida import no_guardrail_saida
 from frigus_ai.graph.names import (
+    A2A_ASSESSOR,
     COMPRAS,
     ESTOQUE,
     FAQ,
@@ -20,6 +22,7 @@ from frigus_ai.graph.names import (
     VISAO,
 )
 from frigus_ai.graph.nodes import (
+    no_assessor,
     no_compras,
     no_estoque,
     no_faq,
@@ -31,6 +34,7 @@ from frigus_ai.graph.nodes import (
     no_visao,
 )
 from frigus_ai.graph.state import (
+    AssessorUpdate,
     AsyncNode,
     EntradaGrafo,
     EspecialistaUpdate,
@@ -40,9 +44,11 @@ from frigus_ai.graph.state import (
     GuardrailSaidaUpdate,
     JuizUpdate,
     OrquestradorUpdate,
+    RotaEspecialista,
     Route,
     RouterUpdate,
     SaidaGrafo,
+    VisaoUpdate,
 )
 from frigus_ai.infra.mongo.connection import mongo
 
@@ -59,9 +65,12 @@ def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     return ROTEADOR
 
 
+_ESPECIALISTAS = frozenset(get_args(RotaEspecialista))
+
+
 def decidir_especialista(estado: Estado) -> str:
     rota = estado.get("rota", Route.FIM)
-    if rota not in (Route.ESTOQUE, Route.COMPRAS, Route.RECEITAS, Route.FAQ, Route.FINANCEIRO):
+    if rota not in _ESPECIALISTAS:
         return Route.FIM
     return rota
 
@@ -78,6 +87,13 @@ def decidir_apos_juiz(estado: Estado) -> str:
     return GUARDRAIL_SAIDA
 
 
+def decidir_apos_assessor(estado: Estado) -> str:
+    """Assessor fora do ar devolve `dados_especialista` vazio: sem dado pra checar, o Juiz só
+    reprovaria a mensagem de erro e cada retry pagaria de novo o timeout de rede."""
+
+    return JUIZ if estado.get("dados_especialista") else GUARDRAIL_SAIDA
+
+
 def _construir_grafo() -> StateGraph:
     guardrail_entrada: AsyncNode[GuardrailEntradaUpdate] = no_guardrail_entrada
     roteador:          AsyncNode[RouterUpdate]           = no_roteador
@@ -86,7 +102,8 @@ def _construir_grafo() -> StateGraph:
     financeiro:        AsyncNode[EspecialistaUpdate]     = no_financeiro
     receitas:          AsyncNode[FaqUpdate]              = no_receitas
     faq:               AsyncNode[FaqUpdate]              = no_faq
-    visao:             AsyncNode[EspecialistaUpdate]     = no_visao
+    assessor:          AsyncNode[AssessorUpdate]         = no_assessor
+    visao:             AsyncNode[VisaoUpdate]            = no_visao
     orquestrador:      AsyncNode[OrquestradorUpdate]     = no_orquestrador
     juiz:              AsyncNode[JuizUpdate]             = no_juiz
     guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]   = no_guardrail_saida
@@ -100,6 +117,7 @@ def _construir_grafo() -> StateGraph:
     grafo.add_node(RECEITAS,          receitas)
     grafo.add_node(FAQ,               faq)
     grafo.add_node(FINANCEIRO,        financeiro)
+    grafo.add_node(A2A_ASSESSOR,      assessor)
     grafo.add_node(VISAO,             visao)
     grafo.add_node(ORQUESTRADOR,      orquestrador)
     grafo.add_node(JUIZ,              juiz)
@@ -126,6 +144,7 @@ def _construir_grafo() -> StateGraph:
             Route.RECEITAS:   RECEITAS,
             Route.FAQ:        FAQ,
             Route.FINANCEIRO: FINANCEIRO,
+            Route.ASSESSOR:   A2A_ASSESSOR,
             Route.FIM:        END,
         },
     )
@@ -141,6 +160,13 @@ def _construir_grafo() -> StateGraph:
     grafo.add_edge(RECEITAS, JUIZ)
     grafo.add_edge(FAQ,      JUIZ)
 
+    # Assessor (A2A) também responde em linguagem natural; fora do ar, pula o Juiz
+    grafo.add_conditional_edges(
+        source   = A2A_ASSESSOR,
+        path     = decidir_apos_assessor,
+        path_map = {JUIZ: JUIZ, GUARDRAIL_SAIDA: GUARDRAIL_SAIDA},
+    )
+
     # Juiz: reprovado + tentativas disponíveis -> volta pro especialista de origem; caso contrário -> Guardrail de Saída
     grafo.add_conditional_edges(
         source   = JUIZ,
@@ -151,6 +177,8 @@ def _construir_grafo() -> StateGraph:
             Route.RECEITAS:   RECEITAS,
             Route.FAQ:        FAQ,
             Route.FINANCEIRO: FINANCEIRO,
+            Route.ASSESSOR:   A2A_ASSESSOR,
+            Route.VISAO:      VISAO,
             GUARDRAIL_SAIDA:  GUARDRAIL_SAIDA,
         },
     )

@@ -1,3 +1,4 @@
+from .assessor import no_assessor
 from .compras import no_compras
 from .estoque import no_estoque
 from .faq import no_faq
@@ -9,6 +10,7 @@ from .router import no_roteador
 from .visao import no_visao
 
 __all__ = [
+    "no_assessor",
     "no_compras",
     "no_estoque",
     "no_faq",
