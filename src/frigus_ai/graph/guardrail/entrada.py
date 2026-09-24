@@ -9,12 +9,13 @@ from frigus_ai.graph.guardrail.padroes import pede_dado_interno, tem_injecao
 from frigus_ai.graph.guardrail.schemas import (
     RESPOSTAS_BLOQUEIO,
     Categoria,
+    Classificacao,
     Motivo,
     ResultadoGuardrail,
 )
 from frigus_ai.graph.llm import llm_guardrail
 from frigus_ai.graph.names import GUARDRAIL_ENTRADA
-from frigus_ai.graph.nodes.contexto import perguntar, podar_historico
+from frigus_ai.graph.nodes.contexto import podar_historico
 from frigus_ai.graph.prompts import load_sections
 from frigus_ai.graph.state import Estado, GuardrailEntradaUpdate
 from frigus_ai.logging import Logging
@@ -36,30 +37,39 @@ def _aprovado() -> ResultadoGuardrail:
 
 
 
-def _extrair_categoria(resposta: str) -> str:
-    """Retorna APROVADO se o LLM não seguir o formato esperado."""
-
-    for linha in resposta.splitlines():
-        if linha.strip().upper().startswith("CATEGORIA:"):
-            return linha.split(":", 1)[1].strip().upper()
-
-    return Categoria.APROVADO
+llm_classificador = (
+    llm_guardrail.with_structured_output(Classificacao) if llm_guardrail else None
+)
 
 
 async def _classificar(mensagem_anonimizada: str) -> str:
-    """Categoria do texto, do cache quando possível — senão da LLM, e então cacheada."""
+    """
+    Categoria do texto, do cache quando possível — senão da LLM, e então cacheada.
+
+    Falha aberta: erro de chamada ou saída fora do schema aprova (os bloqueios por regex já
+    rodaram) e NÃO vai pro cache, pra próxima mensagem igual tentar classificar de novo.
+    """
 
     if (cacheada := categoria_em_cache(mensagem_anonimizada, _FINGERPRINT)) is not None:
         logger.debug("Classificação do guardrail veio do cache: %s", cacheada)
         return cacheada
 
-    resposta = await perguntar(
-        llm_guardrail, _CLASSIFICADOR.format(mensagem=mensagem_anonimizada)
-    )
-    categoria = _extrair_categoria(resposta)
-    guardar_categoria(mensagem_anonimizada, _FINGERPRINT, categoria)
+    if llm_classificador is None:
+        logger.warning("Classificador do guardrail sem API key — aprovando sem classificar.")
+        return Categoria.APROVADO
 
-    return categoria
+    try:
+        resultado = await llm_classificador.ainvoke(
+            _CLASSIFICADOR.format(mensagem=mensagem_anonimizada)
+        )
+    except Exception as e:
+        logger.warning("Classificador do guardrail falhou, aprovando (falha aberta): %s", e)
+        return Categoria.APROVADO
+
+    assert isinstance(resultado, Classificacao)
+    guardar_categoria(mensagem_anonimizada, _FINGERPRINT, resultado.categoria)
+
+    return resultado.categoria
 
 
 async def guardrail_entrada(mensagem_anonimizada: str) -> ResultadoGuardrail:
@@ -78,9 +88,8 @@ async def guardrail_entrada(mensagem_anonimizada: str) -> ResultadoGuardrail:
 
     categoria = await _classificar(mensagem_anonimizada)
 
-    # Lookup pela str crua, sem `Categoria(categoria)`: o StrEnum casa por hash de str, e
-    # converter estouraria ValueError se o LLM inventasse uma categoria fora da lista —
-    # o que precisa cair no `_aprovado()` abaixo (falha aberta), não derrubar o turno.
+    # Lookup pela str crua, sem `Categoria(categoria)`: o valor pode vir do Redis, e uma
+    # entrada corrompida estouraria ValueError em vez de cair na falha aberta abaixo.
     if (bloqueio := RESPOSTAS_BLOQUEIO.get(categoria)) is not None:
         return _bloquear(bloqueio["motivo"], bloqueio["mensagem"])
 

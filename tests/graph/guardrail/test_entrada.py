@@ -8,12 +8,10 @@ esses casos nunca tocam a rede. O caminho que cai no LLM fica de fora daqui.
 
 import pytest
 
-from frigus_ai.graph.guardrail.entrada import (
-    _extrair_categoria,
-    guardrail_entrada,
-)
+from frigus_ai.graph.guardrail import entrada as mod
+from frigus_ai.graph.guardrail.entrada import guardrail_entrada
 from frigus_ai.graph.guardrail.padroes import pede_dado_interno, tem_injecao
-from frigus_ai.graph.guardrail.schemas import Categoria
+from frigus_ai.graph.guardrail.schemas import Categoria, Classificacao
 from frigus_ai.privacy import anonimizar_entrada
 
 # --------------------- detecção de injeção ---------------------
@@ -141,36 +139,61 @@ def test_anonimiza_multiplas_ocorrencias_com_tokens_distintos():
     assert "c@d.com" not in anonimizado
 
 
-# --------------------- extração da categoria ---------------------
+# --------------------- classificador (LLM stubado) ---------------------
 
-def test_extrai_categoria_do_formato_esperado():
-    assert _extrair_categoria("CATEGORIA: OFENSIVO") == "OFENSIVO"
+class _FakeClassificador:
+    def __init__(self, resultado):
+        self._resultado = resultado
 
-
-def test_extrai_categoria_ignorando_espaco_e_case():
-    assert _extrair_categoria("  categoria:  ilicito  ") == "ILICITO"
-
-
-def test_extrai_categoria_em_resposta_multilinha():
-    resposta = "Analisando a mensagem...\nCATEGORIA: POLITICO\nFim."
-    assert _extrair_categoria(resposta) == "POLITICO"
+    async def ainvoke(self, _prompt):
+        if isinstance(self._resultado, Exception):
+            raise self._resultado
+        return self._resultado
 
 
-def test_fallback_para_aprovado_quando_llm_foge_do_formato():
+@pytest.fixture
+def sem_cache(monkeypatch):
+    """Tira o Redis do caminho e registra o que seria cacheado."""
+
+    cacheados = []
+    monkeypatch.setattr(mod, "categoria_em_cache", lambda *_: None)
+    monkeypatch.setattr(mod, "guardar_categoria", lambda _t, _f, c: cacheados.append(c))
+    return cacheados
+
+
+async def test_bloqueia_pela_categoria_estruturada(monkeypatch, sem_cache):
+    monkeypatch.setattr(
+        mod, "llm_classificador",
+        _FakeClassificador(Classificacao(categoria=Categoria.POLITICO, justificativa="eleição")),
+    )
+
+    resultado = await guardrail_entrada("em quem votar?")
+
+    assert resultado["motivo"] == "pergunta_politica"
+    assert sem_cache == [Categoria.POLITICO]
+
+
+async def test_saida_fora_do_schema_aprova_sem_cachear(monkeypatch, sem_cache):
     """
-    Falha aberta deliberada: se o LLM não devolve o formato, aprova em vez de
-    travar o usuário. Os bloqueios por regex já rodaram antes disso.
+    Falha aberta deliberada: se o LLM erra o schema (ou a chamada cai), aprova em vez de
+    travar o usuário — os bloqueios por regex já rodaram. Não cacheia, pra tentar de novo.
     """
-    assert _extrair_categoria("acho que tá tudo bem") == Categoria.APROVADO
+
+    monkeypatch.setattr(
+        mod, "llm_classificador", _FakeClassificador(ValueError("CATEGORIA: talvez?"))
+    )
+
+    resultado = await guardrail_entrada("quantos ovos tenho?")
+
+    assert resultado["bloqueado"] is False
+    assert sem_cache == []
 
 
 async def test_categoria_desconhecida_do_llm_nao_derruba_o_turno(monkeypatch):
     """
-    Falha aberta: se o classificador inventar uma categoria fora da lista, o guardrail
-    aprova em vez de estourar. (`Categoria("SPAM")` levantaria ValueError.)
+    Falha aberta: categoria fora da lista (ex.: entrada corrompida no Redis) aprova em vez
+    de estourar. (`Categoria("SPAM")` levantaria ValueError.)
     """
-
-    from frigus_ai.graph.guardrail import entrada as mod
 
     monkeypatch.setattr(mod, "_classificar", lambda _texto: _devolve("SPAM"))
 

@@ -4,6 +4,8 @@ from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from frigus_ai.graph.guardrail.entrada import no_guardrail_entrada
+from frigus_ai.graph.guardrail.saida import no_guardrail_saida
 from frigus_ai.graph.names import (
     COMPRAS,
     ESTOQUE,
@@ -22,8 +24,6 @@ from frigus_ai.graph.nodes import (
     no_estoque,
     no_faq,
     no_financeiro,
-    no_guardrail_entrada,
-    no_guardrail_saida,
     no_juiz,
     no_orquestrador,
     no_receitas,
