@@ -72,11 +72,11 @@ def test_indice_unico_criado_uma_vez_so(collection):
 
 
 def test_inserir_resumo_filtra_por_dono(collection):
-    chat_repo._inserir_resumo("resumo", "sessao-1", user_id=7)
+    chat_repo._inserir_resumo("resumo", "sessao-1", user_id=7, resumido_ate=12)
 
     filtro, update, _ = collection.updates[0]
     assert filtro == {"session_id": "sessao-1", "user_id": 7}
-    assert update == {"$set": {"resume": "resumo"}}
+    assert update == {"$set": {"resume": "resumo", "resumido_ate": 12}}
 
 
 def test_buscar_documento_completo_filtra_por_dono(collection):

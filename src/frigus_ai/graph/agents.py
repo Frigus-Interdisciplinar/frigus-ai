@@ -1,3 +1,5 @@
+from contextvars import ContextVar
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt
 
@@ -17,6 +19,10 @@ from frigus_ai.graph.tools import (
 from frigus_ai.infra.postgres.context import current_user_id
 from frigus_ai.repositories import fatos_repository
 
+conversas_anteriores: ContextVar[tuple[str, ...]] = ContextVar(
+    "conversas_anteriores", default=()
+)
+
 
 def _montar(nome: str, model, tools: list | None = None, response_format=None):
     """
@@ -32,7 +38,7 @@ def _montar(nome: str, model, tools: list | None = None, response_format=None):
             fatos = fatos_repository.buscar_fatos(current_user_id())
         except Exception:
             fatos = None
-        return load_prompt(nome, fatos=fatos)
+        return load_prompt(nome, fatos=fatos, conversas=conversas_anteriores.get())
 
     return create_agent(
         model=model, tools=tools or [], middleware=[_prompt], response_format=response_format
@@ -50,6 +56,7 @@ orquestrador_app = _montar("orquestrador", llm_rapido)
 
 __all__ = [
     "compras_app",
+    "conversas_anteriores",
     "estoque_app",
     "faq_app",
     "financeiro_app",

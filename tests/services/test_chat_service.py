@@ -1,52 +1,65 @@
 """
 Orquestração de fatos/resumo em `ChatService`: atualizados periodicamente durante a
-conversa (`_talvez_atualizar_memoria`, a cada N mensagens), não só quando a sessão
-fecha — sessão nunca fechada não pode ficar sem nada. `encerrar_sessao` só cobre o
-rabo que o ciclo periódico ainda não alcançou. Tudo mockado (repository/user_service);
-a query em si já tem teste próprio em tests/repositories/test_chat_repository.py.
+conversa (`_talvez_atualizar_memoria`, a cada N mensagens), no fechamento da sessão e
+quando o usuário abre um chat novo (`_resumir_pendentes`) — chat abandonado não pode
+ficar sem resumo. Só o que o resumo ainda não cobre (`resumido_ate`) vai pro LLM, chat
+curto demais não gasta LLM, e só resumo `relevante` vira embedding. Tudo mockado
+(repositories/user_service); a query em si tem teste em tests/repositories/.
 """
 
-from frigus_ai.repositories import chat_repository
-from frigus_ai.schemas.models import Fatos
+import pytest
+
+from frigus_ai.repositories import chat_embeddings_repository, chat_repository
+from frigus_ai.schemas.models import Fatos, Resumo
 from frigus_ai.services import chat_service as chat_service_module
 from frigus_ai.services import runner
 from frigus_ai.services.chat_service import service as chat_service
 from frigus_ai.services.user_service import user_service
 
 
-async def test_encerrar_sessao_no_multiplo_do_intervalo_nao_repete_atualizacao(monkeypatch):
-    """Ciclo periódico já cobriu esse total — rodar de novo repetiria a mesma
-    chamada de LLM à toa."""
-
-    async def _contar(session_id, user_id):
-        return 20  # múltiplo de _INTERVALO_ATUALIZACAO_MEMORIA (10)
-
-    monkeypatch.setattr(chat_repository, "contar_mensagens", _contar)
-
-    chamou = []
-    monkeypatch.setattr(chat_service, "_atualizar_memoria", lambda s, u: chamou.append((s, u)))
-
-    await chat_service.encerrar_sessao("sessao-1", user_id=7)
-
-    assert chamou == []
+def _msgs(n):
+    return [{"role": "human" if i % 2 == 0 else "ai", "content": f"msg {i}"} for i in range(n)]
 
 
-async def test_encerrar_sessao_com_rabo_cobre_o_que_falta(monkeypatch):
-    async def _contar(session_id, user_id):
-        return 23  # 3 mensagens além do último múltiplo de 10
+@pytest.fixture
+def memoria(monkeypatch):
+    """Stuba tudo que `_atualizar_memoria` toca e registra as chamadas."""
 
-    monkeypatch.setattr(chat_repository, "contar_mensagens", _contar)
+    registro = {"doc": None, "resumo": Resumo(resumo="resumo novo", relevante=True),
+                "fatos": None, "chamadas_resumo": [], "salvou": [], "indexou": [],
+                "removeu": [], "fatos_salvos": []}
 
-    chamou = []
+    async def _doc(session_id, user_id):
+        return registro["doc"]
 
-    async def _atualizar_memoria(session_id, user_id):
-        chamou.append((session_id, user_id))
+    async def _buscar_fatos(user_id):
+        return Fatos()
 
-    monkeypatch.setattr(chat_service, "_atualizar_memoria", _atualizar_memoria)
+    def _atualizar_resumo(atual, msgs):
+        registro["chamadas_resumo"].append((atual, msgs))
+        return registro["resumo"]
 
-    await chat_service.encerrar_sessao("sessao-1", user_id=7)
+    async def _salvar_resumo(resumo, session_id, user_id, resumido_ate):
+        registro["salvou"].append((resumo, session_id, user_id, resumido_ate))
 
-    assert chamou == [("sessao-1", 7)]
+    async def _indexar(session_id, user_id, resumo):
+        registro["indexou"].append((session_id, user_id, resumo))
+
+    async def _remover(session_id):
+        registro["removeu"].append(session_id)
+
+    async def _atualizar_fatos(user_id, fatos):
+        registro["fatos_salvos"].append((user_id, fatos))
+
+    monkeypatch.setattr(chat_repository, "buscar_documento_completo", _doc)
+    monkeypatch.setattr(chat_repository, "salvar_resumo", _salvar_resumo)
+    monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
+    monkeypatch.setattr(user_service, "atualizar_fatos_por_extracao", _atualizar_fatos)
+    monkeypatch.setattr(chat_service_module, "_extrair_fatos", lambda m, a: registro["fatos"])
+    monkeypatch.setattr(chat_service_module, "_atualizar_resumo", _atualizar_resumo)
+    monkeypatch.setattr(chat_embeddings_repository, "salvar_resumo", _indexar)
+    monkeypatch.setattr(chat_embeddings_repository, "remover_resumo", _remover)
+    return registro
 
 
 async def test_talvez_atualizar_memoria_dispara_no_multiplo_do_intervalo(monkeypatch):
@@ -78,106 +91,98 @@ async def test_talvez_atualizar_memoria_nao_dispara_fora_do_intervalo(monkeypatc
     assert disparadas == []
 
 
-async def test_atualizar_memoria_ignora_fatos_indisponivel_mas_salva_resumo(monkeypatch):
-    async def _doc(session_id, user_id):
-        return {
-            "messages": [{"role": "human", "content": "sou alérgico a amendoim"}],
-            "resume": "resumo antigo",
-        }
-
-    async def _buscar_fatos(user_id):
-        return Fatos()
-
-    monkeypatch.setattr(chat_repository, "buscar_documento_completo", _doc)
-    monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
-    monkeypatch.setattr(chat_service_module, "_extrair_fatos", lambda msgs, atuais: None)
-    monkeypatch.setattr(chat_service_module, "_atualizar_resumo", lambda atual, msgs: "resumo novo")
-
-    chamou_fatos = []
-
-    async def _atualizar_fatos_por_extracao(user_id, extraidos):
-        chamou_fatos.append((user_id, extraidos))
-
-    monkeypatch.setattr(user_service, "atualizar_fatos_por_extracao", _atualizar_fatos_por_extracao)
-
-    salvou_resumo = []
-
-    async def _salvar_resumo(resumo, session_id, user_id):
-        salvou_resumo.append((resumo, session_id, user_id))
-
-    monkeypatch.setattr(chat_repository, "salvar_resumo", _salvar_resumo)
+async def test_resumo_recebe_so_o_que_ainda_nao_foi_resumido(memoria):
+    memoria["doc"] = {"messages": _msgs(15), "resume": "resumo salvo", "resumido_ate": 10}
 
     await chat_service._atualizar_memoria("sessao-1", 7)
 
-    assert chamou_fatos == []
-    assert salvou_resumo == [("resumo novo", "sessao-1", 7)]
-
-
-async def test_atualizar_memoria_salva_fatos_quando_extracao_funciona(monkeypatch):
-    async def _doc(session_id, user_id):
-        return {"messages": [{"role": "human", "content": "sou alérgico a amendoim"}], "resume": ""}
-
-    async def _buscar_fatos(user_id):
-        return Fatos()
-
-    extraidos = Fatos(alergias=["amendoim"])
-
-    monkeypatch.setattr(chat_repository, "buscar_documento_completo", _doc)
-    monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
-    monkeypatch.setattr(chat_service_module, "_extrair_fatos", lambda msgs, atuais: extraidos)
-    monkeypatch.setattr(chat_service_module, "_atualizar_resumo", lambda atual, msgs: "x")
-    monkeypatch.setattr(chat_repository, "salvar_resumo", lambda *a, **kw: None)
-
-    chamou = []
-
-    async def _atualizar(user_id, fatos):
-        chamou.append((user_id, fatos))
-
-    monkeypatch.setattr(user_service, "atualizar_fatos_por_extracao", _atualizar)
-
-    await chat_service._atualizar_memoria("sessao-1", 7)
-
-    assert chamou == [(7, extraidos)]
-
-
-async def test_atualizar_memoria_resumo_recebe_so_a_janela_recente(monkeypatch):
-    """Resumo é incremental: recebe o resumo já salvo + só a janela recente de
-    mensagens, não a conversa inteira — é essa a economia de token sobre o
-    'full pass' antigo em `encerrar_sessao`."""
-
-    async def _doc(session_id, user_id):
-        return {
-            "messages": [{"role": "human", "content": f"msg {i}"} for i in range(15)],
-            "resume": "resumo salvo",
-        }
-
-    async def _buscar_fatos(user_id):
-        return Fatos()
-
-    monkeypatch.setattr(chat_repository, "buscar_documento_completo", _doc)
-    monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
-    monkeypatch.setattr(chat_service_module, "_extrair_fatos", lambda msgs, atuais: None)
-
-    chamadas = []
-
-    def _atualizar_resumo(resumo_atual, mensagens_recentes):
-        chamadas.append((resumo_atual, mensagens_recentes))
-        return "resumo novo"
-
-    monkeypatch.setattr(chat_service_module, "_atualizar_resumo", _atualizar_resumo)
-
-    salvou = []
-    monkeypatch.setattr(
-        chat_repository, "salvar_resumo", lambda resumo, session_id, user_id: salvou.append(resumo)
-    )
-
-    await chat_service._atualizar_memoria("sessao-1", 7)
-
-    assert len(chamadas) == 1
-    resumo_atual, recentes = chamadas[0]
+    [(resumo_atual, recentes)] = memoria["chamadas_resumo"]
     assert resumo_atual == "resumo salvo"
-    assert len(recentes) == 10  # só a janela (_INTERVALO_ATUALIZACAO_MEMORIA), não as 15
-    assert salvou == ["resumo novo"]
+    assert [m["content"] for m in recentes] == [f"msg {i}" for i in range(10, 15)]
+    assert memoria["salvou"] == [("resumo novo", "sessao-1", 7, 15)]
+
+
+async def test_chat_ja_resumido_nao_chama_llm(memoria):
+    """Fecha a sessão logo depois do ciclo periódico: nada novo, nada a fazer."""
+
+    memoria["doc"] = {"messages": _msgs(10), "resume": "r", "resumido_ate": 10}
+
+    await chat_service.encerrar_sessao("sessao-1", user_id=7)
+
+    assert memoria["chamadas_resumo"] == []
+    assert memoria["salvou"] == []
+
+
+async def test_chat_curto_demais_nao_chama_llm(memoria):
+    """'oi' / 'olá' fechado com DELETE: nem resumo, nem fatos, nem embedding."""
+
+    memoria["doc"] = {"messages": _msgs(2), "resume": ""}
+
+    await chat_service.encerrar_sessao("sessao-1", user_id=7)
+
+    assert memoria["chamadas_resumo"] == []
+    assert memoria["indexou"] == []
+
+
+async def test_resumo_relevante_vai_pro_qdrant(memoria):
+    memoria["doc"] = {"messages": _msgs(6), "resume": ""}
+
+    await chat_service._atualizar_memoria("sessao-1", 7)
+
+    assert memoria["indexou"] == [("sessao-1", 7, "resumo novo")]
+    assert memoria["removeu"] == []
+
+
+async def test_resumo_irrelevante_sai_do_qdrant(memoria):
+    memoria["doc"] = {"messages": _msgs(6), "resume": ""}
+    memoria["resumo"] = Resumo(resumo="Usuário só cumprimentou.", relevante=False)
+
+    await chat_service._atualizar_memoria("sessao-1", 7)
+
+    assert memoria["indexou"] == []
+    assert memoria["removeu"] == ["sessao-1"]
+    # o resumo no Mongo continua salvo — `resumido_ate` avança mesmo sem embedding
+    assert memoria["salvou"] == [("Usuário só cumprimentou.", "sessao-1", 7, 6)]
+
+
+async def test_qdrant_fora_do_ar_nao_desfaz_o_resumo(memoria, monkeypatch):
+    memoria["doc"] = {"messages": _msgs(6), "resume": ""}
+
+    async def _falha(*_):
+        raise ConnectionError("qdrant fora")
+
+    monkeypatch.setattr(chat_embeddings_repository, "salvar_resumo", _falha)
+
+    await chat_service._atualizar_memoria("sessao-1", 7)
+
+    assert memoria["salvou"] == [("resumo novo", "sessao-1", 7, 6)]
+
+
+async def test_atualizar_memoria_salva_fatos_quando_extracao_funciona(memoria):
+    memoria["doc"] = {"messages": _msgs(4), "resume": ""}
+    memoria["fatos"] = Fatos(alergias=["amendoim"])
+
+    await chat_service._atualizar_memoria("sessao-1", 7)
+
+    assert memoria["fatos_salvos"] == [(7, Fatos(alergias=["amendoim"]))]
+
+
+async def test_novo_chat_resume_os_pendentes_em_sequencia(monkeypatch):
+    async def _pendentes(user_id, minimo_mensagens, limite):
+        return ["antigo-1", "antigo-2"]
+
+    monkeypatch.setattr(chat_repository, "listar_pendentes_de_resumo", _pendentes)
+
+    resumidos = []
+
+    async def _atualizar_memoria(session_id, user_id):
+        resumidos.append((session_id, user_id))
+
+    monkeypatch.setattr(chat_service, "_atualizar_memoria", _atualizar_memoria)
+
+    await chat_service._resumir_pendentes(7)
+
+    assert resumidos == [("antigo-1", 7), ("antigo-2", 7)]
 
 
 async def test_analisar_foto_usa_thread_id_unico_e_nao_salva_historico(monkeypatch):

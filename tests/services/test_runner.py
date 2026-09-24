@@ -6,10 +6,32 @@ quanto no delta de um nó vindo do `astream` — se o extrator errasse, o SSE te
 sempre com "Sem resposta".
 """
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from frigus_ai.graph.agents import conversas_anteriores
+from frigus_ai.repositories import chat_embeddings_repository
 from frigus_ai.schemas.execution import AnswerReady, NodeStarted, RunFinished
 from frigus_ai.services import runner
+
+
+@pytest.fixture(autouse=True)
+def _sem_qdrant(monkeypatch):
+    """A busca de conversas anteriores roda antes do grafo — sem isso, iria à rede."""
+
+    async def _buscar(user_id, pergunta, session_id_atual):
+        return ["comprou leite semana passada"]
+
+    monkeypatch.setattr(chat_embeddings_repository, "buscar_resumos_relevantes", _buscar)
+
+
+async def test_conversas_anteriores_ficam_disponiveis_pro_prompt():
+    await runner._carregar_conversas_anteriores("e o leite?", "chat-1", 7, imagem_b64=None)
+    assert conversas_anteriores.get() == ("comprou leite semana passada",)
+
+    # Turno com foto não busca — e não herda o valor do turno anterior.
+    await runner._carregar_conversas_anteriores("foto", "chat-1", 7, imagem_b64="abc")
+    assert conversas_anteriores.get() == ()
 
 
 class _FakeGrafo:

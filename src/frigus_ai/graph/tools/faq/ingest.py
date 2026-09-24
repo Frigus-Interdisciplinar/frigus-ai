@@ -6,14 +6,12 @@ from pathlib import Path
 from uuid import NAMESPACE_DNS, uuid5
 
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from frigus_ai.infra.qdrant.connection import get_qdrant_client
+from frigus_ai.infra.qdrant.connection import get_embeddings, get_qdrant_client
 from frigus_ai.logging import Logging
-from frigus_ai.models import Model
 from frigus_ai.settings import settings
 
 logger = Logging.get_logger("qdrant_faq_ingest")
@@ -45,11 +43,7 @@ def ingest() -> None:
     client = get_qdrant_client()
     chunks = _load_chunks()
 
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model=Model.EMBEDDING_MODEL,
-        google_api_key=settings.GEMINI_API_KEY,
-        task_type=_TASK_TYPE_DOCUMENT,
-    )
+    embeddings = get_embeddings(_TASK_TYPE_DOCUMENT)
     textos = [chunk.page_content for chunk in chunks]
     vetores = embeddings.embed_documents(textos)
 

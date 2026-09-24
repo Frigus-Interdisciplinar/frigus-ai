@@ -32,7 +32,7 @@ class _FakeEmbeddings:
 
 def _monkeypatch_deps(monkeypatch, points):
     monkeypatch.setattr(core, "get_qdrant_client", lambda: _FakeQdrantClient(points))
-    monkeypatch.setattr(core, "GoogleGenerativeAIEmbeddings", _FakeEmbeddings)
+    monkeypatch.setattr(core, "get_embeddings", lambda _task_type: _FakeEmbeddings())
 
 
 def test_faq_retriever_retorna_resultados(monkeypatch):

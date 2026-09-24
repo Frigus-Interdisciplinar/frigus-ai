@@ -5,6 +5,7 @@ from typing import cast, get_args
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
+from frigus_ai.graph.agents import conversas_anteriores
 from frigus_ai.graph.builder import fluxo_agentes
 from frigus_ai.graph.names import NodeLiteral
 from frigus_ai.graph.state import EntradaGrafo, RouteLiteral
@@ -12,6 +13,7 @@ from frigus_ai.infra.postgres.context import session_context
 from frigus_ai.logging import Logging
 from frigus_ai.observability.metrics import GRAPH_DURATION, GRAPH_RUNS
 from frigus_ai.observability.metrics_callback import PrometheusCallbackHandler
+from frigus_ai.repositories import chat_embeddings_repository
 from frigus_ai.schemas.execution import (
     AnswerReady,
     ExecutionEvent,
@@ -66,6 +68,27 @@ def _estado_inicial(
     return entrada
 
 
+async def _carregar_conversas_anteriores(
+    conteudo: str, session_id: str, user_id: int, imagem_b64: str | None
+) -> None:
+    """
+    Memória de longo prazo é opcional: Qdrant/embedding fora do ar não pode derrubar o
+    turno. Sempre seta (vazio inclusive) — o ContextVar não é resetado no fim, então é
+    isso que impede o valor de um turno vazar pro próximo na mesma task (MCP/TUI).
+    """
+
+    resumos: list[str] = []
+    if not imagem_b64:  # foto não tem pergunta em texto pra buscar
+        try:
+            resumos = await chat_embeddings_repository.buscar_resumos_relevantes(
+                user_id, conteudo, session_id
+            )
+        except Exception as e:
+            logger.warning(f"Busca de conversas anteriores falhou, seguindo sem: {e}")
+
+    conversas_anteriores.set(tuple(resumos))
+
+
 def _config(session_id: str, user_id: int) -> RunnableConfig:
     return {
         "configurable": {"thread_id": session_id},
@@ -86,6 +109,8 @@ async def executar(
 ) -> str | None:
     inicio = time.perf_counter()
     outcome = "error"
+
+    await _carregar_conversas_anteriores(conteudo, session_id, user_id, imagem_b64)
 
     try:
         # stock_id/user_id ficam disponíveis via contextvars para as tools de
@@ -122,6 +147,8 @@ async def executar_stream(
     """
 
     yield RunStarted()
+
+    await _carregar_conversas_anteriores(conteudo, session_id, user_id, imagem_b64)
 
     inicio = time.perf_counter()
     outcome = "error"
