@@ -5,10 +5,12 @@ export function GraphPanel({
   status,
   timings,
   activeEdge,
+  traveled,
 }: {
   status: GraphStatus;
   timings: GraphTimings;
   activeEdge: string | null;
+  traveled: ReadonlySet<string>;
 }) {
   return (
     <aside className="hidden h-screen w-[760px] shrink-0 flex-col justify-center border-l border-border bg-card p-6 xl:flex">
@@ -18,7 +20,7 @@ export function GraphPanel({
       <div
         className="flex flex-1 items-center justify-center rounded-xl border border-border bg-background bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] bg-[length:22px_22px] p-6"
       >
-        <GraphView status={status} timings={timings} activeEdge={activeEdge} />
+        <GraphView status={status} timings={timings} activeEdge={activeEdge} traveled={traveled} />
       </div>
     </aside>
   );

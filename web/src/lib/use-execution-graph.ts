@@ -30,11 +30,13 @@ function idleTimings(): GraphTimings {
 }
 
 // Consome a timeline de execução (SSE) e mantém o estado visual do grafo: qual node está ativo,
-// quais já terminaram, qual aresta acabou de ser percorrida e quanto tempo cada node levou.
+// quais já terminaram, qual aresta acabou de ser percorrida, quais já foram (`traveled`, as
+// arestas de fato usadas — não "toda saída de um nó que rodou") e quanto tempo cada node levou.
 export function useExecutionGraph() {
   const [status, setStatus] = useState<GraphStatus>(idleStatus);
   const [timings, setTimings] = useState<GraphTimings>(idleTimings);
   const [activeEdge, setActiveEdge] = useState<string | null>(null);
+  const [traveled, setTraveled] = useState<ReadonlySet<string>>(() => new Set());
   const lastNode = useRef<NodeName | null>(null);
 
   const feed = useCallback((evento: ExecutionEvent) => {
@@ -44,6 +46,7 @@ export function useExecutionGraph() {
         setStatus(idleStatus());
         setTimings(idleTimings());
         setActiveEdge(null);
+        setTraveled(new Set());
         break;
 
       case "node_started": {
@@ -63,7 +66,9 @@ export function useExecutionGraph() {
           next[evento.node] = { start: agora, end: null };
           return next;
         });
-        setActiveEdge(lastNode.current ? `${lastNode.current}>${evento.node}` : null);
+        const aresta = lastNode.current ? `${lastNode.current}>${evento.node}` : null;
+        setActiveEdge(aresta);
+        if (aresta) setTraveled((prev) => new Set(prev).add(aresta));
         lastNode.current = evento.node;
         break;
       }
@@ -97,7 +102,8 @@ export function useExecutionGraph() {
     setStatus(idleStatus());
     setTimings(idleTimings());
     setActiveEdge(null);
+    setTraveled(new Set());
   }, []);
 
-  return { status, timings, activeEdge, feed, reset };
+  return { status, timings, activeEdge, traveled, feed, reset };
 }

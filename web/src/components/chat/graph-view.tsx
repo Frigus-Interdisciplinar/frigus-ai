@@ -25,6 +25,16 @@ const NODE_STROKE_CLASS: Record<NodeStatus, string> = {
   done: "stroke-primary",
 };
 
+// Volta do juiz pro especialista (reprovou): caminho de exceção, não o fluxo normal — fica
+// tracejado e apagado, e por baixo das outras arestas, até de fato acontecer.
+function isRetry(from: NodeName, to: NodeName): boolean {
+  return from === "juiz_node" && to !== "guardrail_saida_node";
+}
+
+const EDGES_RETRY_ATRAS = [...GRAPH_EDGES].sort(
+  ([fa, ta], [fb, tb]) => Number(isRetry(fb, tb)) - Number(isRetry(fa, ta)),
+);
+
 function formatDuracao(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
@@ -33,20 +43,23 @@ export function GraphView({
   status,
   timings,
   activeEdge,
+  traveled,
 }: {
   status: GraphStatus;
   timings: GraphTimings;
   activeEdge: string | null;
+  traveled: ReadonlySet<string>;
 }) {
   useTick(Object.values(status).includes("active"));
 
   return (
     <svg viewBox={VIEWBOX} className="mx-auto w-full max-w-[680px]" role="img" aria-label="Progresso da execução">
-      {GRAPH_EDGES.map(([from, to]) => {
+      {EDGES_RETRY_ATRAS.map(([from, to]) => {
         const a = NODE_META[from];
         const b = NODE_META[to];
         const lit = activeEdge === `${from}>${to}`;
-        const traveled = status[from] === "done" || status[from] === "active";
+        const retry = isRetry(from, to);
+        const percorrida = traveled.has(`${from}>${to}`);
 
         const y1 = a.y + 52;
         const y2 = b.y - 52;
@@ -57,11 +70,18 @@ export function GraphView({
             key={`${from}>${to}`}
             d={`M ${a.x} ${y1} C ${a.x} ${midY}, ${b.x} ${midY}, ${b.x} ${y2}`}
             fill="none"
-            strokeWidth={lit ? 5 : 2.5}
+            strokeWidth={lit ? 5 : retry ? 1.5 : 2.5}
+            strokeDasharray={retry && !lit ? "6 8" : undefined}
             strokeLinecap="round"
             className={cn(
               "transition-all duration-500",
-              lit ? "edge-flow stroke-primary" : traveled ? "stroke-primary/40" : "stroke-border",
+              lit
+                ? "edge-flow stroke-primary"
+                : percorrida
+                  ? "stroke-primary/40"
+                  : retry
+                    ? "stroke-border/40"
+                    : "stroke-border",
             )}
           />
         );
