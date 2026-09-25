@@ -68,7 +68,7 @@ frigus-ai/
 ├── config/                          # settings, models (LLM), logging, docker (compose up/down)
 ├── data/
 │   ├── pdf/Frigus-Documentacao.pdf
-│   └── sql/schema.sql               # DDL antigo da disciplina (legado — o banco real é o Supabase)
+│   └── sql/schema.sql               # Espelho do schema public do Supabase (DDL)
 │
 └── src/frigus_ai/                   # Pacote instalável com o "cérebro" do assistente
     │
@@ -140,8 +140,8 @@ quando cada trabalho começar (ver "Próximos passos").
 | **Busca vetorial (RAG do FAQ)** | Qdrant | Índice do `Frigus-Documentacao.pdf` (`graph/tools/faq/`) |
 | **Rate limit de chat** | Redis | `tools/redis/chat.py` (mensagens/minuto por usuário) |
 
-Note que `users`, `groups`, `stocks` etc. no Postgres usam `INTEGER PRIMARY KEY` sem `SERIAL` (o DDL foi
-desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` (`tools/postgres/helpers.py::next_id`).
+Note que `users`, `groups` e `shopping_lists` usam `UUID` (`gen_random_uuid()`) e as demais tabelas
+usam sequence — os IDs vêm do banco.
 
 ---
 
