@@ -33,11 +33,11 @@ def test_key_em_claro_nunca_e_persistida(monkeypatch):
     assert _hash_api_key("chave-secreta") in str(fake.dados)
 
 
-def test_lookup_devolve_user_id_como_int(monkeypatch):
+def test_lookup_devolve_o_user_id_alocado(monkeypatch):
     _usar_fake_client(monkeypatch)
-    api_key_service.allocate_api_key(7, "chave-secreta")
+    api_key_service.allocate_api_key("user-7", "chave-secreta")
 
-    assert api_key_service.get_user_id_by_api_key("chave-secreta") == 7
+    assert api_key_service.get_user_id_by_api_key("chave-secreta") == "user-7"
 
 
 def test_lookup_de_key_desconhecida_devolve_none(monkeypatch):
@@ -49,8 +49,8 @@ def test_lookup_de_key_desconhecida_devolve_none(monkeypatch):
 def test_segunda_key_para_o_mesmo_usuario_e_recusada(monkeypatch):
     _usar_fake_client(monkeypatch)
 
-    assert api_key_service.allocate_api_key(7, "primeira") is True
-    assert api_key_service.allocate_api_key(7, "segunda") is False
+    assert api_key_service.allocate_api_key("user-7", "primeira") is True
+    assert api_key_service.allocate_api_key("user-7", "segunda") is False
     # a primeira continua valendo — recusar não pode invalidar a key em uso
-    assert api_key_service.get_user_id_by_api_key("primeira") == 7
+    assert api_key_service.get_user_id_by_api_key("primeira") == "user-7"
     assert api_key_service.get_user_id_by_api_key("segunda") is None

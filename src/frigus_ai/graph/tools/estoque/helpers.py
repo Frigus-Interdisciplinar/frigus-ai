@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-# Valores exatos dos enums do schema (data/sql/schema.sql), usados aqui pra normalizar
+# Rótulos em português dos enums (o banco grava o código em inglês), usados aqui pra normalizar
 # entradas em linguagem natural do LLM (ex.: "geladeira" -> "Geladeira"). Fonte única em
 # infra/postgres/models/estoque.py — não duplicar a lista aqui.
 from frigus_ai.infra.postgres.models.estoque import (

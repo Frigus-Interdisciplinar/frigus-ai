@@ -39,7 +39,7 @@ router = APIRouter(prefix="/stock", tags=["stock"])
 _MAX_FOTO_BYTES = 8 * 1024 * 1024
 
 
-async def _resolver_stock_id(user_id: int) -> int:
+async def _resolver_stock_id(user_id: str) -> int:
     stock_id = await user_service.resolver_stock_id(user_id)
     if stock_id is None:
         raise EstoqueAtualNaoDefinido

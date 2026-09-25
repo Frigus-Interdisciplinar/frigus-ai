@@ -68,7 +68,7 @@ frigus-ai/
 ├── config/                          # settings, models (LLM), logging, docker (compose up/down)
 ├── data/
 │   ├── pdf/Frigus-Documentacao.pdf
-│   └── sql/schema.sql               # DDL fornecido (schema `dataload`, 20 tabelas + 9 enums)
+│   └── sql/schema.sql               # DDL antigo da disciplina (legado — o banco real é o Supabase)
 │
 └── src/frigus_ai/                   # Pacote instalável com o "cérebro" do assistente
     │
@@ -111,7 +111,7 @@ frigus-ai/
     │
     └── tools/
         ├── postgres/
-        │   ├── connection.py        # Pool psycopg2 com search_path=dataload
+        │   ├── connection.py        # Engine SQLAlchemy (Supabase, schema public)
         │   ├── context.py           # contextvars: current_user_id / current_stock_id
         │   ├── helpers.py           # resolve_stock_id, next_id, normalize_enum, semáforo
         │   ├── estoque/{schemas,core}.py
@@ -133,7 +133,7 @@ quando cada trabalho começar (ver "Próximos passos").
 
 | Camada | Tecnologia | Responsabilidade |
 |---|---|---|
-| **Estoque, compras, receitas, financeiro** | PostgreSQL (schema `dataload`) | Dados de domínio do app Frigus |
+| **Estoque, compras, receitas, financeiro** | PostgreSQL no Supabase (schema `public`) | Dados de domínio do app Frigus |
 | **Histórico de conversa do assistente** | MongoDB (`agent_chats`) | Mensagens por sessão do chatbot (distinto do chat social do app, que já existe em `conversations`/`messages` no Postgres) |
 | **Fatos estruturados do usuário** | MongoDB (`user_fatos`) | Alergias/preferências/restrições/hábitos extraídos do chat, chaveado por `users.id` |
 | **Checkpointing do grafo** | LangGraph `MongoDBSaver` (`graph_checkpoints`/`graph_checkpoint_writes`) | Estado interno do grafo entre turnos, chaveado por `thread_id` (= `session_id`) — sobrevive a restart do processo |

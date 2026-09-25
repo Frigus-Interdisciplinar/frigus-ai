@@ -12,12 +12,12 @@ from contextvars import ContextVar
 
 from frigus_ai.exceptions import EstoqueAtualNaoDefinido, UsuarioDaSessaoNaoDefinido
 
-_current_user_id: ContextVar[int | None] = ContextVar("current_user_id", default=None)
+_current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 _current_stock_id: ContextVar[int | None] = ContextVar("current_stock_id", default=None)
 
 
 @contextmanager
-def session_context(user_id: int, stock_id: int | None):
+def session_context(user_id: str, stock_id: int | None):
     token_user = _current_user_id.set(user_id)
     token_stock = _current_stock_id.set(stock_id)
     try:
@@ -27,7 +27,7 @@ def session_context(user_id: int, stock_id: int | None):
         _current_stock_id.reset(token_stock)
 
 
-def current_user_id() -> int:
+def current_user_id() -> str:
     value = _current_user_id.get()
     if value is None:
         raise UsuarioDaSessaoNaoDefinido

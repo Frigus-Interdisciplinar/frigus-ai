@@ -17,7 +17,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 _signup_secret_header = APIKeyHeader(name="X-Signup-Secret", auto_error=False)
 
 
-async def resolver_usuario(api_key: str | None) -> int | None:
+async def resolver_usuario(api_key: str | None) -> str | None:
     """
     Quem é o dono da requisição, sem nada de FastAPI — o servidor MCP
     (`mcp/server.py`) monta como ASGI puro e chama isto direto.
@@ -33,7 +33,7 @@ async def resolver_usuario(api_key: str | None) -> int | None:
 
 async def get_current_user(
     api_key: Annotated[str | None, Security(_api_key_header)] = None,
-) -> int:
+) -> str:
     if (user_id := await resolver_usuario(api_key)) is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API key inválida.")
 
@@ -51,4 +51,4 @@ def verify_signup_secret(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Signup secret inválido.")
 
 
-CurrentUserDep = Annotated[int, Depends(get_current_user)]
+CurrentUserDep = Annotated[str, Depends(get_current_user)]

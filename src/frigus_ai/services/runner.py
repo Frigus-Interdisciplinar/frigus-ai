@@ -70,7 +70,7 @@ def _estado_inicial(
 
 
 async def _carregar_conversas_anteriores(
-    conteudo: str, session_id: str, user_id: int, imagem_b64: str | None
+    conteudo: str, session_id: str, user_id: str, imagem_b64: str | None
 ) -> None:
     """
     Memória de longo prazo é opcional: Qdrant/embedding fora do ar não pode derrubar o
@@ -90,7 +90,7 @@ async def _carregar_conversas_anteriores(
     conversas_anteriores.set(tuple(resumos))
 
 
-def _config(session_id: str, user_id: int) -> RunnableConfig:
+def _config(session_id: str, user_id: str) -> RunnableConfig:
     return {
         "configurable": {"thread_id": session_id},
         "tags": ["chat"],
@@ -120,7 +120,7 @@ async def descartar_thread(thread_id: str) -> None:
 async def executar(
     conteudo: str,
     session_id: str,
-    user_id: int,
+    user_id: str,
     stock_id: int | None,
     imagem_b64: str | None = None,
 ) -> str | None:
@@ -149,7 +149,7 @@ async def executar(
 async def executar_stream(
     conteudo: str,
     session_id: str,
-    user_id: int,
+    user_id: str,
     stock_id: int | None,
     imagem_b64: str | None = None,
 ) -> AsyncIterator[ExecutionEvent]:

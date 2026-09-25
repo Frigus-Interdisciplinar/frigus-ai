@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from frigus_ai.exceptions import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
-from frigus_ai.infra.postgres.helpers import proximo_id
 from frigus_ai.infra.postgres.models import (
     AJUSTE,
     ENTRADA,
@@ -103,19 +102,20 @@ def _localizar(
 def _registrar_movimento(
     s: Session,
     stock_product_id: int,
-    user_id: int,
+    user_id: str,
     movement_type: str,
     quantidade: int,
     quando: datetime | None = None,
 ) -> None:
-    s.add(StockMovement(
-        id=proximo_id(s, StockMovement),
+    movimento = StockMovement(
         stock_product_id=stock_product_id,
         user_id=user_id,
         movement_type=movement_type,
         quantity=quantidade,
-        date=quando,
-    ))
+    )
+    if quando is not None:  # sem data: omite a coluna e vale o DEFAULT do banco (None viraria NULL)
+        movimento.date = quando
+    s.add(movimento)
 
 
 def _produto_do_catalogo(s: Session, dados: ProdutoNovo) -> int:
@@ -130,7 +130,6 @@ def _produto_do_catalogo(s: Session, dados: ProdutoNovo) -> int:
         return existente
 
     novo = Product(
-        id=proximo_id(s, Product),
         name=dados["product_name"],
         category=dados["category"],
         storage_place=dados["storage_place"],
@@ -156,7 +155,6 @@ class _EstoquePostgresRepo(PostgresRepo):
         stmt = (
             insert(StockProduct)
             .values(
-                id=proximo_id(s, StockProduct),
                 product_id=product_id,
                 stock_id=stock_id,
                 quantity=dados["quantity"],
@@ -229,16 +227,18 @@ class _EstoquePostgresRepo(PostgresRepo):
         self,
         s: Session,
         stock_id: int,
-        user_id: int,
+        user_id: str,
         stock_product_id: int | None,
         product_name: str | None,
         delta: int | None,
         novo_valor: int | None,
     ) -> tuple[int, int]:
         """
-        Localiza, recalcula e grava a nova quantidade + o movimento correspondente numa
-        transação só. `novo_valor` vira `Ajuste`; `delta` vira `Entrada`/`Saída` conforme
-        o sinal. Devolve (id do item, quantidade final).
+        Localiza, recalcula e grava o movimento correspondente numa transação só — quem
+        aplica a variação em `stock_products.quantity` é a trigger `trg_stock_movements_apply`
+        do Supabase, então o app NÃO mexe na quantidade (senão aplicaria duas vezes).
+        `novo_valor` vira `Ajuste` (com sinal, como a trigger espera); `delta` vira
+        `Entrada`/`Saída` conforme o sinal. Devolve (id do item, quantidade final).
         """
 
         item = _localizar(s, stock_id, stock_product_id, product_name)
@@ -257,8 +257,8 @@ class _EstoquePostgresRepo(PostgresRepo):
         if nova_quantidade < 0:
             raise QuantidadeNegativa
 
-        item.quantity = nova_quantidade
-        _registrar_movimento(s, item.id, user_id, movement_type, abs(variacao))
+        quantidade_movimento = variacao if movement_type == AJUSTE else abs(variacao)
+        _registrar_movimento(s, item.id, user_id, movement_type, quantidade_movimento)
 
         return item.id, nova_quantidade
 
@@ -267,13 +267,13 @@ class _EstoquePostgresRepo(PostgresRepo):
         self,
         s: Session,
         stock_id: int,
-        user_id: int,
+        user_id: str,
         stock_product_id: int | None,
         product_name: str | None,
         reason: str,
     ) -> DescarteInfo:
         """
-        Zera o item e grava o descarte. `discard` não tem coluna de quantidade, então o
+        Grava o descarte e uma `Saída` do volume inteiro — a trigger de movimento zera o item. `discard` não tem coluna de quantidade, então o
         volume perdido vai em `stock_movements` com a MESMA data do descarte — é por
         (stock_product_id, date) que `repositories/financeiro_repository.py` casa os dois
         pra calcular o valor desperdiçado. Mudar essa data quebra o financeiro.
@@ -286,7 +286,7 @@ class _EstoquePostgresRepo(PostgresRepo):
         nome_produto = s.scalar(select(Product.name).where(Product.id == item.product_id))
         quantidade_perdida = item.quantity
 
-        descarte = Discard(id=proximo_id(s, Discard), stock_product_id=item.id, reason=reason)
+        descarte = Discard(stock_product_id=item.id, reason=reason)
         s.add(descarte)
         s.flush()          # o DEFAULT do banco preenche `date`...
         s.refresh(descarte)  # ...e o refresh traz o valor pro objeto
@@ -294,7 +294,6 @@ class _EstoquePostgresRepo(PostgresRepo):
         if quantidade_perdida > 0:
             _registrar_movimento(s, item.id, user_id, SAIDA, quantidade_perdida, descarte.date)
 
-        item.quantity = 0
         item.product_status = VENCIDO
 
         return DescarteInfo(
@@ -315,7 +314,7 @@ def consultar_estoque(stock_id: int, filtros: FiltrosEstoque) -> list[ItemEstoqu
 
 def atualizar_quantidade(
     stock_id: int,
-    user_id: int,
+    user_id: str,
     stock_product_id: int | None,
     product_name: str | None,
     delta: int | None,
@@ -328,7 +327,7 @@ def atualizar_quantidade(
 
 def descartar(
     stock_id: int,
-    user_id: int,
+    user_id: str,
     stock_product_id: int | None,
     product_name: str | None,
     reason: str,

@@ -20,7 +20,7 @@ class FatosRepository:
     def _collection(self):
         return collection or mongo.collection("user_fatos")
 
-    def buscar_fatos(self, user_id: int) -> Fatos:
+    def buscar_fatos(self, user_id: str) -> Fatos:
         doc = self._collection().find_one({"user_id": user_id})
         if not doc:
             return Fatos()
@@ -32,7 +32,7 @@ class FatosRepository:
             habitos=doc.get("habitos", []),
         )
 
-    def salvar_fatos(self, user_id: int, fatos: Fatos) -> None:
+    def salvar_fatos(self, user_id: str, fatos: Fatos) -> None:
         self._collection().update_one(
             {"user_id": user_id},
             {"$set": {**fatos.model_dump(), "updated_at": datetime.now(UTC)}},
@@ -43,11 +43,11 @@ class FatosRepository:
 _fatos_repository = FatosRepository()
 
 
-def buscar_fatos(user_id: int) -> Fatos:
+def buscar_fatos(user_id: str) -> Fatos:
     return _fatos_repository.buscar_fatos(user_id)
 
 
-def salvar_fatos(user_id: int, fatos: Fatos) -> None:
+def salvar_fatos(user_id: str, fatos: Fatos) -> None:
     _fatos_repository.salvar_fatos(user_id, fatos)
 
 

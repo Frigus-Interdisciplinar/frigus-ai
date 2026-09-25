@@ -20,7 +20,7 @@ from frigus_ai.services.user_service import user_service
 router = APIRouter(prefix="/shopping-list", tags=["shopping-list"])
 
 
-async def _resolver_stock_id(user_id: int) -> int:
+async def _resolver_stock_id(user_id: str) -> int:
     stock_id = await user_service.resolver_stock_id(user_id)
     if stock_id is None:
         raise EstoqueAtualNaoDefinido
