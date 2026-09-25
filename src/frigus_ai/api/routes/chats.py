@@ -31,7 +31,7 @@ from frigus_ai.services.chat_service import service as chat_service
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 
-async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep) -> int:
+async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep) -> str:
     """
     Dono do chat + rate limit do caminho SSE. Vai numa dependência, e não no corpo da
     rota, porque o corpo de um gerador só roda depois que o status HTTP saiu — 403/429

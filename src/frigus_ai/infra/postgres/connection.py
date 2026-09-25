@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
 
@@ -12,9 +12,8 @@ from frigus_ai.settings import settings
 
 class PostgresConn(Connector[Engine]):
     """Engine SQLAlchemy síncrono, lazy — todo repository fala com o Postgres por aqui
-    via `PostgresRepo`/`@transacional`. Schema `dataload` (data/sql/schema.sql) já vem
-    qualificado no metadata dos models (`infra/postgres/models/base.py`), não precisa de
-    search_path na conexão."""
+    via `PostgresRepo`/`@transacional`. Tabelas no schema `public` do
+    Supabase (search_path padrão), mapeadas em `infra/postgres/models/`."""
 
     def __init__(self) -> None:
         self._engine: Engine | None = None
@@ -33,7 +32,7 @@ class PostgresConn(Connector[Engine]):
         return self._session_factory
 
     @contextmanager
-    def session(self) -> Iterator[Session]:
+    def session(self) -> Generator[Session]:
         """Commit no sucesso, rollback na exceção, close sempre."""
 
         s = self._factory()

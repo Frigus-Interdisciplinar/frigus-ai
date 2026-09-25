@@ -9,7 +9,7 @@ from frigus_ai.logging import Logging
 logger = Logging.get_logger("redis_chat")
 
 
-def can_send_message(user_id: int) -> bool:
+def can_send_message(user_id: str) -> bool:
     r = get_client()
     key = _chave_mensagem(user_id)
 

@@ -38,7 +38,7 @@ def _bateu_palavra_chave(resposta: str | None, palavras_chave: tuple[str, ...]) 
     return any(palavra.lower() in resposta_normalizada for palavra in palavras_chave)
 
 
-async def _rodar_cenario(cenario: Cenario, user_id: int, stock_id: int | None) -> ResultadoCenario:
+async def _rodar_cenario(cenario: Cenario, user_id: str, stock_id: int | None) -> ResultadoCenario:
     session_id = f"eval-{cenario['id']}-{uuid4()}"
     inicio = time.perf_counter()
 

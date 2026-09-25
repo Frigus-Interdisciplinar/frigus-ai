@@ -10,7 +10,6 @@ from sqlalchemy import Float, func, select
 from sqlalchemy.orm import Session
 
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
-from frigus_ai.infra.postgres.helpers import proximo_id
 from frigus_ai.infra.postgres.models import (
     Product,
     Recipe,
@@ -114,7 +113,6 @@ class _ReceitasPostgresRepo(PostgresRepo):
             score = round(matched / total, 3) if total else 0.0
 
             s.add(RecipeSuggestion(
-                id=proximo_id(s, RecipeSuggestion),
                 recipe_id=recipe_id,
                 stock_id=stock_id,
                 matched_ingredients=matched,

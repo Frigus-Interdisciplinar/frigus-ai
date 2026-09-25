@@ -44,10 +44,10 @@ class ChatEmbeddingsRepository:
         )
         # Toda busca filtra por dono — sem índice, o filtro varre o payload de todo ponto.
         await self._client().create_payload_index(
-            self._nome(), "user_id", models.PayloadSchemaType.INTEGER
+            self._nome(), "user_id", models.PayloadSchemaType.KEYWORD
         )
 
-    async def salvar_resumo(self, session_id: str, user_id: int, resumo: str) -> None:
+    async def salvar_resumo(self, session_id: str, user_id: str, resumo: str) -> None:
         # PII fica no Mongo (histórico do próprio usuário), mas não é copiada pro índice vetorial.
         resumo = redigir_pii(resumo)
         [vetor] = await get_embeddings("retrieval_document").aembed_documents([resumo])
@@ -74,7 +74,7 @@ class ChatEmbeddingsRepository:
         )
 
     async def buscar_resumos_relevantes(
-        self, user_id: int, pergunta: str, session_id_atual: str
+        self, user_id: str, pergunta: str, session_id_atual: str
     ) -> list[str]:
         if not await self._existe():
             return []
@@ -107,7 +107,7 @@ class ChatEmbeddingsRepository:
 _chat_embeddings_repository = ChatEmbeddingsRepository()
 
 
-async def salvar_resumo(session_id: str, user_id: int, resumo: str) -> None:
+async def salvar_resumo(session_id: str, user_id: str, resumo: str) -> None:
     await _chat_embeddings_repository.salvar_resumo(session_id, user_id, resumo)
 
 
@@ -116,7 +116,7 @@ async def remover_resumo(session_id: str) -> None:
 
 
 async def buscar_resumos_relevantes(
-    user_id: int, pergunta: str, session_id_atual: str
+    user_id: str, pergunta: str, session_id_atual: str
 ) -> list[str]:
     return await _chat_embeddings_repository.buscar_resumos_relevantes(
         user_id, pergunta, session_id_atual

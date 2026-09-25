@@ -76,8 +76,9 @@ default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
   `src/frigus_ai/models.py`. Provider sem API key configurada faz `build_llm` devolver `None` e fica
   fora da cadeia de fallback — só Gemini e Groq são obrigatórios
 - PostgreSQL (via Docker) para estoque/compras/receitas/financeiro, acessado via SQLAlchemy
-  (`infra/postgres/connection.py`, `@transacional`; schema `dataload`, DDL fornecido em
-  `data/sql/schema.sql`)
+  (`infra/postgres/connection.py`, `@transacional`; banco real no Supabase, schema
+  `public` — enums gravados como código em inglês e traduzidos por `models/base.py:Rotulo`;
+  `data/sql/schema.sql` é o DDL antigo da disciplina, não bate mais com o banco)
 - MongoDB para histórico de conversa (`repositories/chat_repository.py`), fatos estruturados do
   usuário (`repositories/fatos_repository.py`, coleção `user_fatos`) e checkpoint do LangGraph
   (`MongoDBSaver`, coleções `graph_checkpoints`/`graph_checkpoint_writes`)

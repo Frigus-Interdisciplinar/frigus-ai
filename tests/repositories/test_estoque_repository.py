@@ -80,7 +80,7 @@ def _item(quantidade: int) -> StockProduct:
     [
         (-3,   None, "Saída",   7, 3),   # consumo
         (4,    None, "Entrada", 14, 4),  # reposição
-        (None, 2,    "Ajuste",  2, 8),   # correção: 10 -> 2, movimento registra |variação|
+        (None, 2,    "Ajuste",  2, -8),  # correção: 10 -> 2, Ajuste leva o sinal (trigger soma direto)
         (None, 25,   "Ajuste",  25, 15),
     ],
 )
@@ -95,7 +95,7 @@ def test_deriva_tipo_de_movimento(
 
     (movimento,) = sessao.movimentos()
     assert movimento.movement_type == tipo_esperado
-    assert movimento.quantity == movimento_esperado  # sempre positivo
+    assert movimento.quantity == movimento_esperado
     assert movimento.user_id == 7
 
 
@@ -146,12 +146,16 @@ def test_descarte_grava_a_saida_com_a_data_do_discard():
     assert movimento.date == DATA_DO_DESCARTE == descarte.date
 
 
-def test_descarte_zera_o_item_e_marca_vencido():
+def test_descarte_registra_saida_total_e_marca_vencido():
+    """Quem zera a quantidade é a trigger do movimento — o app não mexe em `quantity`."""
+
     repo, sessao = _repo(_item(4))
 
     repo.descartar(42, 7, 5, None, "Vencido")
 
-    assert sessao._item.quantity == 0
+    (movimento,) = sessao.movimentos()
+    assert (movimento.movement_type, movimento.quantity) == ("Saída", 4)
+    assert sessao._item.quantity == 4
     assert sessao._item.product_status == "Vencido"
 
 

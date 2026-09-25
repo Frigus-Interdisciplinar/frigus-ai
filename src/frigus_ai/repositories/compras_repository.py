@@ -7,6 +7,7 @@ Cada estoque tem no máximo uma lista `Aberta` por vez — `_lista_aberta` garan
 (busca antes de criar), igual `_get_or_create_open_list` fazia no SQL cru.
 """
 
+from datetime import date
 from typing import TypedDict
 
 from sqlalchemy import func, select
@@ -15,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from frigus_ai.exceptions import ItemDeCompraNaoEncontrado, ProdutoNaoCadastrado
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
-from frigus_ai.infra.postgres.helpers import proximo_id
 from frigus_ai.infra.postgres.models import (
     Product,
     ShoppingList,
@@ -34,7 +34,7 @@ class ItemCompra(TypedDict):
     status: str | None
 
 
-def _lista_aberta(s: Session, stock_id: int) -> int:
+def _lista_aberta(s: Session, stock_id: int) -> str:
     lista_id = s.scalar(
         select(ShoppingList.id)
         .where(ShoppingList.stock_id == stock_id, ShoppingList.status == ABERTA)
@@ -44,7 +44,7 @@ def _lista_aberta(s: Session, stock_id: int) -> int:
     if lista_id is not None:
         return lista_id
 
-    nova = ShoppingList(id=proximo_id(s, ShoppingList), stock_id=stock_id, status=ABERTA)
+    nova = ShoppingList(date=date.today(), stock_id=stock_id, status=ABERTA)
     s.add(nova)
     s.flush()
 
@@ -59,9 +59,7 @@ def _produto_do_catalogo(s: Session, name: str, category: str | None, storage_pl
     if not category or not storage_place:
         raise ProdutoNaoCadastrado
 
-    novo = Product(
-        id=proximo_id(s, Product), name=name, category=category, storage_place=storage_place, unit_price=0
-    )
+    novo = Product(name=name, category=category, storage_place=storage_place, unit_price=0)
     s.add(novo)
     s.flush()
 
@@ -97,7 +95,7 @@ def _localizar_item(
 
 class _ComprasPostgresRepo(PostgresRepo):
     @transacional
-    def criar_lista_aberta(self, s: Session, stock_id: int) -> int:
+    def criar_lista_aberta(self, s: Session, stock_id: int) -> str:
         return _lista_aberta(s, stock_id)
 
     @transacional
@@ -113,7 +111,6 @@ class _ComprasPostgresRepo(PostgresRepo):
         stmt = (
             insert(ShoppingListProduct)
             .values(
-                id=proximo_id(s, ShoppingListProduct),
                 list_id=lista_id,
                 product_id=product_id,
                 status="Pendente",
@@ -189,8 +186,7 @@ class _ComprasPostgresRepo(PostgresRepo):
             stmt = (
                 insert(ShoppingListProduct)
                 .values(
-                    id=proximo_id(s, ShoppingListProduct),
-                    list_id=lista_id,
+                        list_id=lista_id,
                     product_id=product_id,
                     status="Pendente",
                     quantity=sugerida,
@@ -213,7 +209,7 @@ class _ComprasPostgresRepo(PostgresRepo):
 _compras = _ComprasPostgresRepo()
 
 
-def criar_lista_aberta(stock_id: int) -> int:
+def criar_lista_aberta(stock_id: int) -> str:
     return _compras.criar_lista_aberta(stock_id)
 
 

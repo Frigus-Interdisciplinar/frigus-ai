@@ -1,5 +1,5 @@
 """
-Models SQLAlchemy do schema `dataload` (data/sql/schema.sql) — só os domínios que o app
+Models SQLAlchemy das tabelas do Supabase (schema `public`) — só os domínios que o app
 usa hoje (estoque, compras, receitas; financeiro reaproveita as tabelas de estoque).
 O schema tem outras tabelas (accounts, conversations, messages, requests,
 compartilhadas com outras apps do grupo) que não estão mapeadas aqui de propósito —

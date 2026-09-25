@@ -81,29 +81,29 @@ def _extrair_fatos(mensagens_recentes: list[dict], fatos_atuais: Fatos) -> Fatos
 class ChatService:
     """Casos de uso de chat; a instância (`service`, abaixo) é o ponto de entrada."""
 
-    async def iniciar_sessao(self, user_id: int) -> int | None:
+    async def iniciar_sessao(self, user_id: str) -> int | None:
         """Resolve o stock_id do usuário."""
 
         return await user_service.resolver_stock_id(user_id)
 
-    async def criar_chat(self, user_id: int) -> str:
+    async def criar_chat(self, user_id: str) -> str:
         await self.iniciar_sessao(user_id)
         chat_id = novo_chat_id()
         await chat_repository.criar_chat(chat_id, user_id)
         _disparar_em_segundo_plano(self._resumir_pendentes(user_id))
         return chat_id
 
-    async def validar_ownership(self, session_id: str, user_id: int) -> None:
+    async def validar_ownership(self, session_id: str, user_id: str) -> None:
         dono = await chat_repository.buscar_dono_chat(session_id)
         if dono is None:
             return
         if dono != user_id:
             raise ChatDeOutroUsuario(session_id)
 
-    async def listar_chats(self, user_id: int) -> list[ChatDocument]:
+    async def listar_chats(self, user_id: str) -> list[ChatDocument]:
         return await chat_repository.listar_chats(user_id)
 
-    async def garantir_limite(self, user_id: int) -> None:
+    async def garantir_limite(self, user_id: str) -> None:
         """Consome uma unidade do rate limit; levanta se o usuário estourou a janela."""
 
         if not await asyncio.to_thread(can_send_message, user_id):
@@ -112,7 +112,7 @@ class ChatService:
             )
 
     async def send_message(
-        self, conteudo: str, session_id: str, user_id: int, stock_id: int | None
+        self, conteudo: str, session_id: str, user_id: str, stock_id: int | None
     ) -> str:
         await self.garantir_limite(user_id)
 
@@ -131,7 +131,7 @@ class ChatService:
         return resposta
 
     async def stream_message(
-        self, conteudo: str, session_id: str, user_id: int, stock_id: int | None
+        self, conteudo: str, session_id: str, user_id: str, stock_id: int | None
     ) -> AsyncIterator[ExecutionEvent]:
         """
         Mesmo caso de uso do `send_message` (grafo, persistência), só que emitindo a
@@ -160,7 +160,7 @@ class ChatService:
         await chat_repository.salvar_mensagens(user_id, session_id, novas)
         await self._talvez_atualizar_memoria(session_id, user_id)
 
-    async def _talvez_atualizar_memoria(self, session_id: str, user_id: int) -> None:
+    async def _talvez_atualizar_memoria(self, session_id: str, user_id: str) -> None:
         """
         Dispara fatos + resumo em segundo plano a cada `_INTERVALO_ATUALIZACAO_MEMORIA`
         mensagens — chamado depois de salvar, então o próprio `salvar_mensagens` já
@@ -175,7 +175,7 @@ class ChatService:
         if total % _INTERVALO_ATUALIZACAO_MEMORIA == 0:
             _disparar_em_segundo_plano(self._atualizar_memoria(session_id, user_id))
 
-    async def _resumir_pendentes(self, user_id: int) -> None:
+    async def _resumir_pendentes(self, user_id: str) -> None:
         """
         Chat que o usuário abandonou sem `DELETE` (e sem bater o intervalo) nunca teria
         resumo. Abrir um chat novo é o sinal de que os anteriores acabaram — resume o que
@@ -196,7 +196,7 @@ class ChatService:
         for session_id in pendentes:
             await self._atualizar_memoria(session_id, user_id)
 
-    async def _atualizar_memoria(self, session_id: str, user_id: int) -> None:
+    async def _atualizar_memoria(self, session_id: str, user_id: str) -> None:
         """
         Fatos e resumo lêem as mesmas mensagens — só as que o resumo ainda não cobre
         (`resumido_ate`) — numa leitura só do documento pros dois.
@@ -230,7 +230,7 @@ class ChatService:
 
         await self._indexar_resumo(session_id, user_id, resumo)
 
-    async def _indexar_resumo(self, session_id: str, user_id: int, resumo: Resumo) -> None:
+    async def _indexar_resumo(self, session_id: str, user_id: str, resumo: Resumo) -> None:
         """
         Só chat relevante vira embedding; um que deixou de ser (ou nunca foi) sai do
         índice. Falha aqui não desfaz o resumo no Mongo: o ponto fica velho até o
@@ -245,7 +245,7 @@ class ChatService:
         except Exception:
             logger.exception(f"Falha ao indexar resumo no Qdrant | session_id={session_id}")
 
-    async def analisar_foto(self, user_id: int, stock_id: int | None, imagem: bytes) -> str:
+    async def analisar_foto(self, user_id: str, stock_id: int | None, imagem: bytes) -> str:
         """
         Foto da geladeira/freezer/despensa — não é uma conversa (não salva histórico,
         não conta pro rate limit de mensagens do chat). `thread_id` único por chamada,
@@ -273,11 +273,11 @@ class ChatService:
         return resposta or "Não consegui analisar a foto."
 
     async def get_history(
-        self, session_id: str, user_id: int, limit: int = 5
+        self, session_id: str, user_id: str, limit: int = 5
     ) -> list[ChatMessage]:
         return await chat_repository.buscar_historico(session_id, user_id, limit)
 
-    async def encerrar_sessao(self, session_id: str, user_id: int) -> None:
+    async def encerrar_sessao(self, session_id: str, user_id: str) -> None:
         """
         Fatos/resumo já são mantidos frescos periodicamente durante a conversa
         (`_talvez_atualizar_memoria`) — aqui só cobre o rabo que ainda não bateu o

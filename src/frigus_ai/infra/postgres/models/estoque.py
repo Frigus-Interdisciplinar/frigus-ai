@@ -1,12 +1,12 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Enum, ForeignKey, Numeric, UniqueConstraint
+from sqlalchemy import ForeignKey, Numeric, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base
+from .base import Base, UuidStr, rotulo
 
-# Valores exatos dos enums do schema (data/sql/schema.sql) — fonte única, reaproveitada
+# Rótulos em português que o app usa — fonte única, reaproveitada
 # por graph/tools/estoque/helpers.py pra normalizar entrada em linguagem natural do LLM.
 # Mora aqui (infra) e não lá (domínio) porque os models não podem depender de graph/tools
 # — senão qualquer import de infra.postgres.models arrasta o pacote de tools inteiro.
@@ -25,20 +25,25 @@ SAIDA = "Saída"
 AJUSTE = "Ajuste"
 MOVEMENT_TYPE_VALUES = [ENTRADA, SAIDA, AJUSTE]
 
-CategoryEnum = Enum(*CATEGORY_VALUES, name="category_enum")
-StoragePlaceEnum = Enum(*STORAGE_PLACE_VALUES, name="storage_place_enum")
-ProductStatusEnum = Enum(*PRODUCT_STATUS_VALUES, name="product_status_enum")
-MovementTypeEnum = Enum(*MOVEMENT_TYPE_VALUES, name="movement_type_enum")
+# Mesma ordem dos rótulos acima: o código em inglês que o Supabase grava (ver `base.Rotulo`).
+CategoryEnum = rotulo(CATEGORY_VALUES, [
+    "FRUIT", "VEGETABLE", "DAIRY", "MEAT", "GRAIN",
+    "BEVERAGE", "CLEANING", "PERSONAL_HYGIENE",
+])
+StoragePlaceEnum = rotulo(STORAGE_PLACE_VALUES, ["FRIDGE", "FREEZER", "PANTRY", "CABINET", "SHELF"])
+ProductStatusEnum = rotulo(PRODUCT_STATUS_VALUES, ["FRESH", "NEAR_EXPIRATION", "EXPIRED"])
+MovementTypeEnum = rotulo(MOVEMENT_TYPE_VALUES, ["IN", "OUT", "ADJUSTMENT"])
 
 
 class Product(Base):
     __tablename__ = "products"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
     category: Mapped[str] = mapped_column(CategoryEnum)
     storage_place: Mapped[str] = mapped_column(StoragePlaceEnum)
     unit_price: Mapped[Decimal] = mapped_column(Numeric)
+    unit_of_measure: Mapped[str] = mapped_column(default="UNIT")
 
 
 class StockProduct(Base):
@@ -49,7 +54,7 @@ class StockProduct(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     stock_id: Mapped[int] = mapped_column(ForeignKey("stocks.id", ondelete="CASCADE"))
     quantity: Mapped[int]
@@ -62,21 +67,21 @@ class StockProduct(Base):
 class StockMovement(Base):
     __tablename__ = "stock_movements"
 
-    id: Mapped[int] = mapped_column(primary_key=True)  # SERIAL no schema
+    id: Mapped[int] = mapped_column(primary_key=True)
     stock_product_id: Mapped[int] = mapped_column(ForeignKey("stock_products.id", ondelete="CASCADE"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[UuidStr] = mapped_column(ForeignKey("users.id"))
     movement_type: Mapped[str] = mapped_column(MovementTypeEnum)
     quantity: Mapped[int]
-    date: Mapped[datetime | None]
+    date: Mapped[datetime | None] = mapped_column(server_default=func.now())
 
 
 class Discard(Base):
     __tablename__ = "discard"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
     stock_product_id: Mapped[int] = mapped_column(ForeignKey("stock_products.id", ondelete="CASCADE"))
     reason: Mapped[str | None]
-    date: Mapped[datetime]
+    date: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
 __all__ = [

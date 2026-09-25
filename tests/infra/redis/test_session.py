@@ -28,7 +28,7 @@ def test_buscar_usuario_da_sessao_retorna_id(monkeypatch):
     fake = _usar_fake_client(monkeypatch)
     fake.values["a2a:context:ctx-1"] = "42"
 
-    assert session.buscar_usuario_da_sessao("ctx-1") == 42
+    assert session.buscar_usuario_da_sessao("ctx-1") == "42"
 
 
 def test_salvar_usuario_da_sessao_e_atomico_e_tem_ttl(monkeypatch):

@@ -14,13 +14,13 @@ logger = Logging.get_logger(__name__)
 class UserService:
     """Casos de uso de usuário; a instância (`user_service`, abaixo) é o ponto de entrada."""
 
-    async def criar_usuario(self, nome: str, email: str) -> int:
+    async def criar_usuario(self, nome: str, email: str) -> str:
         return await asyncio.to_thread(identidade_repository.criar_usuario, nome, email)
 
-    async def resolver_stock_id(self, user_id: int) -> int | None:
+    async def resolver_stock_id(self, user_id: str) -> int | None:
         return await asyncio.to_thread(identidade_repository.resolver_stock_id, user_id)
 
-    async def obter_ou_criar_padrao(self) -> int:
+    async def obter_ou_criar_padrao(self) -> str:
         """
         Reaproveita o primeiro usuário existente no Postgres, ou cria um novo. Bootstrap
         usado pela TUI e pela API quando `API_KEY_AUTH_ENABLED=false` (sem tela de
@@ -34,16 +34,16 @@ class UserService:
 
         return await self.criar_usuario("Usuário Local", f"local-{uuid4()}@frigus.local")
 
-    async def buscar_fatos(self, user_id: int) -> Fatos:
+    async def buscar_fatos(self, user_id: str) -> Fatos:
         return await asyncio.to_thread(fatos_repository.buscar_fatos, user_id)
 
-    async def sobrescrever_fatos(self, user_id: int, fatos: Fatos) -> None:
+    async def sobrescrever_fatos(self, user_id: str, fatos: Fatos) -> None:
         """`PUT /profile` — correção manual do usuário, substitui tudo (inclusive
         remover alergia). Único caminho autorizado a remover alergia."""
 
         await asyncio.to_thread(fatos_repository.salvar_fatos, user_id, fatos)
 
-    async def atualizar_fatos_por_extracao(self, user_id: int, fatos_extraidos: Fatos) -> None:
+    async def atualizar_fatos_por_extracao(self, user_id: str, fatos_extraidos: Fatos) -> None:
         """
         Merge automático (LLM, a cada N mensagens do chat) — nunca chamado pelo PUT manual.
 

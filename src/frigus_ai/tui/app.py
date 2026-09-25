@@ -31,7 +31,7 @@ class FrigusTUI(App):
 
     def __init__(self) -> None:
         super().__init__()
-        self.user_id: int | None = None
+        self.user_id: str | None = None
         self.session_id = str(uuid4())
         self.stock_id: int | None = None
 
