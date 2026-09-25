@@ -37,16 +37,20 @@ def build_llm(
     if top_p is not None and provider == "gemini":
         kwargs["top_p"] = top_p
 
+    # gpt-oss é modelo de raciocínio: sem isso o chain-of-thought vem dentro do content.
+    if provider == "groq":
+        kwargs["reasoning_format"] = "hidden"
+
     return BUILDERS[provider](**kwargs)
 
 
-_llm_visao_base  = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.1)
+_llm_visao_base  = build_llm(model=Model.GEMINI_FLASH, temperature=0.1)
 llm_visao        = _llm_visao_base.with_structured_output(InventarioGeladeira) if _llm_visao_base else None
-llm_gemini       = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.7, top_p=0.95)
-llm_groq         = build_llm(model=Model.LLAMA_3_3_VERSATILE, temperature=0.7)
-llm_rapido       = build_llm(model=Model.LLAMA_3_3_VERSATILE, temperature=0.0)
-llm_guardrail    = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.0)
-llm_juiz         = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.0)
+llm_gemini       = build_llm(model=Model.GEMINI_FLASH, temperature=0.7, top_p=0.95)
+llm_groq         = build_llm(model=Model.GPT_OSS_120B, temperature=0.7)
+llm_rapido       = build_llm(model=Model.GPT_OSS_120B, temperature=0.0)
+llm_guardrail    = build_llm(model=Model.GEMINI_FLASH, temperature=0.0)
+llm_juiz         = build_llm(model=Model.GEMINI_FLASH, temperature=0.0)
 llm_openrouter   = build_llm(model=Model.GLM_5_2_FREE, temperature=0.7)
 llm_especialista = llm_gemini.with_fallbacks([m for m in (llm_groq, llm_openrouter) if m])
 
