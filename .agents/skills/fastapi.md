@@ -24,9 +24,8 @@ diretório, então o caminho é só `<arquivo>.md`.
 O skill oficial recomenda algumas coisas que **não** se aplicam aqui. Não "corrija" o repo pra
 segui-las sem discutir antes:
 
-- **SQLModel:** o oficial prefere SQLModel a SQLAlchemy. Aqui o Postgres é acessado via `psycopg2`
-  cru (schema `dataload` fornecido pela disciplina, DDL em `data/sql/schema.sql`, sem ORM nenhum) —
-  não é o caso de escolher entre SQLModel e SQLAlchemy, nenhum dos dois se aplica.
+- **SQLModel:** o oficial prefere SQLModel a SQLAlchemy. Aqui o Postgres é acessado via SQLAlchemy
+  (models em `infra/postgres/models/`, schema `public` do Supabase espelhado em `data/sql/schema.sql`).
 - **Rotas `async`:** ~~aqui rota é `def` normal de propósito~~ — **essa divergência deixou de valer
   na Fase 2 do async.** Hoje as rotas são `async def` e convergem com o skill oficial. O I/O
   síncrono (psycopg2, pymongo) não sumiu: ele é embrulhado em `asyncio.to_thread` na camada de
