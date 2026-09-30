@@ -107,3 +107,9 @@ def test_analisar_foto_maior_que_o_limite_vira_413(cliente):
     r = cliente.post("/stock/foto", files={"foto": ("geladeira.jpg", foto_grande, "image/jpeg")})
 
     assert r.status_code == 413
+
+
+def test_analisar_foto_que_nao_e_imagem_vira_415(cliente):
+    r = cliente.post("/stock/foto", files={"foto": ("notas.txt", b"texto", "text/plain")})
+
+    assert r.status_code == 415
