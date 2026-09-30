@@ -18,9 +18,7 @@
 - Remover a duplicação entre funções de módulo e métodos de `ChatService`.
 - Tirar bootstrap de usuário/estoque de `chat/service.py`.
 - Criar schemas para todas as respostas da API.
-- Versionamento (`/v1`) e CSRF ainda não existem — nenhuma rota tem prefixo de versão hoje
-  (`/chats`, `/keys`, e agora `/stock`, `/shopping-list`, `/recipes`), então adicionar `/v1` só
-  nas rotas novas criaria inconsistência; é mudança pra todas as rotas de uma vez.
+- CSRF ainda não existe. (Versionamento feito: rotas de domínio sob `/v1`, ver `api/app.py`.)
 - Validar ownership em todas as rotas.
 - Consolidar a rota A2A antiga com a implementação SDK.
 - `/v1/profile` (perfil alimentar) e `/v1/stock/foto` (visão) ficam pra quando as fases 2 e 4

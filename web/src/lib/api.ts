@@ -28,22 +28,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function listChats(): Promise<ChatSummary[]> {
-  return request("/chats");
+  return request("/v1/chats");
 }
 
 export function createChat(): Promise<{ chat_id: string }> {
-  return request("/chats", { method: "POST" });
+  return request("/v1/chats", { method: "POST" });
 }
 
 export function getMessages(chatId: string): Promise<Message[]> {
-  return request(`/chats/${chatId}/messages`);
+  return request(`/v1/chats/${chatId}/messages`);
 }
 
 export function sendMessage(
   chatId: string,
   content: string,
 ): Promise<{ chat_id: string; content: string }> {
-  return request(`/chats/${chatId}/messages`, {
+  return request(`/v1/chats/${chatId}/messages`, {
     method: "POST",
     body: JSON.stringify({ content }),
   });
@@ -55,7 +55,7 @@ export async function streamMessage(
   content: string,
   onEvent: (evento: ExecutionEvent) => void,
 ): Promise<void> {
-  const res = await fetch(`/chats/${chatId}/messages/stream`, {
+  const res = await fetch(`/v1/chats/${chatId}/messages/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
@@ -108,7 +108,7 @@ export async function streamMessage(
 
 export async function getFatos(): Promise<Fatos | null> {
   try {
-    return await request<Fatos>("/profile");
+    return await request<Fatos>("/v1/profile");
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null;
     throw e;
@@ -116,5 +116,5 @@ export async function getFatos(): Promise<Fatos | null> {
 }
 
 export function saveFatos(fatos: Fatos): Promise<Fatos> {
-  return request("/profile", { method: "PUT", body: JSON.stringify(fatos) });
+  return request("/v1/profile", { method: "PUT", body: JSON.stringify(fatos) });
 }

@@ -36,7 +36,7 @@ def test_create_item_calcula_status_e_devolve_201(cliente, monkeypatch):
     monkeypatch.setattr(rotas.estoque_repository, "adicionar_produto", _adicionar_produto)
 
     r = cliente.post(
-        "/stock/items",
+        "/v1/stock/items",
         json={
             "product_name": "Leite integral",
             "category": "Laticínio",
@@ -52,7 +52,7 @@ def test_create_item_calcula_status_e_devolve_201(cliente, monkeypatch):
 
 
 def test_update_item_sem_delta_nem_novo_valor_e_422(cliente):
-    r = cliente.put("/stock/items/1", json={})
+    r = cliente.put("/v1/stock/items/1", json={})
     assert r.status_code == 422
 
 
@@ -62,7 +62,7 @@ def test_item_nao_encontrado_vira_404(cliente, monkeypatch):
 
     monkeypatch.setattr(rotas.estoque_repository, "atualizar_quantidade", _atualizar_quantidade)
 
-    r = cliente.put("/stock/items/999", json={"delta": 1})
+    r = cliente.put("/v1/stock/items/999", json={"delta": 1})
 
     assert r.status_code == 404
     assert r.json()["code"] == "estoque_item_nao_encontrado"
@@ -79,7 +79,7 @@ def test_estoque_nao_definido_vira_409(monkeypatch):
     monkeypatch.setattr(user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
     cliente = TestClient(app, raise_server_exceptions=False)
 
-    r = cliente.get("/stock/items")
+    r = cliente.get("/v1/stock/items")
 
     assert r.status_code == 409
     assert r.json()["code"] == "estoque_nao_definido"
@@ -94,7 +94,7 @@ def test_analisar_foto_devolve_a_resposta_do_grafo(cliente, monkeypatch):
 
     monkeypatch.setattr(rotas.chat_service, "analisar_foto", _analisar_foto)
 
-    r = cliente.post("/stock/foto", files={"foto": ("geladeira.jpg", b"conteudo-fake", "image/jpeg")})
+    r = cliente.post("/v1/stock/foto", files={"foto": ("geladeira.jpg", b"conteudo-fake", "image/jpeg")})
 
     assert r.status_code == 200
     assert r.json() == {"resposta": "Você tem leite e ovos na geladeira."}
@@ -104,12 +104,12 @@ def test_analisar_foto_devolve_a_resposta_do_grafo(cliente, monkeypatch):
 def test_analisar_foto_maior_que_o_limite_vira_413(cliente):
     foto_grande = b"x" * (rotas._MAX_FOTO_BYTES + 1)
 
-    r = cliente.post("/stock/foto", files={"foto": ("geladeira.jpg", foto_grande, "image/jpeg")})
+    r = cliente.post("/v1/stock/foto", files={"foto": ("geladeira.jpg", foto_grande, "image/jpeg")})
 
     assert r.status_code == 413
 
 
 def test_analisar_foto_que_nao_e_imagem_vira_415(cliente):
-    r = cliente.post("/stock/foto", files={"foto": ("notas.txt", b"texto", "text/plain")})
+    r = cliente.post("/v1/stock/foto", files={"foto": ("notas.txt", b"texto", "text/plain")})
 
     assert r.status_code == 415

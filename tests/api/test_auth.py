@@ -42,7 +42,7 @@ def test_auth_desligada_reaproveita_usuario_local(cliente, monkeypatch):
 
     monkeypatch.setattr(auth.user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
 
-    assert client.get(f"/chats/{CHAT_ID}/messages").status_code == 200
+    assert client.get(f"/v1/chats/{CHAT_ID}/messages").status_code == 200
     assert get_history.chamado_com == (CHAT_ID, 1)
 
 
@@ -50,7 +50,7 @@ def test_auth_ligada_sem_key_vira_401(cliente, monkeypatch):
     client, _ = cliente
     monkeypatch.setattr(auth.settings, "API_KEY_AUTH_ENABLED", True)
 
-    assert client.get(f"/chats/{CHAT_ID}/messages").status_code == 401
+    assert client.get(f"/v1/chats/{CHAT_ID}/messages").status_code == 401
 
 
 def test_auth_ligada_resolve_user_id_da_key(cliente, monkeypatch):
@@ -60,19 +60,19 @@ def test_auth_ligada_resolve_user_id_da_key(cliente, monkeypatch):
         auth.api_key_service, "get_user_id_by_api_key", lambda key: 42 if key == "boa" else None
     )
 
-    r = client.get(f"/chats/{CHAT_ID}/messages", headers={"X-API-Key": "boa"})
+    r = client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"X-API-Key": "boa"})
 
     assert r.status_code == 200
     assert get_history.chamado_com == (CHAT_ID, 42)
 
-    assert client.get(f"/chats/{CHAT_ID}/messages", headers={"X-API-Key": "ruim"}).status_code == 401
+    assert client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"X-API-Key": "ruim"}).status_code == 401
 
 
 def test_signup_secret_vazio_nao_libera_emissao_de_key(cliente, monkeypatch):
     client, _ = cliente
     monkeypatch.setattr(auth.settings, "SIGNUP_SECRET", "")
 
-    r = client.post("/keys", json={"nome": "Ana", "email": "ana@frigus.com"})
+    r = client.post("/v1/keys", json={"nome": "Ana", "email": "ana@frigus.com"})
 
     assert r.status_code == 401
 
@@ -88,7 +88,7 @@ def test_emissao_de_key_devolve_key_em_claro_uma_vez(cliente, monkeypatch):
     monkeypatch.setattr(rotas_keys.api_key_service, "allocate_api_key", lambda user_id, api_key: True)
 
     r = client.post(
-        "/keys",
+        "/v1/keys",
         json={"nome": "Ana", "email": "ana@frigus.com"},
         headers={"X-Signup-Secret": "segredo"},
     )
@@ -109,7 +109,7 @@ def test_key_duplicada_vira_409(cliente, monkeypatch):
     monkeypatch.setattr(rotas_keys.api_key_service, "allocate_api_key", lambda user_id, api_key: False)
 
     r = client.post(
-        "/keys",
+        "/v1/keys",
         json={"nome": "Ana", "email": "ana@frigus.com"},
         headers={"X-Signup-Secret": "segredo"},
     )
@@ -122,7 +122,7 @@ def test_email_invalido_vira_422(cliente, monkeypatch):
     monkeypatch.setattr(auth.settings, "SIGNUP_SECRET", "segredo")
 
     r = client.post(
-        "/keys",
+        "/v1/keys",
         json={"nome": "Ana", "email": "sem-arroba"},
         headers={"X-Signup-Secret": "segredo"},
     )

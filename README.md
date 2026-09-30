@@ -151,12 +151,15 @@ desenhado para carga de dados) — os tools geram o próximo ID via `MAX(id)+1` 
 (`API_KEY_AUTH_ENABLED`): ligada, resolve o usuário pela key; desligada (modo local/demo),
 reaproveita ou cria um usuário local único — não há mais `DEMO_USER_ID` fixo.
 
+Rotas de domínio (`chats`, `keys`, `stock`, `shopping-list`, `recipes`, `profile`) ficam sob
+`/v1`; `/health`, `/metrics`, A2A (`/a2a`, `/.well-known/agent-card.json`) e MCP (`/mcp`) ficam na raiz.
+
 | Método | Rota | O que faz |
 |---|---|---|
-| `POST` | `/chats` | Cria uma sessão de chat (`chat_id` + `stock_id` resolvido) |
-| `POST` | `/chats/{chat_id}/messages` | Envia mensagem e roda o grafo. **429** + `Retry-After` se o rate limit do Redis estourar (10 msg/60s) |
-| `GET` | `/chats/{chat_id}/messages` | Histórico da sessão |
-| `DELETE` | `/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa (chamada de LLM) vai pra `BackgroundTasks`, fora do caminho da resposta |
+| `POST` | `/v1/chats` | Cria uma sessão de chat (`chat_id` + `stock_id` resolvido) |
+| `POST` | `/v1/chats/{chat_id}/messages` | Envia mensagem e roda o grafo. **429** + `Retry-After` se o rate limit do Redis estourar (10 msg/60s) |
+| `GET` | `/v1/chats/{chat_id}/messages` | Histórico da sessão |
+| `DELETE` | `/v1/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa (chamada de LLM) vai pra `BackgroundTasks`, fora do caminho da resposta |
 | `GET` | `/health/live` | Liveness |
 | `GET` | `/health/ready` | Readiness — checa Postgres/Mongo/Redis/Qdrant, **503** se algum estiver fora |
 

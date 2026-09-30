@@ -1,4 +1,4 @@
-"""Contrato HTTP de `/profile`. `user_service` vira stub — o merge/segurança de
+"""Contrato HTTP de `/v1/profile`. `user_service` vira stub — o merge/segurança de
 alergias já tem teste próprio em tests/services/test_user_service.py."""
 
 import pytest
@@ -26,7 +26,7 @@ def test_get_profile_devolve_fatos_do_usuario(cliente, monkeypatch):
 
     monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
 
-    r = cliente.get("/profile")
+    r = cliente.get("/v1/profile")
 
     assert r.status_code == 200
     assert r.json() == {
@@ -45,7 +45,7 @@ def test_put_profile_pode_remover_alergia(cliente, monkeypatch):
 
     monkeypatch.setattr(user_service, "sobrescrever_fatos", _sobrescrever_fatos)
 
-    r = cliente.put("/profile", json={"alergias": [], "preferencias": ["frango"]})
+    r = cliente.put("/v1/profile", json={"alergias": [], "preferencias": ["frango"]})
 
     assert r.status_code == 200
     assert r.json()["alergias"] == []
