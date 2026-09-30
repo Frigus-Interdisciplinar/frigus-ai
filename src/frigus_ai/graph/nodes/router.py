@@ -32,7 +32,8 @@ async def _rotear(mensagens: Sequence[AnyMessage]) -> Roteamento:
         log.warning(f"Roteador falhou, respondendo sem especialista: {e}")
         return Roteamento(rota=Route.FIM, resposta=_NAO_ENTENDI)
 
-    assert isinstance(roteamento, Roteamento)
+    if not isinstance(roteamento, Roteamento):
+        raise TypeError(f"esperava Roteamento, veio {type(roteamento).__name__}")
     return roteamento
 
 

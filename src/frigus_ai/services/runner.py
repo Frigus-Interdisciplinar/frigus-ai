@@ -41,7 +41,8 @@ def _extrair_resposta(estado: Mapping[str, object]) -> str | None:
     """
 
     mensagens = estado.get("messages") or []
-    assert isinstance(mensagens, Sequence)
+    if not isinstance(mensagens, Sequence):
+        raise TypeError(f"esperava Sequence, veio {type(mensagens).__name__}")
 
     for msg in list(mensagens)[::-1]:
         if isinstance(msg, AIMessage):

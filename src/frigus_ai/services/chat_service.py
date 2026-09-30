@@ -59,7 +59,8 @@ def _atualizar_resumo(resumo_atual: str, mensagens_recentes: list[dict]) -> Resu
     resumo = llm_resumo.invoke(
         load_prompt("resumidor").format(resumo_atual=resumo_atual, mensagens=conversa)
     )
-    assert isinstance(resumo, Resumo)
+    if not isinstance(resumo, Resumo):
+        raise TypeError(f"esperava Resumo, veio {type(resumo).__name__}")
     return resumo
 
 
@@ -74,7 +75,8 @@ def _extrair_fatos(mensagens_recentes: list[dict], fatos_atuais: Fatos) -> Fatos
         fatos_atuais=fatos_atuais.model_dump_json(), mensagens=conversa
     )
     fatos = llm_fatos.invoke(prompt)
-    assert isinstance(fatos, Fatos)
+    if not isinstance(fatos, Fatos):
+        raise TypeError(f"esperava Fatos, veio {type(fatos).__name__}")
     return fatos
 
 
