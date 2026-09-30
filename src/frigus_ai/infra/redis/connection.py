@@ -23,8 +23,8 @@ class RedisConn(Connector[Redis]):
             self._client = Redis.from_url(
                 settings.REDIS_URL,
                 decode_responses=True,
-                socket_connect_timeout=0.5,
-                socket_timeout=0.5,
+                socket_connect_timeout=3.0,
+                socket_timeout=3.0,
                 retry_on_timeout=False,
             )
         return self._client

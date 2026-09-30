@@ -25,6 +25,7 @@ class ChatCreateResponse(BaseModel):
 
 class MessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
+    stock_id: int | None = None
 
 
 class MessageResponse(BaseModel):
