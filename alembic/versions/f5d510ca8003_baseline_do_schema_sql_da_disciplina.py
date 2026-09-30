@@ -4,15 +4,14 @@ Revision ID: f5d510ca8003
 Revises:
 Create Date: 2026-09-17 00:00:00.000000
 
-Marco zero das migrations — não recria nada do zero, só registra o schema
-`dataload` já fornecido pela disciplina (`data/sql/schema.sql`) como ponto de
-partida do Alembic.
+Marco zero das migrations — aplica `data/sql/schema.sql`, espelho do schema
+`public` do Supabase (banco real do grupo).
 
-Num banco que JÁ tem o schema `dataload` aplicado (o caso normal de dev/CI que
-recebeu o dump da disciplina): rode `alembic stamp f5d510ca8003` em vez de
+Num banco que JÁ tem esse schema (o próprio Supabase, ou o Postgres local já
+inicializado pelo docker-compose): rode `alembic stamp f5d510ca8003` em vez de
 `upgrade` — stamp só grava a revisão, sem tentar recriar tabelas que já existem.
 
-Só rode `upgrade` de verdade num banco vazio (ex.: ambiente novo sem o dump).
+Só rode `upgrade` de verdade num banco vazio.
 """
 
 from pathlib import Path
@@ -46,4 +45,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(sa.text("DROP SCHEMA IF EXISTS dataload CASCADE;"))
+    # O schema agora é o `public` — desfazer a baseline apagaria o banco inteiro.
+    raise NotImplementedError("baseline não tem downgrade; recrie o banco se precisar")

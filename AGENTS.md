@@ -78,7 +78,7 @@ default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
 - PostgreSQL (via Docker) para estoque/compras/receitas/financeiro, acessado via SQLAlchemy
   (`infra/postgres/connection.py`, `@transacional`; banco real no Supabase, schema
   `public` — enums gravados como código em inglês e traduzidos por `models/base.py:Rotulo`;
-  `data/sql/schema.sql` é o DDL antigo da disciplina, não bate mais com o banco)
+  `data/sql/schema.sql` espelha esse schema e inicializa o Postgres local do docker-compose)
 - MongoDB para histórico de conversa (`repositories/chat_repository.py`), fatos estruturados do
   usuário (`repositories/fatos_repository.py`, coleção `user_fatos`) e checkpoint do LangGraph
   (`MongoDBSaver`, coleções `graph_checkpoints`/`graph_checkpoint_writes`)
@@ -116,7 +116,7 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 │                         service usam; por isso não mora dentro do guardrail
 └── tui/                 app.py (Textual) + display.py + app.tcss — interface interativa
 
-data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (DDL fornecido)
+data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (espelho do DDL do Supabase)
 prometheus/ grafana/    scrape config, datasource e dashboard (8 painéis)
 main.py                 dispatcher fino — `python main.py <interface>` (`tui` [default] ou `api`)
 ```

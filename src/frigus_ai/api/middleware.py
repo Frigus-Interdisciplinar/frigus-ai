@@ -21,6 +21,10 @@ def security_config() -> SecurityConfig:
     return SecurityConfig(
         redis_url=settings.REDIS_URL,
         enable_rate_limiting=settings.API_KEY_AUTH_ENABLED,
+        redis_socket_connect_timeout=10.0,
+        redis_socket_timeout=10.0,
+        redis_retries=3,
+        redis_fail_open=True,
         enable_cors=True,
         cors_allow_origins=["*"],
         cors_allow_methods=["GET", "POST", "PUT", "DELETE"],

@@ -27,10 +27,20 @@ class RespostaAgenteInvalida(RuntimeError):
 
 
 def _texto(conteudo: Any) -> str:
-    if not isinstance(conteudo, str):
-        raise RespostaAgenteInvalida("O modelo não retornou conteúdo textual.")
+    if isinstance(conteudo, str):
+        return conteudo
+    if isinstance(conteudo, list):
+        partes: list[str] = []
+        for item in conteudo:
+            if isinstance(item, str):
+                partes.append(item)
+            elif isinstance(item, dict) and "text" in item:
+                partes.append(str(item["text"]))
+        texto = "".join(partes)
+        if texto:
+            return texto
 
-    return conteudo
+    raise RespostaAgenteInvalida("O modelo não retornou conteúdo textual.")
 
 
 # Quantas mensagens do turno ficam no checkpoint. O canal `messages` cresce ~3 por turno

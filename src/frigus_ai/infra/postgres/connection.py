@@ -21,7 +21,10 @@ class PostgresConn(Connector[Engine]):
 
     def connect(self) -> Engine:
         if self._engine is None:
-            self._engine = create_engine(settings.POSTGRES_URI)
+            uri = settings.POSTGRES_URI
+            if uri.startswith("postgresql://"):
+                uri = uri.replace("postgresql://", "postgresql+psycopg2://", 1)
+            self._engine = create_engine(uri)
         return self._engine
 
     @property

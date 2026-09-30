@@ -160,7 +160,7 @@ def demo() -> None:
     )
 
     relatorio = gerar_relatorio(metricas)
-    assert relatorio["custo_total_observado_usd"] == 0.30 * 1 + 2.50 * 0.5  # glm free não soma nada
+    assert relatorio["custo_total_observado_usd"] == 0.30 * 1 + 2.50 * 0.5  # qwen free não soma nada
     assert relatorio["indice_erros"] == 0.2
     assert relatorio["total_turnos_observados"] == 10
     assert relatorio["resolucoes_observadas"] == 8

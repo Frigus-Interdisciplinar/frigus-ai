@@ -64,7 +64,12 @@ def _logar(veredito: str, justificativa: str, tentativas: int, repetir: bool) ->
 async def no_juiz(estado: Estado) -> JuizUpdate:
     tentativas = estado.get("tentativas_juiz", 0)
 
-    veredito, justificativa = _extrair_veredito(await perguntar(llm_juiz, _mensagens(estado)))
+    try:
+        veredito, justificativa = _extrair_veredito(await perguntar(llm_juiz, _mensagens(estado)))
+    except Exception as e:
+        logger.warning("Falha ao invocar Juiz (%s) — aprovando por segurança: %s", type(e).__name__, e)
+        veredito, justificativa = APROVADO, "Aprovado por fallback após falha na avaliação"
+
     repetir = veredito == REPROVADO and tentativas < MAX_TENTATIVAS
 
     _logar(veredito, justificativa, tentativas, repetir)

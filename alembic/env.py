@@ -24,8 +24,7 @@ target_metadata = Base.metadata
 
 def include_object(object, name, type_, reflected, compare_to):
     """
-    O schema `dataload` é fornecido pela disciplina e compartilhado com outras apps
-    do grupo — tem tabelas (accounts, conversations, messages, requests, ...) que
+    O schema `public` do Supabase é compartilhado com outras apps do grupo — tem tabelas (accounts, conversations, messages, requests, ...) que
     este app não mapeia em `infra/postgres/models/` de propósito. Sem isso, todo
     `--autogenerate` proporia DROP TABLE pra elas.
     """
