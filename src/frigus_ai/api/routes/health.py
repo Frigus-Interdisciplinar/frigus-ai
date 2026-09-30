@@ -67,3 +67,6 @@ async def readiness():
         )
 
     return HealthCheckResponse(status="ready", message="all systems operational", checks=checks)
+
+
+__all__ = ["router"]

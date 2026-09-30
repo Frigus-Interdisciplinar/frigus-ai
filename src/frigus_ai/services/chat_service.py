@@ -190,7 +190,7 @@ class ChatService:
                 user_id, _MINIMO_MENSAGENS_MEMORIA, _PENDENTES_POR_NOVO_CHAT
             )
         except Exception:
-            logger.exception(f"Falha ao listar chats pendentes de resumo | user_id={user_id}")
+            logger.exception("Falha ao listar chats pendentes de resumo | user_id=%s", user_id)
             return
 
         for session_id in pendentes:
@@ -225,7 +225,7 @@ class ChatService:
                 resumo.resumo, session_id, user_id, resumido_ate=len(mensagens)
             )
         except Exception:
-            logger.exception(f"Falha ao atualizar memória em segundo plano | session_id={session_id}")
+            logger.exception("Falha ao atualizar memória em segundo plano | session_id=%s", session_id)
             return
 
         await self._indexar_resumo(session_id, user_id, resumo)
@@ -243,7 +243,7 @@ class ChatService:
             else:
                 await chat_embeddings_repository.remover_resumo(session_id)
         except Exception:
-            logger.exception(f"Falha ao indexar resumo no Qdrant | session_id={session_id}")
+            logger.exception("Falha ao indexar resumo no Qdrant | session_id=%s", session_id)
 
     async def analisar_foto(self, user_id: str, stock_id: int | None, imagem: bytes) -> str:
         """

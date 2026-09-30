@@ -72,7 +72,7 @@ async def _handle_limite(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def _handle_inesperado(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception(f"Erro não tratado em {request.method} {request.url.path}")
+    logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
 
     return _resposta(status.HTTP_500_INTERNAL_SERVER_ERROR, "Erro interno inesperado.", ErrorCode.ERRO_INTERNO)
 

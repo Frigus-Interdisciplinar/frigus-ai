@@ -71,7 +71,7 @@ class ChatRepository:
             self._indice_collection = colecao
 
     def _buscar_documento(self, session_id: str, user_id: str, limit: int = 5) -> ChatDocument | None:
-        logger.info(f"Buscando histórico de mensagens para session_id: {session_id} (limit={limit})")
+        logger.info("Buscando histórico de mensagens para session_id: %s (limit=%s)", session_id, limit)
 
         return self._collection().find_one(
             {"session_id": session_id, "user_id": user_id},
@@ -94,7 +94,7 @@ class ChatRepository:
         return list(self._collection().find({"user_id": user_id}).sort("updated_at", -1))
 
     def _adicionar_mensagens(self, session_id: str, user_id: str, mensagens: list[Mensagem]) -> None:
-        logger.info(f"Adicionando mensagens para session_id: {session_id}")
+        logger.info("Adicionando mensagens para session_id: %s", session_id)
 
         self._garantir_indice()
         agora = datetime.now(UTC)
@@ -111,7 +111,7 @@ class ChatRepository:
     def _inserir_resumo(
         self, resumo: str, session_id: str, user_id: str, resumido_ate: int
     ) -> None:
-        logger.info(f"Salvando resumo da sessão para session_id: {session_id}")
+        logger.info("Salvando resumo da sessão para session_id: %s", session_id)
 
         self._collection().update_one(
             {"session_id": session_id, "user_id": user_id},

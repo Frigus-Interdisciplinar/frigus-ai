@@ -25,12 +25,12 @@ class ApiKeyService:
         hashed = _hash_api_key(api_key)
 
         if not r.set(_chave_api_key(user_id), hashed, ex=API_KEY_TTL_TIME, nx=True):
-            logger.warning(f"Usuário {user_id} já tem uma API key ativa.")
+            logger.warning("Usuário %s já tem uma API key ativa.", user_id)
             return False
 
         r.set(_chave_api_key_lookup(hashed), user_id, ex=API_KEY_TTL_TIME)
 
-        logger.info(f"API key alocada para o usuário {user_id}.")
+        logger.info("API key alocada para o usuário %s.", user_id)
         return True
 
     def get_user_id_by_api_key(self, api_key: str) -> str | None:

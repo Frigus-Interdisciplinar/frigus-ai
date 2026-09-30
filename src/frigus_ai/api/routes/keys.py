@@ -28,3 +28,6 @@ async def create_key(payload: KeyCreate) -> KeyCreateResponse:
         raise HTTPException(status.HTTP_409_CONFLICT, "Usuário já tem uma API key ativa.")
 
     return KeyCreateResponse(user_id=user_id, api_key=api_key)
+
+
+__all__ = ["router"]
