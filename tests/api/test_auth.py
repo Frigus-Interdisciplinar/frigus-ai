@@ -82,7 +82,7 @@ def test_emissao_de_key_devolve_key_em_claro_uma_vez(cliente, monkeypatch):
     monkeypatch.setattr(auth.settings, "SIGNUP_SECRET", "segredo")
 
     async def _criar_usuario(nome, email):
-        return 7
+        return "u-7"
 
     monkeypatch.setattr(rotas_keys.user_service, "criar_usuario", _criar_usuario)
     monkeypatch.setattr(rotas_keys.api_key_service, "allocate_api_key", lambda user_id, api_key: True)
@@ -94,7 +94,7 @@ def test_emissao_de_key_devolve_key_em_claro_uma_vez(cliente, monkeypatch):
     )
 
     assert r.status_code == 201
-    assert r.json()["user_id"] == 7
+    assert r.json()["user_id"] == "u-7"
     assert len(r.json()["api_key"]) > 20
 
 
@@ -103,7 +103,7 @@ def test_key_duplicada_vira_409(cliente, monkeypatch):
     monkeypatch.setattr(auth.settings, "SIGNUP_SECRET", "segredo")
 
     async def _criar_usuario(nome, email):
-        return 7
+        return "u-7"
 
     monkeypatch.setattr(rotas_keys.user_service, "criar_usuario", _criar_usuario)
     monkeypatch.setattr(rotas_keys.api_key_service, "allocate_api_key", lambda user_id, api_key: False)
