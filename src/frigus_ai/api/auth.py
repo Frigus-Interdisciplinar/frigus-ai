@@ -3,6 +3,7 @@ Auth por `X-API-Key`, mesmo desenho do assessor-ai: a key em claro nunca é
 persistida — o Redis guarda `sha256(key) -> user_id` (`tools/redis/api_key.py`).
 """
 
+import asyncio
 import secrets
 from typing import Annotated
 
@@ -28,7 +29,10 @@ async def resolver_usuario(api_key: str | None) -> str | None:
         # sem depender de um id fixo. Ligue a flag pra exigir API key de verdade.
         return await user_service.obter_ou_criar_padrao()
 
-    return api_key_service.get_user_id_by_api_key(api_key) if api_key else None
+    if not api_key:
+        return None
+
+    return await asyncio.to_thread(api_key_service.get_user_id_by_api_key, api_key)
 
 
 async def get_current_user(
