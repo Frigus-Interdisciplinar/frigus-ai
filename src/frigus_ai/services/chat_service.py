@@ -94,10 +94,10 @@ class ChatService:
         return chat_id
 
     async def validar_ownership(self, session_id: str, user_id: str) -> None:
+        # Chat inexistente não é erro: o cliente (web/A2A) escolhe o id e o primeiro
+        # envio cria o chat. Só bloqueia quando o chat existe e é de outra pessoa.
         dono = await chat_repository.buscar_dono_chat(session_id)
-        if dono is None:
-            return
-        if dono != user_id:
+        if dono is not None and dono != user_id:
             raise ChatDeOutroUsuario(session_id)
 
     async def listar_chats(self, user_id: str) -> list[ChatDocument]:
