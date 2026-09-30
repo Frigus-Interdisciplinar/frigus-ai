@@ -23,7 +23,7 @@ def security_config() -> SecurityConfig:
         enable_rate_limiting=settings.API_KEY_AUTH_ENABLED,
         enable_cors=True,
         cors_allow_origins=["*"],
-        cors_allow_methods=["GET", "POST"],
+        cors_allow_methods=["GET", "POST", "PUT", "DELETE"],
         cors_allow_headers=["*"],
         cors_allow_credentials=False,
         cors_expose_headers=["X-Custom-Header"],
