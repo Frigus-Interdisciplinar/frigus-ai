@@ -17,7 +17,7 @@ class Model(StrEnum):
     GPT_OSS_120B        = "openai/gpt-oss-120b"
     CLAUDE_HAIKU        = "claude-haiku-4-5"
     CLAUDE_SONNET       = "claude-sonnet-4-6"
-    GLM_5_2_FREE        = "z-ai/glm-5.2:free"
+    QWEN_3_8_FREE       = "qwen/qwen3.8-27b:free"
     EMBEDDING_MODEL     = "gemini-embedding-001"
 
 
@@ -26,7 +26,7 @@ PROVIDER_MAP: Final[Mapping[Model, Provider]] = {
     Model.GPT_OSS_120B:        "groq",
     Model.CLAUDE_HAIKU:        "claude",
     Model.CLAUDE_SONNET:       "claude",
-    Model.GLM_5_2_FREE:        "openrouter",
+    Model.QWEN_3_8_FREE:       "openrouter",
 }
 
 API_KEYS: Final = {

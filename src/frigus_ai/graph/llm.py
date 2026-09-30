@@ -51,7 +51,7 @@ llm_groq         = build_llm(model=Model.GPT_OSS_120B, temperature=0.7)
 llm_rapido       = build_llm(model=Model.GPT_OSS_120B, temperature=0.0)
 llm_guardrail    = build_llm(model=Model.GEMINI_FLASH, temperature=0.0)
 llm_juiz         = build_llm(model=Model.GEMINI_FLASH, temperature=0.0)
-llm_openrouter   = build_llm(model=Model.GLM_5_2_FREE, temperature=0.7)
+llm_openrouter   = build_llm(model=Model.QWEN_3_8_FREE, temperature=0.7)
 llm_especialista = llm_gemini.with_fallbacks([m for m in (llm_groq, llm_openrouter) if m])
 
 

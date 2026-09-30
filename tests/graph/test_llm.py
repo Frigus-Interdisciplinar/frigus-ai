@@ -12,16 +12,16 @@ from frigus_ai.models import BUILDERS, PROVIDER_MAP, Model
 
 
 def test_openrouter_resolve_para_chatopenai_com_base_url():
-    assert PROVIDER_MAP[Model.GLM_5_2_FREE] == "openrouter"
+    assert PROVIDER_MAP[Model.QWEN_3_8_FREE] == "openrouter"
 
-    modelo = BUILDERS["openrouter"](model=Model.GLM_5_2_FREE, api_key="fake")
+    modelo = BUILDERS["openrouter"](model=Model.QWEN_3_8_FREE, api_key="fake")
 
     assert isinstance(modelo, ChatOpenAI)
     assert str(modelo.openai_api_base).rstrip("/") == "https://openrouter.ai/api/v1"
 
 
 def test_build_llm_sem_api_key_devolve_none():
-    assert llm_mod.build_llm(model=Model.GLM_5_2_FREE, temperature=0.7) is None
+    assert llm_mod.build_llm(model=Model.QWEN_3_8_FREE, temperature=0.7) is None
     assert llm_mod.llm_openrouter is None
 
 

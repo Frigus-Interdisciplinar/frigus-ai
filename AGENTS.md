@@ -72,7 +72,7 @@ default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
 - Python 3.13+, gerenciado com `uv` (`uv venv`, `uv sync`, `uv add <pkg>`)
 - LangChain 1.2 / LangGraph 1.1 para orquestração de agentes
 - LLMs: Gemini (`gemini-3.6-flash`), Groq (`openai/gpt-oss-120b`), Claude
-  (`claude-haiku-4-5`, `claude-sonnet-4-6`) e OpenRouter (`z-ai/glm-5.2:free`) mapeados em
+  (`claude-haiku-4-5`, `claude-sonnet-4-6`) e OpenRouter (`qwen/qwen3.8-27b:free`) mapeados em
   `src/frigus_ai/models.py`. Provider sem API key configurada faz `build_llm` devolver `None` e fica
   fora da cadeia de fallback — só Gemini e Groq são obrigatórios
 - PostgreSQL (via Docker) para estoque/compras/receitas/financeiro, acessado via SQLAlchemy
