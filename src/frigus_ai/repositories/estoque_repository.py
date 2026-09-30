@@ -86,7 +86,7 @@ def _localizar(
     elif product_name:
         stmt = (
             stmt.join(Product, Product.id == StockProduct.product_id)
-            .where(Product.name.ilike(f"%{product_name}%"))
+            .where(Product.name.icontains(product_name, autoescape=True))
             .order_by(StockProduct.expire_date.asc())
         )
     else:
@@ -202,7 +202,7 @@ class _EstoquePostgresRepo(PostgresRepo):
             stmt = stmt.where(StockProduct.expire_date <= vence_ate)
 
         if nome := filtros.get("product_name"):
-            stmt = stmt.where(Product.name.ilike(f"%{nome}%"))
+            stmt = stmt.where(Product.name.icontains(nome, autoescape=True))
 
         stmt = stmt.order_by(StockProduct.expire_date.asc())
 

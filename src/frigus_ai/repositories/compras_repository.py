@@ -81,7 +81,7 @@ def _localizar_item(
         stmt = stmt.where(ShoppingListProduct.id == shopping_list_product_id)
     elif product_name:
         stmt = stmt.join(Product, Product.id == ShoppingListProduct.product_id).where(
-            Product.name.ilike(f"%{product_name}%")
+            Product.name.icontains(product_name, autoescape=True)
         )
     else:
         raise ItemDeCompraNaoEncontrado
