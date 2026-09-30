@@ -9,22 +9,6 @@ venv:
     @echo "Preparing python environment"
     python -m venv .venv
 
-install:
-    @echo "Installing dependencies from requirements.txt"
-    {{ if os() == "windows" { "if (!(Test-Path .venv)) { python -m venv .venv }" } else { "if [ ! -d .venv ]; then python3 -m venv .venv; fi" } }}
-    {{python}} -m pip install --upgrade pip
-    {{python}} -m pip install -r requirements/requirements.txt
-    {{python}} -c "import site, pathlib; p = pathlib.Path(site.getsitepackages()[-1]) / 'frigus_ai.pth'; p.write_text(str(pathlib.Path('src').resolve()))"
-
-install-dev:
-    @echo "Installing development dependencies"
-    {{ if os() == "windows" { "if (!(Test-Path .venv)) { python -m venv .venv }" } else { "if [ ! -d .venv ]; then python3 -m venv .venv; fi" } }}
-    {{python}} -m pip install --upgrade pip
-    {{python}} -m pip install -r requirements/requirements-dev.txt
-    {{python}} -c "import site, pathlib; p = pathlib.Path(site.getsitepackages()[-1]) / 'frigus_ai.pth'; p.write_text(str(pathlib.Path('src').resolve()))"
-
-requirements: install
-
 run mode="tui":
     @echo "Running the application"
     {{bash}} scripts/run.sh {{mode}}
