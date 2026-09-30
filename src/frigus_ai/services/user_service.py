@@ -4,6 +4,7 @@ fica em `repositories/identidade_repository.py`."""
 import asyncio
 from uuid import uuid4
 
+from frigus_ai.exceptions import EstoqueAtualNaoDefinido
 from frigus_ai.logging import Logging
 from frigus_ai.repositories import fatos_repository, identidade_repository
 from frigus_ai.schemas.models import Fatos
@@ -19,6 +20,13 @@ class UserService:
 
     async def resolver_stock_id(self, user_id: str) -> int | None:
         return await asyncio.to_thread(identidade_repository.resolver_stock_id, user_id)
+
+    async def exigir_stock_id(self, user_id: str) -> int:
+        """Rotas de estoque/compras não têm o que fazer sem estoque — vira 409."""
+
+        if (stock_id := await self.resolver_stock_id(user_id)) is None:
+            raise EstoqueAtualNaoDefinido
+        return stock_id
 
     async def obter_ou_criar_padrao(self) -> str:
         """
