@@ -23,6 +23,7 @@ router = APIRouter(
 @router.post("", status_code=status.HTTP_201_CREATED)
 @guard.rate_limit(requests=5, window=3600)  # por IP: freia chute do signup secret
 async def create_key(payload: KeyCreate) -> KeyCreateResponse:
+    # criar_usuario é idempotente por email: o 409 abaixo não deixa usuário órfão.
     user_id = await user_service.criar_usuario(payload.nome, payload.email)
     api_key = secrets.token_urlsafe(32)
 

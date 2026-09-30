@@ -29,7 +29,7 @@ async def _rotear(mensagens: Sequence[AnyMessage]) -> Roteamento:
         saida = await router_app.ainvoke({"messages": list(mensagens)})
         roteamento = saida["structured_response"]
     except Exception as e:
-        log.warning(f"Roteador falhou, respondendo sem especialista: {e}")
+        log.warning("Roteador falhou, respondendo sem especialista: %s", e)
         return Roteamento(rota=Route.FIM, resposta=_NAO_ENTENDI)
 
     if not isinstance(roteamento, Roteamento):
@@ -53,7 +53,7 @@ async def no_roteador(estado: Estado) -> RouterUpdate:
     roteamento = await _rotear(estado["messages"])
     pergunta   = _ultima_pergunta(estado["messages"])
 
-    log.debug(f"Rota escolhida: {roteamento.rota} | pergunta: '{pergunta}'")
+    log.debug("Rota escolhida: %s | pergunta: '%s'", roteamento.rota, pergunta)
     ROUTER_DECISIONS.labels(route=roteamento.rota).inc()
 
     if roteamento.rota == Route.FIM:

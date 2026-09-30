@@ -25,7 +25,7 @@ def cliente(monkeypatch):
         return None
 
     async def _obter_ou_criar_padrao():
-        return 1
+        return "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"
 
     async def _validar_ownership(chat_id, user_id):
         """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
@@ -99,7 +99,7 @@ def test_delete_chat_devolve_202_e_agenda_encerramento(cliente, monkeypatch):
 
     assert r.status_code == 202
     # TestClient roda as background tasks antes de devolver a resposta
-    assert chamadas == [(CHAT_ID, 1)]
+    assert chamadas == [(CHAT_ID, "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")]
 
 
 def test_delete_chat_de_outro_dono_vira_403_e_nao_agenda_nada(cliente, monkeypatch):
@@ -125,7 +125,7 @@ def test_list_chats_devolve_schema_tipado(cliente, monkeypatch):
         return [
             {
                 "session_id": CHAT_ID,
-                "user_id": 1,
+                "user_id": "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c",
                 "messages": [{"role": "human", "content": "oi"}],
                 "resume": "conversa sobre estoque",
                 "created_at": "2025-01-01T00:00:00Z",

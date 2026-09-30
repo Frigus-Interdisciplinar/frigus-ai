@@ -38,12 +38,12 @@ def test_auth_desligada_reaproveita_usuario_local(cliente, monkeypatch):
     monkeypatch.setattr(auth.settings, "API_KEY_AUTH_ENABLED", False)
 
     async def _obter_ou_criar_padrao():
-        return 1
+        return "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"
 
     monkeypatch.setattr(auth.user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
 
     assert client.get(f"/v1/chats/{CHAT_ID}/messages").status_code == 200
-    assert get_history.chamado_com == (CHAT_ID, 1)
+    assert get_history.chamado_com == (CHAT_ID, "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
 
 def test_auth_ligada_sem_key_vira_401(cliente, monkeypatch):

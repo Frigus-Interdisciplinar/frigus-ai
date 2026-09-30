@@ -45,42 +45,42 @@ def test_id_do_ponto_e_deterministico_por_chat():
 
 
 async def test_novo_resumo_do_mesmo_chat_sobrescreve(client):
-    await repo.salvar_resumo("chat-1", 7, "comprou leite")
-    await repo.salvar_resumo("chat-1", 7, "comprou leite e decidiu trocar de marca")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "comprou leite")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "comprou leite e decidiu trocar de marca")
 
     assert await _total(client) == 1
 
 
 async def test_busca_so_traz_chats_do_dono_e_nao_o_atual(client):
-    await repo.salvar_resumo("chat-1", 7, "comprou leite")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "comprou leite")
     await repo.salvar_resumo("chat-2", 7, "falou de leite de novo")
     await repo.salvar_resumo("chat-3", 99, "outro usuário, leite")
 
-    resumos = await repo.buscar_resumos_relevantes(7, "e o leite?", session_id_atual="chat-2")
+    resumos = await repo.buscar_resumos_relevantes("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "e o leite?", session_id_atual="chat-2")
 
     assert resumos == ["comprou leite"]
 
 
 async def test_busca_ignora_resumo_de_outro_assunto(client):
-    await repo.salvar_resumo("chat-1", 7, "planejou arroz da semana")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "planejou arroz da semana")
 
-    assert await repo.buscar_resumos_relevantes(7, "e o leite?", "chat-atual") == []
+    assert await repo.buscar_resumos_relevantes("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "e o leite?", "chat-atual") == []
 
 
 async def test_remover_tira_o_ponto(client):
-    await repo.salvar_resumo("chat-1", 7, "comprou leite")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "comprou leite")
     await repo.remover_resumo("chat-1")
 
     assert await _total(client) == 0
 
 
 async def test_sem_collection_busca_e_remocao_nao_falham(client):
-    assert await repo.buscar_resumos_relevantes(7, "leite", "chat-1") == []
+    assert await repo.buscar_resumos_relevantes("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "leite", "chat-1") == []
     await repo.remover_resumo("chat-1")
 
 
 async def test_pii_nao_vai_pro_indice(client):
-    await repo.salvar_resumo("chat-1", 7, "leite; CPF 123.456.789-01")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "leite; CPF 123.456.789-01")
 
     [ponto] = (await client.scroll(settings.QDRANT_CHATS_COLLECTION))[0]
     assert "123.456.789-01" not in ponto.payload["resumo"]

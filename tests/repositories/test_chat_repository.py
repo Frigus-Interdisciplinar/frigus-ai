@@ -45,18 +45,18 @@ def _mensagens():
 
 
 def test_buscar_filtra_por_dono(collection):
-    chat_repo._buscar_documento("sessao-1", user_id=7)
+    chat_repo._buscar_documento("sessao-1", user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
-    assert collection.filtros_find == [{"session_id": "sessao-1", "user_id": 7}]
+    assert collection.filtros_find == [{"session_id": "sessao-1", "user_id": "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"}]
 
 
 def test_adicionar_mensagens_e_um_upsert_atomico(collection):
-    chat_repo._adicionar_mensagens("sessao-1", 7, _mensagens())
+    chat_repo._adicionar_mensagens("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", _mensagens())
 
     assert len(collection.updates) == 1
     filtro, update, upsert = collection.updates[0]
 
-    assert filtro == {"session_id": "sessao-1", "user_id": 7}
+    assert filtro == {"session_id": "sessao-1", "user_id": "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"}
     assert upsert is True
     assert len(update["$push"]["messages"]["$each"]) == 2
     # created_at só no insert: um $set apagaria a data de criação a cada turno.
@@ -65,23 +65,23 @@ def test_adicionar_mensagens_e_um_upsert_atomico(collection):
 
 
 def test_indice_unico_criado_uma_vez_so(collection):
-    chat_repo._adicionar_mensagens("sessao-1", 7, _mensagens())
-    chat_repo._adicionar_mensagens("sessao-1", 7, _mensagens())
+    chat_repo._adicionar_mensagens("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", _mensagens())
+    chat_repo._adicionar_mensagens("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", _mensagens())
 
     assert collection.indices == ("session_id", True)
 
 
 def test_inserir_resumo_filtra_por_dono(collection):
-    chat_repo._inserir_resumo("resumo", "sessao-1", user_id=7, resumido_ate=12)
+    chat_repo._inserir_resumo("resumo", "sessao-1", user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", resumido_ate=12)
 
     filtro, update, _ = collection.updates[0]
-    assert filtro == {"session_id": "sessao-1", "user_id": 7}
+    assert filtro == {"session_id": "sessao-1", "user_id": "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"}
     assert update == {"$set": {"resume": "resumo", "resumido_ate": 12}}
 
 
 def test_buscar_documento_completo_filtra_por_dono(collection):
     """Sem o filtro por user_id, encerrar_sessao resumiria a conversa de outro usuário."""
 
-    chat_repo._buscar_documento_completo("sessao-1", user_id=999)
+    chat_repo._buscar_documento_completo("sessao-1", user_id="9979d729-681c-46ec-8741-b37fae55d9d7")
 
-    assert collection.filtros_find == [{"session_id": "sessao-1", "user_id": 999}]
+    assert collection.filtros_find == [{"session_id": "sessao-1", "user_id": "9979d729-681c-46ec-8741-b37fae55d9d7"}]

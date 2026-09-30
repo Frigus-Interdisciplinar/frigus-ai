@@ -19,7 +19,7 @@ def cliente(monkeypatch):
         return 1
 
     async def _obter_ou_criar_padrao():
-        return 1
+        return "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"
 
     monkeypatch.setattr(user_service, "resolver_stock_id", _resolver_stock_id)
     monkeypatch.setattr(user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
@@ -73,7 +73,7 @@ def test_estoque_nao_definido_vira_409(monkeypatch):
         return None
 
     async def _obter_ou_criar_padrao():
-        return 1
+        return "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"
 
     monkeypatch.setattr(user_service, "resolver_stock_id", _sem_estoque)
     monkeypatch.setattr(user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
@@ -98,7 +98,7 @@ def test_analisar_foto_devolve_a_resposta_do_grafo(cliente, monkeypatch):
 
     assert r.status_code == 200
     assert r.json() == {"resposta": "Você tem leite e ovos na geladeira."}
-    assert chamado_com["args"] == (1, 1, b"conteudo-fake")
+    assert chamado_com["args"] == ("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", 1, b"conteudo-fake")
 
 
 def test_analisar_foto_maior_que_o_limite_vira_413(cliente):
