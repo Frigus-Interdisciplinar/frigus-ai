@@ -14,7 +14,7 @@ aqui, mesma regra pra essa rota e pra `a2a.py`.
 from collections.abc import AsyncIterable
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from frigus_ai.api.auth import CurrentUserDep
@@ -46,7 +46,7 @@ async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep) 
     return user_id
 
 
-DonoComLimiteDep = Annotated[int, Depends(_dono_do_chat_dentro_do_limite)]
+DonoComLimiteDep = Annotated[str, Depends(_dono_do_chat_dentro_do_limite)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -82,9 +82,11 @@ async def stream_message(
 
 
 @router.get("/{chat_id}/messages")
-async def get_messages(chat_id: str, user_id: CurrentUserDep) -> list[MessageResponse]:
+async def get_messages(
+    chat_id: str, user_id: CurrentUserDep, limit: Annotated[int, Query(ge=1, le=100)] = 5
+) -> list[MessageResponse]:
     await chat_service.validar_ownership(chat_id, user_id)
-    historico = await chat_service.get_history(chat_id, user_id)
+    historico = await chat_service.get_history(chat_id, user_id, limit)
 
     return [
         MessageResponse(role=_ROLE_MAP[m.role], content=m.content)
@@ -122,3 +124,6 @@ async def close_chat(
 
     await chat_service.validar_ownership(chat_id, user_id)
     background_tasks.add_task(chat_service.encerrar_sessao, chat_id, user_id)
+
+
+__all__ = ["router"]

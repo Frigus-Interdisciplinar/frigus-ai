@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+import secrets
+
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -16,6 +18,7 @@ from frigus_ai.api.routes import (
     stock_router,
 )
 from frigus_ai.mcp import montar_app as montar_app_mcp
+from frigus_ai.settings import settings
 
 app = FastAPI(
     title="Frigus.AI",
@@ -27,19 +30,25 @@ app = FastAPI(
 register_exception_handlers(app)
 adicionar_middleware(app)
 
+# Rotas de domínio versionadas. Health/metrics (infra), A2A (agent card no caminho
+# da spec) e MCP ficam na raiz — têm contrato próprio, fora da versão da API.
+v1 = APIRouter(prefix="/v1")
+for router in (chats_router, keys_router, stock_router, shopping_router, recipes_router, profile_router):
+    v1.include_router(router)
+
 app.include_router(health_router)
 app.include_router(a2a_router)
-app.include_router(chats_router)
-app.include_router(keys_router)
-app.include_router(stock_router)
-app.include_router(shopping_router)
-app.include_router(recipes_router)
-app.include_router(profile_router)
+app.include_router(v1)
 
 # Servidor MCP das tools de domínio, no mesmo processo da API (POST /mcp).
 app.mount("/mcp", montar_app_mcp())
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics() -> Response:
+async def metrics(request: Request) -> Response:
+    # Com METRICS_TOKEN, só quem manda o Bearer (o Prometheus) lê; vazio = aberto (dev local).
+    token = settings.METRICS_TOKEN.get_secret_value()
+    if token and not secrets.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
+
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

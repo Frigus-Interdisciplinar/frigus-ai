@@ -66,7 +66,8 @@ async def _classificar(mensagem_anonimizada: str) -> str:
         logger.warning("Classificador do guardrail falhou, aprovando (falha aberta): %s", e)
         return Categoria.APROVADO
 
-    assert isinstance(resultado, Classificacao)
+    if not isinstance(resultado, Classificacao):
+        raise TypeError(f"esperava Classificacao, veio {type(resultado).__name__}")
     guardar_categoria(mensagem_anonimizada, _FINGERPRINT, resultado.categoria)
 
     return resultado.categoria

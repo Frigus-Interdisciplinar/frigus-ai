@@ -41,7 +41,7 @@ PRECOS_POR_1M_TOKENS: dict[str, PrecoPor1MTokens] = {
     # na página de preços do Gemini e da Groq antes de usar o relatório pra valer.
     Model.GEMINI_FLASH: PrecoPor1MTokens(entrada=0.30, saida=2.50),
     Model.GPT_OSS_120B: PrecoPor1MTokens(entrada=0.59, saida=0.79),
-    Model.GLM_5_2_FREE: PrecoPor1MTokens(entrada=0.0, saida=0.0),
+    Model.QWEN_3_8_FREE: PrecoPor1MTokens(entrada=0.0, saida=0.0),
 }
 
 MENSAGENS_POR_USUARIO_SEMANA = 20  # placeholder — sem dado real de uso ainda
@@ -153,14 +153,14 @@ def demo() -> None:
     metricas = Metricas(
         tokens={
             Model.GEMINI_FLASH: TokensPorDirecao(input=1_000_000, output=500_000),
-            Model.GLM_5_2_FREE: TokensPorDirecao(input=1_000_000, output=1_000_000),
+            Model.QWEN_3_8_FREE: TokensPorDirecao(input=1_000_000, output=1_000_000),
         },
         graph_runs={"success": 8, "error": 2},
         rate_limit_rejections=1,
     )
 
     relatorio = gerar_relatorio(metricas)
-    assert relatorio["custo_total_observado_usd"] == 0.30 * 1 + 2.50 * 0.5  # glm free não soma nada
+    assert relatorio["custo_total_observado_usd"] == 0.30 * 1 + 2.50 * 0.5  # qwen free não soma nada
     assert relatorio["indice_erros"] == 0.2
     assert relatorio["total_turnos_observados"] == 10
     assert relatorio["resolucoes_observadas"] == 8

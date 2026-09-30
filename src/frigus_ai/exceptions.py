@@ -27,11 +27,6 @@ class ChatError(FrigusError):
     """Erro base dos casos de uso de chat (services/chat/service.py)."""
 
 
-class ChatNaoEncontrado(ChatError):
-    def __init__(self, chat_id: str) -> None:
-        super().__init__(f"Chat {chat_id!r} não encontrado.")
-
-
 class ChatDeOutroUsuario(ChatError):
     def __init__(self, chat_id: str) -> None:
         super().__init__(f"Chat {chat_id!r} pertence a outro usuário.")

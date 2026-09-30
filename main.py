@@ -11,7 +11,9 @@ def main() -> None:
     elif modo == "api":
         import uvicorn
 
-        uvicorn.run("frigus_ai.api.app:app", host="0.0.0.0", port=8000, reload=True)
+        from frigus_ai.settings import settings
+
+        uvicorn.run("frigus_ai.api.app:app", host="0.0.0.0", port=8000, reload=settings.API_RELOAD)
     else:
         print(f"Interface '{modo}' ainda não implementada.")
 

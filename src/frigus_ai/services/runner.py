@@ -41,7 +41,8 @@ def _extrair_resposta(estado: Mapping[str, object]) -> str | None:
     """
 
     mensagens = estado.get("messages") or []
-    assert isinstance(mensagens, Sequence)
+    if not isinstance(mensagens, Sequence):
+        raise TypeError(f"esperava Sequence, veio {type(mensagens).__name__}")
 
     for msg in list(mensagens)[::-1]:
         if isinstance(msg, AIMessage):
@@ -85,7 +86,7 @@ async def _carregar_conversas_anteriores(
                 user_id, conteudo, session_id
             )
         except Exception as e:
-            logger.warning(f"Busca de conversas anteriores falhou, seguindo sem: {e}")
+            logger.warning("Busca de conversas anteriores falhou, seguindo sem: %s", e)
 
     conversas_anteriores.set(tuple(resumos))
 
@@ -114,7 +115,7 @@ async def descartar_thread(thread_id: str) -> None:
         if grafo.checkpointer:
             await asyncio.to_thread(grafo.checkpointer.delete_thread, thread_id)
     except Exception as e:
-        logger.warning(f"Não consegui apagar a thread {thread_id}: {e}")
+        logger.warning("Não consegui apagar a thread %s: %s", thread_id, e)
 
 
 async def executar(
@@ -210,7 +211,7 @@ async def executar_stream(
 
         yield RunFinished()
     except Exception:
-        logger.exception(f"Falha durante streaming da execução do agente | session_id={session_id}")
+        logger.exception("Falha durante streaming da execução do agente | session_id=%s", session_id)
         yield RunFailed(message="Não foi possível processar a mensagem.")
     finally:
         GRAPH_RUNS.labels(outcome=outcome).inc()

@@ -40,7 +40,7 @@ def dados(monkeypatch):
 
 
 async def test_manda_a_pergunta_com_os_numeros_do_frigus(enviado, dados):
-    with session_context(user_id=7, stock_id=1):
+    with session_context(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1):
         update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"})
 
     [mensagem] = enviado["mensagens"]
@@ -68,7 +68,7 @@ async def test_assessor_fora_do_ar_devolve_mensagem_limpa(monkeypatch, dados):
     monkeypatch.setattr(mod.assessor, "perguntar", _fora)
     monkeypatch.setattr(mod, "_session_id", lambda: "chat-1")
 
-    with session_context(user_id=7, stock_id=1):
+    with session_context(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1):
         update = await mod.no_assessor({"pergunta_original": "como economizo?"})
 
     assert update["resposta_especialista"] == mod.INDISPONIVEL

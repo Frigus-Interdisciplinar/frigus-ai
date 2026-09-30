@@ -10,10 +10,8 @@ export default defineConfig({
       // primeiro, mas a API sobe com host="0.0.0.0" (só IPv4) → ECONNREFUSED → o proxy do
       // Vite responde 502. Ver main.py (uvicorn.run).
       //
-      // Rotas do Frigus não são versionadas (sem prefixo /v1, ao contrário do assessor-ai) —
-      // ver api/routes/*.py.
-      "/chats": "http://127.0.0.1:8000",
-      "/profile": "http://127.0.0.1:8000",
+      // Rotas de domínio ficam sob /v1 (ver api/app.py); health/metrics na raiz.
+      "/v1": "http://127.0.0.1:8000",
       "/health": "http://127.0.0.1:8000",
       "/metrics": "http://127.0.0.1:8000",
     },

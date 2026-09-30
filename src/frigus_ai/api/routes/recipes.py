@@ -6,7 +6,6 @@ import asyncio
 from fastapi import APIRouter
 
 from frigus_ai.api.auth import CurrentUserDep
-from frigus_ai.exceptions import EstoqueAtualNaoDefinido
 from frigus_ai.repositories import receitas_repository
 from frigus_ai.schemas.recipes import RecipeSuggestionResponse, RecipeSummaryResponse
 from frigus_ai.services.user_service import user_service
@@ -25,9 +24,7 @@ async def list_recipes(user_id: CurrentUserDep, limit: int = 50) -> list[RecipeS
 async def recipe_suggestions(
     user_id: CurrentUserDep, limit: int = 10
 ) -> list[RecipeSuggestionResponse]:
-    stock_id = await user_service.resolver_stock_id(user_id)
-    if stock_id is None:
-        raise EstoqueAtualNaoDefinido
+    stock_id = await user_service.exigir_stock_id(user_id)
 
     sugestoes = await asyncio.to_thread(receitas_repository.match_recipes_to_stock, stock_id, limit)
 

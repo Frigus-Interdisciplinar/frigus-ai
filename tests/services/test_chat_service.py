@@ -71,7 +71,7 @@ async def test_talvez_atualizar_memoria_dispara_no_multiplo_do_intervalo(monkeyp
     disparadas = []
     monkeypatch.setattr(chat_service_module, "_disparar_em_segundo_plano", disparadas.append)
 
-    await chat_service._talvez_atualizar_memoria("sessao-1", 7)
+    await chat_service._talvez_atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     assert len(disparadas) == 1
     disparadas[0].close()  # não executa o corpo — só confirma que foi agendado
@@ -86,7 +86,7 @@ async def test_talvez_atualizar_memoria_nao_dispara_fora_do_intervalo(monkeypatc
     disparadas = []
     monkeypatch.setattr(chat_service_module, "_disparar_em_segundo_plano", disparadas.append)
 
-    await chat_service._talvez_atualizar_memoria("sessao-1", 7)
+    await chat_service._talvez_atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     assert disparadas == []
 
@@ -94,12 +94,12 @@ async def test_talvez_atualizar_memoria_nao_dispara_fora_do_intervalo(monkeypatc
 async def test_resumo_recebe_so_o_que_ainda_nao_foi_resumido(memoria):
     memoria["doc"] = {"messages": _msgs(15), "resume": "resumo salvo", "resumido_ate": 10}
 
-    await chat_service._atualizar_memoria("sessao-1", 7)
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     [(resumo_atual, recentes)] = memoria["chamadas_resumo"]
     assert resumo_atual == "resumo salvo"
     assert [m["content"] for m in recentes] == [f"msg {i}" for i in range(10, 15)]
-    assert memoria["salvou"] == [("resumo novo", "sessao-1", 7, 15)]
+    assert memoria["salvou"] == [("resumo novo", "sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", 15)]
 
 
 async def test_chat_ja_resumido_nao_chama_llm(memoria):
@@ -107,7 +107,7 @@ async def test_chat_ja_resumido_nao_chama_llm(memoria):
 
     memoria["doc"] = {"messages": _msgs(10), "resume": "r", "resumido_ate": 10}
 
-    await chat_service.encerrar_sessao("sessao-1", user_id=7)
+    await chat_service.encerrar_sessao("sessao-1", user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     assert memoria["chamadas_resumo"] == []
     assert memoria["salvou"] == []
@@ -118,7 +118,7 @@ async def test_chat_curto_demais_nao_chama_llm(memoria):
 
     memoria["doc"] = {"messages": _msgs(2), "resume": ""}
 
-    await chat_service.encerrar_sessao("sessao-1", user_id=7)
+    await chat_service.encerrar_sessao("sessao-1", user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     assert memoria["chamadas_resumo"] == []
     assert memoria["indexou"] == []
@@ -127,9 +127,9 @@ async def test_chat_curto_demais_nao_chama_llm(memoria):
 async def test_resumo_relevante_vai_pro_qdrant(memoria):
     memoria["doc"] = {"messages": _msgs(6), "resume": ""}
 
-    await chat_service._atualizar_memoria("sessao-1", 7)
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
-    assert memoria["indexou"] == [("sessao-1", 7, "resumo novo")]
+    assert memoria["indexou"] == [("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "resumo novo")]
     assert memoria["removeu"] == []
 
 
@@ -137,12 +137,12 @@ async def test_resumo_irrelevante_sai_do_qdrant(memoria):
     memoria["doc"] = {"messages": _msgs(6), "resume": ""}
     memoria["resumo"] = Resumo(resumo="Usuário só cumprimentou.", relevante=False)
 
-    await chat_service._atualizar_memoria("sessao-1", 7)
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     assert memoria["indexou"] == []
     assert memoria["removeu"] == ["sessao-1"]
     # o resumo no Mongo continua salvo — `resumido_ate` avança mesmo sem embedding
-    assert memoria["salvou"] == [("Usuário só cumprimentou.", "sessao-1", 7, 6)]
+    assert memoria["salvou"] == [("Usuário só cumprimentou.", "sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", 6)]
 
 
 async def test_qdrant_fora_do_ar_nao_desfaz_o_resumo(memoria, monkeypatch):
@@ -153,18 +153,18 @@ async def test_qdrant_fora_do_ar_nao_desfaz_o_resumo(memoria, monkeypatch):
 
     monkeypatch.setattr(chat_embeddings_repository, "salvar_resumo", _falha)
 
-    await chat_service._atualizar_memoria("sessao-1", 7)
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
-    assert memoria["salvou"] == [("resumo novo", "sessao-1", 7, 6)]
+    assert memoria["salvou"] == [("resumo novo", "sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", 6)]
 
 
 async def test_atualizar_memoria_salva_fatos_quando_extracao_funciona(memoria):
     memoria["doc"] = {"messages": _msgs(4), "resume": ""}
     memoria["fatos"] = Fatos(alergias=["amendoim"])
 
-    await chat_service._atualizar_memoria("sessao-1", 7)
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
-    assert memoria["fatos_salvos"] == [(7, Fatos(alergias=["amendoim"]))]
+    assert memoria["fatos_salvos"] == [("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", Fatos(alergias=["amendoim"]))]
 
 
 async def test_novo_chat_resume_os_pendentes_em_sequencia(monkeypatch):
@@ -180,9 +180,9 @@ async def test_novo_chat_resume_os_pendentes_em_sequencia(monkeypatch):
 
     monkeypatch.setattr(chat_service, "_atualizar_memoria", _atualizar_memoria)
 
-    await chat_service._resumir_pendentes(7)
+    await chat_service._resumir_pendentes("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
-    assert resumidos == [("antigo-1", 7), ("antigo-2", 7)]
+    assert resumidos == [("antigo-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"), ("antigo-2", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")]
 
 
 async def test_analisar_foto_usa_thread_id_unico_e_nao_salva_historico(monkeypatch):
@@ -205,13 +205,13 @@ async def test_analisar_foto_usa_thread_id_unico_e_nao_salva_historico(monkeypat
     monkeypatch.setattr(runner, "descartar_thread", _descartar)
     monkeypatch.setattr(chat_repository, "salvar_mensagens", lambda *a, **kw: salvou.append(a))
 
-    resposta = await chat_service.analisar_foto(user_id=7, stock_id=1, imagem=b"fake-jpeg-bytes")
+    resposta = await chat_service.analisar_foto(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1, imagem=b"fake-jpeg-bytes")
 
     assert resposta == "Você tem leite e ovos."
     assert len(chamadas) == 1
     _, session_id, user_id, stock_id, imagem_b64 = chamadas[0]
-    assert session_id.startswith("visao-7-")
-    assert user_id == 7
+    assert session_id.startswith("visao-3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c-")
+    assert user_id == "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"
     assert stock_id == 1
     assert imagem_b64 == "ZmFrZS1qcGVnLWJ5dGVz"  # base64 de b"fake-jpeg-bytes"
     assert salvou == []
@@ -229,6 +229,6 @@ async def test_analisar_foto_sem_resposta_devolve_mensagem_padrao(monkeypatch):
     monkeypatch.setattr(runner, "executar", _executar)
     monkeypatch.setattr(runner, "descartar_thread", _descartar)
 
-    resposta = await chat_service.analisar_foto(user_id=7, stock_id=1, imagem=b"x")
+    resposta = await chat_service.analisar_foto(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1, imagem=b"x")
 
     assert resposta == "Não consegui analisar a foto."

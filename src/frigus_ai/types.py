@@ -14,10 +14,10 @@ from uuid import uuid4
 from pydantic import Field
 
 UserID = Annotated[
-    int, 
+    str,
     Field(
-        description="Identificador único do usuário.", 
-        examples=[42]
+        description="Identificador único do usuário (UUID do Postgres).",
+        examples=["3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"]
     )
 ]
 ChatID = Annotated[

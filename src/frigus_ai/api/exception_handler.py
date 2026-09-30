@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 from frigus_ai.exceptions import (
     ChatDeOutroUsuario,
     ChatError,
-    ChatNaoEncontrado,
     EstoqueAtualNaoDefinido,
     FalhaNoAgente,
     FrigusError,
@@ -38,7 +37,6 @@ class MapaExcecao(NamedTuple):
 
 
 _MAPA: list[MapaExcecao] = [
-    MapaExcecao(ChatNaoEncontrado,          status.HTTP_404_NOT_FOUND,            ErrorCode.CHAT_NAO_ENCONTRADO),
     MapaExcecao(ChatDeOutroUsuario,         status.HTTP_403_FORBIDDEN,            ErrorCode.CHAT_DE_OUTRO_USUARIO),
     MapaExcecao(FalhaNoAgente,              status.HTTP_502_BAD_GATEWAY,          ErrorCode.FALHA_NO_AGENTE),
     MapaExcecao(ItemDeEstoqueNaoEncontrado, status.HTTP_404_NOT_FOUND,            ErrorCode.ESTOQUE_ITEM_NAO_ENCONTRADO),
@@ -74,7 +72,7 @@ async def _handle_limite(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def _handle_inesperado(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception(f"Erro não tratado em {request.method} {request.url.path}")
+    logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
 
     return _resposta(status.HTTP_500_INTERNAL_SERVER_ERROR, "Erro interno inesperado.", ErrorCode.ERRO_INTERNO)
 

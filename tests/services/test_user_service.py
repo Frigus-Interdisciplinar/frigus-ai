@@ -41,7 +41,7 @@ async def test_atualizar_fatos_por_extracao_uniao_alergias_nunca_remove(monkeypa
     monkeypatch.setattr(fatos_repository, "salvar_fatos", lambda user_id, fatos: salvos.append(fatos))
 
     extraidos = Fatos(alergias=["amendoim"], preferencias=["frango"], habitos=["novo"])
-    await user_service.atualizar_fatos_por_extracao(1, extraidos)
+    await user_service.atualizar_fatos_por_extracao("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", extraidos)
 
     assert len(salvos) == 1
     salvo = salvos[0]
@@ -58,6 +58,6 @@ async def test_sobrescrever_fatos_repassa_direto_ao_repository(monkeypatch):
     monkeypatch.setattr(fatos_repository, "salvar_fatos", lambda user_id, fatos: salvos.append((user_id, fatos)))
 
     fatos_sem_alergia = Fatos(alergias=[])
-    await user_service.sobrescrever_fatos(1, fatos_sem_alergia)
+    await user_service.sobrescrever_fatos("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", fatos_sem_alergia)
 
-    assert salvos == [(1, fatos_sem_alergia)]
+    assert salvos == [("3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", fatos_sem_alergia)]

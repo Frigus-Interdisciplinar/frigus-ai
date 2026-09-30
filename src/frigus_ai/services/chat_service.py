@@ -59,7 +59,8 @@ def _atualizar_resumo(resumo_atual: str, mensagens_recentes: list[dict]) -> Resu
     resumo = llm_resumo.invoke(
         load_prompt("resumidor").format(resumo_atual=resumo_atual, mensagens=conversa)
     )
-    assert isinstance(resumo, Resumo)
+    if not isinstance(resumo, Resumo):
+        raise TypeError(f"esperava Resumo, veio {type(resumo).__name__}")
     return resumo
 
 
@@ -74,7 +75,8 @@ def _extrair_fatos(mensagens_recentes: list[dict], fatos_atuais: Fatos) -> Fatos
         fatos_atuais=fatos_atuais.model_dump_json(), mensagens=conversa
     )
     fatos = llm_fatos.invoke(prompt)
-    assert isinstance(fatos, Fatos)
+    if not isinstance(fatos, Fatos):
+        raise TypeError(f"esperava Fatos, veio {type(fatos).__name__}")
     return fatos
 
 
@@ -94,10 +96,10 @@ class ChatService:
         return chat_id
 
     async def validar_ownership(self, session_id: str, user_id: str) -> None:
+        # Chat inexistente não é erro: o cliente (web/A2A) escolhe o id e o primeiro
+        # envio cria o chat. Só bloqueia quando o chat existe e é de outra pessoa.
         dono = await chat_repository.buscar_dono_chat(session_id)
-        if dono is None:
-            return
-        if dono != user_id:
+        if dono is not None and dono != user_id:
             raise ChatDeOutroUsuario(session_id)
 
     async def listar_chats(self, user_id: str) -> list[ChatDocument]:
@@ -190,7 +192,7 @@ class ChatService:
                 user_id, _MINIMO_MENSAGENS_MEMORIA, _PENDENTES_POR_NOVO_CHAT
             )
         except Exception:
-            logger.exception(f"Falha ao listar chats pendentes de resumo | user_id={user_id}")
+            logger.exception("Falha ao listar chats pendentes de resumo | user_id=%s", user_id)
             return
 
         for session_id in pendentes:
@@ -225,7 +227,7 @@ class ChatService:
                 resumo.resumo, session_id, user_id, resumido_ate=len(mensagens)
             )
         except Exception:
-            logger.exception(f"Falha ao atualizar memória em segundo plano | session_id={session_id}")
+            logger.exception("Falha ao atualizar memória em segundo plano | session_id=%s", session_id)
             return
 
         await self._indexar_resumo(session_id, user_id, resumo)
@@ -243,7 +245,7 @@ class ChatService:
             else:
                 await chat_embeddings_repository.remover_resumo(session_id)
         except Exception:
-            logger.exception(f"Falha ao indexar resumo no Qdrant | session_id={session_id}")
+            logger.exception("Falha ao indexar resumo no Qdrant | session_id=%s", session_id)
 
     async def analisar_foto(self, user_id: str, stock_id: int | None, imagem: bytes) -> str:
         """

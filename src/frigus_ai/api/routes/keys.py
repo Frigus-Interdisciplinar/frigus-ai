@@ -8,6 +8,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from frigus_ai.api.auth import verify_signup_secret
+from frigus_ai.api.middleware import guard
 from frigus_ai.schemas.key import KeyCreate, KeyCreateResponse
 from frigus_ai.services.api_key_service import api_key_service
 from frigus_ai.services.user_service import user_service
@@ -20,7 +21,9 @@ router = APIRouter(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
+@guard.rate_limit(requests=5, window=3600)  # por IP: freia chute do signup secret
 async def create_key(payload: KeyCreate) -> KeyCreateResponse:
+    # criar_usuario é idempotente por email: o 409 abaixo não deixa usuário órfão.
     user_id = await user_service.criar_usuario(payload.nome, payload.email)
     api_key = secrets.token_urlsafe(32)
 
@@ -28,3 +31,6 @@ async def create_key(payload: KeyCreate) -> KeyCreateResponse:
         raise HTTPException(status.HTTP_409_CONFLICT, "Usuário já tem uma API key ativa.")
 
     return KeyCreateResponse(user_id=user_id, api_key=api_key)
+
+
+__all__ = ["router"]

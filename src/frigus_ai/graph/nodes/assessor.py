@@ -94,13 +94,13 @@ async def no_assessor(estado: Estado) -> AssessorUpdate:
     try:
         contexto = await asyncio.to_thread(_contexto_financeiro)
     except Exception as e:  # sem estoque na sessão, Postgres/Redis fora: pergunta sem dados
-        logger.warning(f"Sem dados financeiros pro Assessor, perguntando sem contexto: {e}")
+        logger.warning("Sem dados financeiros pro Assessor, perguntando sem contexto: %s", e)
         contexto = ""
 
     try:
         resposta = await assessor.perguntar(_mensagem(pergunta, contexto), _session_id())
     except AssessorIndisponivel as e:
-        logger.warning(f"Assessor indisponível: {e}")
+        logger.warning("Assessor indisponível: %s", e)
 
         return AssessorUpdate(
             agentes_chamados=[A2A_ASSESSOR],

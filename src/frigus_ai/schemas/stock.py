@@ -11,7 +11,7 @@ class StockItemCreate(BaseModel):
     storage_place: StoragePlace
     quantity: int = Field(gt=0)
     expire_date: date
-    unit_price: float = 0.0
+    unit_price: float = Field(default=0.0, ge=0)
     minimal_quantity: int | None = None
 
 

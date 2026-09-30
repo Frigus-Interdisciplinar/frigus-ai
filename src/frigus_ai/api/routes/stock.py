@@ -14,7 +14,6 @@ from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 
 from frigus_ai.api.auth import CurrentUserDep
 from frigus_ai.api.middleware import guard
-from frigus_ai.exceptions import EstoqueAtualNaoDefinido
 from frigus_ai.graph.tools.estoque.helpers import compute_product_status
 from frigus_ai.infra.redis import ranking
 from frigus_ai.logging import Logging
@@ -39,13 +38,6 @@ router = APIRouter(prefix="/stock", tags=["stock"])
 _MAX_FOTO_BYTES = 8 * 1024 * 1024
 
 
-async def _resolver_stock_id(user_id: str) -> int:
-    stock_id = await user_service.resolver_stock_id(user_id)
-    if stock_id is None:
-        raise EstoqueAtualNaoDefinido
-    return stock_id
-
-
 @router.get("/items")
 async def list_items(
     user_id: CurrentUserDep,
@@ -54,7 +46,7 @@ async def list_items(
     product_status: str | None = None,
     product_name: str | None = None,
 ) -> list[StockItemResponse]:
-    stock_id = await _resolver_stock_id(user_id)
+    stock_id = await user_service.exigir_stock_id(user_id)
     filtros = FiltrosEstoque(
         storage_place=storage_place,
         category=category,
@@ -69,7 +61,7 @@ async def list_items(
 @router.post("/items", status_code=status.HTTP_201_CREATED)
 @guard.rate_limit(requests=10, window=60)
 async def create_item(payload: StockItemCreate, user_id: CurrentUserDep) -> StockItemCreateResponse:
-    stock_id = await _resolver_stock_id(user_id)
+    stock_id = await user_service.exigir_stock_id(user_id)
     status_calculado = compute_product_status(payload.expire_date)
     dados = ProdutoNovo(
         product_name=payload.product_name,
@@ -93,7 +85,7 @@ async def create_item(payload: StockItemCreate, user_id: CurrentUserDep) -> Stoc
 async def update_item(
     item_id: int, payload: StockItemUpdate, user_id: CurrentUserDep
 ) -> StockItemQuantityResponse:
-    stock_id = await _resolver_stock_id(user_id)
+    stock_id = await user_service.exigir_stock_id(user_id)
     novo_id, quantidade = await asyncio.to_thread(
         estoque_repository.atualizar_quantidade,
         stock_id, user_id, item_id, None, payload.delta, payload.novo_valor,
@@ -107,7 +99,7 @@ async def update_item(
 async def delete_item(
     item_id: int, user_id: CurrentUserDep, reason: str = Query(default="Removido")
 ) -> StockItemDiscardResponse:
-    stock_id = await _resolver_stock_id(user_id)
+    stock_id = await user_service.exigir_stock_id(user_id)
     descarte = await asyncio.to_thread(
         estoque_repository.descartar, stock_id, user_id, item_id, None, reason
     )
@@ -132,11 +124,15 @@ async def analisar_foto(foto: UploadFile, user_id: CurrentUserDep) -> FotoAnalis
     verdade é o usuário, confirmando via `POST /stock/items`.
     """
 
-    conteudo = await foto.read()
+    if not (foto.content_type or "").startswith("image/"):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Envie uma imagem.")
+
+    # Lê no máximo 1 byte além do limite: arquivo grande não entra inteiro na RAM.
+    conteudo = await foto.read(_MAX_FOTO_BYTES + 1)
     if len(conteudo) > _MAX_FOTO_BYTES:
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Foto maior que 8MB.")
 
-    stock_id = await _resolver_stock_id(user_id)
+    stock_id = await user_service.exigir_stock_id(user_id)
     resposta = await chat_service.analisar_foto(user_id, stock_id, conteudo)
 
     return FotoAnaliseResponse(resposta=resposta)

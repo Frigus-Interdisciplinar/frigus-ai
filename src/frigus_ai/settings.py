@@ -33,9 +33,12 @@ class Settings(BaseSettings):
     QDRANT_URL: str
     QDRANT_API_KEY: SecretStr = SecretStr("")
     QDRANT_COLLECTION_NAME: str
-    QDRANT_CHATS_COLLECTION: str = "chats" 
+    QDRANT_CHATS_COLLECTION: str = "chats"
 
     PROMETHEUS_URL: str = ""
+    METRICS_TOKEN: SecretStr = SecretStr("")
+
+    API_RELOAD: bool = False
 
     model_config = {
         "env_file": ".env",

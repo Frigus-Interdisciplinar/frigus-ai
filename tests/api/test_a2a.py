@@ -34,7 +34,7 @@ def cliente(monkeypatch):
         return f"eco: {conteudo}"
 
     async def _obter_ou_criar_padrao():
-        return 1
+        return "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"
 
     async def _validar_ownership(session_id, user_id):
         """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
@@ -75,7 +75,7 @@ def test_message_send_responde_com_mensagem_do_agente(cliente):
     assert "error" not in corpo
 
     # contextId do A2A é o session_id do chat — é o que mantém a conversa
-    assert send_message.chamado_com == ("quanto gastei?", CHAT_ID, 1)
+    assert send_message.chamado_com == ("quanto gastei?", CHAT_ID, "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
 
 def test_sem_context_id_abre_sessao_nova_e_devolve_o_id(cliente):
