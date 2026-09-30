@@ -199,3 +199,15 @@ def test_stream_rejeita_chat_de_outro_dono(cliente, monkeypatch):
     resposta = cliente.post(f"/chats/{CHAT_ID}/messages/stream", json={"content": "oi"})
 
     assert resposta.status_code == 403
+
+
+def test_historico_repassa_limit_e_barra_fora_da_faixa(cliente, monkeypatch):
+    async def _get_history(session_id, user_id, limit):
+        _get_history.limit = limit
+        return []
+
+    monkeypatch.setattr(rotas.chat_service, "get_history", _get_history)
+
+    assert cliente.get(f"/chats/{CHAT_ID}/messages?limit=20").status_code == 200
+    assert _get_history.limit == 20
+    assert cliente.get(f"/chats/{CHAT_ID}/messages?limit=500").status_code == 422
