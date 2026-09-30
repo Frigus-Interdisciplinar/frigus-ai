@@ -8,6 +8,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from frigus_ai.api.auth import verify_signup_secret
+from frigus_ai.api.middleware import guard
 from frigus_ai.schemas.key import KeyCreate, KeyCreateResponse
 from frigus_ai.services.api_key_service import api_key_service
 from frigus_ai.services.user_service import user_service
@@ -20,6 +21,7 @@ router = APIRouter(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
+@guard.rate_limit(requests=5, window=3600)  # por IP: freia chute do signup secret
 async def create_key(payload: KeyCreate) -> KeyCreateResponse:
     user_id = await user_service.criar_usuario(payload.nome, payload.email)
     api_key = secrets.token_urlsafe(32)
