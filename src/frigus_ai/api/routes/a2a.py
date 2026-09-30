@@ -12,7 +12,7 @@ mesma conversa (mesmo `thread_id` no checkpointer). O `user_id` **não** vem do
 protocolo — vem da mesma auth por `X-API-Key` das rotas de chat.
 """
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from uuid import uuid4
 
 from fastapi import APIRouter
@@ -97,6 +97,11 @@ SKILLS = [
     ),
 ]
 
+try:
+    _app_version = version("frigus-ai")
+except PackageNotFoundError:
+    _app_version = "0.1.0"
+
 AGENT_CARD = AgentCard(
     protocol_version="0.3.0",
     name="Frigus.AI",
@@ -105,7 +110,7 @@ AGENT_CARD = AgentCard(
         "compras, receitas, desperdício e FAQ do app Frigus."
     ),
     url=f"{settings.A2A_BASE_URL}/a2a",
-    version=version("frigus-ai"),
+    version=_app_version,
     provider=AgentProvider(organization="Frigus", url=settings.A2A_BASE_URL),
     capabilities=AgentCapabilities(streaming=False, push_notifications=False),
     default_input_modes=["text/plain"],
