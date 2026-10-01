@@ -11,7 +11,7 @@ despensa, compras, receitas e finanças domésticas). Construído com LangChain 
 de Sistemas Multiagentes** — ver seção "Requisitos da disciplina" abaixo para o que precisa ser
 entregue e o que já está feito.
 
-`main.py` é um dispatcher fino (`python main.py <interface>`) — a lógica de montar estado, invocar o
+`main.py` (em `src/frigus_ai/`) é um dispatcher fino (`python -m frigus_ai.main <interface>`) — a lógica de montar estado, invocar o
 grafo e persistir histórico vive em `frigus_ai.services.chat_service`, compartilhada por todas as
 interfaces (`tui`, `api`, A2A e MCP). Detalhes de arquitetura, fluxo de agentes e tools estão no
 [README.md](README.md) — leia-o antes de mexer em `src/frigus_ai/graph/`.
@@ -38,16 +38,16 @@ coisa; a nota diz o que fazer primeiro.
 | A2A | ⚠️ Parcial | Superfície única e consolidada em `src/frigus_ai/api/routes/a2a.py` (contrato manual, com auth real por `X-API-Key`). A integração alternativa via `a2a-sdk` foi removida: o dispatcher da SDK sempre responde HTTP 200 e embute erro no corpo JSON-RPC, perdendo o 429/401 de transporte que o contrato manual já entrega |
 | RAG com fonte externa indicada | ✅ Feito | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `graph/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
-| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `privacy.py`, regex de ataque, classificador com cache no Redis) e saída |
-| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ⚠️ Parcial | `evals/sre_report.py` calcula a estimativa a partir do custo médio por turno observado; premissa de volume (`MENSAGENS_POR_USUARIO_SEMANA`) é placeholder até haver dado real de uso |
+| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `domain/privacy.py`, regex de ataque, classificador com cache no Redis) e saída |
+| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ⚠️ Parcial | `observability/evals/sre_report.py` calcula a estimativa a partir do custo médio por turno observado; premissa de volume (`MENSAGENS_POR_USUARIO_SEMANA`) é placeholder até haver dado real de uso |
 | Observabilidade/SRE — latência interagentes e tempo total de resposta | ✅ Feito | Prometheus mede HTTP, grafo, nodes, tools e LLM; LangSmith complementa os traces individuais |
-| Observabilidade/SRE — índice de erros | ⚠️ Parcial | `evals/sre_report.py` define fórmula (`error` / total de `frigus_graph_runs_total`) e relatório; falta rodar contra scrape real acumulado (não só o processo atual) |
-| Observabilidade/SRE — custo/ROI | ⚠️ Parcial | `evals/sre_report.py` calcula ROI, mas `VALOR_POR_RESOLUCAO_USD` é placeholder — falta valor de negócio real pra o número fazer sentido |
-| Observabilidade/SRE — custo por resolução | ⚠️ Parcial | `evals/sre_report.py` define resolução = `frigus_graph_runs_total{outcome="success"}` e calcula custo/resolução a partir da tabela de preços por modelo |
+| Observabilidade/SRE — índice de erros | ⚠️ Parcial | `observability/evals/sre_report.py` define fórmula (`error` / total de `frigus_graph_runs_total`) e relatório; falta rodar contra scrape real acumulado (não só o processo atual) |
+| Observabilidade/SRE — custo/ROI | ⚠️ Parcial | `observability/evals/sre_report.py` calcula ROI, mas `VALOR_POR_RESOLUCAO_USD` é placeholder — falta valor de negócio real pra o número fazer sentido |
+| Observabilidade/SRE — custo por resolução | ⚠️ Parcial | `observability/evals/sre_report.py` define resolução = `frigus_graph_runs_total{outcome="success"}` e calcula custo/resolução a partir da tabela de preços por modelo |
 | Desenho de arquitetura de alto nível | ✅ Feito | README.md — diagrama Mermaid + `assets/diagrama-agentes.png` |
 | Extra: Redis com fila ou ranking | ✅ Feito | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados por `ZINCRBY`/`ZREVRANGE`, alimentado em `discard_product` e exposto como tool (`ranking_desperdicio`, domínio financeiro) |
 | Extra: Neo4j | ⚠️ Parcial | `neomodel` (OGM) no `pyproject.toml`, conexão lazy em `infra/neo4j/connection.py`, models `User`/`Ingredient`/`Recipe` com relações (`PREFERS`/`DISLIKES`/`ALLERGIC_TO`/`REQUIRES`/`SIMILAR_TO`). Tools de preferências (`graph/tools/preferencias/`, CRUD + traversal `sugerir_receitas_compativeis`) agora expostas ao LLM dentro do toolset de receitas (`RECEITAS_TOOLS`) — antes existiam mas não estavam ligadas a nenhum node. `definir_preferencia` cria o node do usuário no grafo na primeira preferência (não há sync automático Postgres → Neo4j de usuário). Falta: sync automático de `products`/`recipes` do Postgres pro grafo (nunca existiu script pra isso, só seed manual em `infra/neo4j/cql/`) e mapear fatos (`user_fatos`, ver memória incremental) pras relações do grafo |
-| Extra: visão computacional (foto da geladeira) | ⚠️ Parcial | `POST /stock/foto` (`api/routes/stock.py`) + node `visao_node` (`graph/nodes/visao.py`, `with_structured_output` no Gemini Flash, bypassa o roteador via `imagem_b64` no estado). Só descreve o que reconheceu, em linguagem natural — não escreve no estoque; usuário confirma via `POST /stock/items` numa mensagem separada. Limite de 8MB no upload. Falta: `thread_id` da foto some depois de uso (checkpoint com a imagem em base64 fica órfão no Mongo pra sempre, ver nota abaixo) |
+| Extra: visão computacional (foto da geladeira) | ⚠️ Parcial | `POST /stock/foto` (`api/routes/v1/stock.py`) + node `visao_node` (`graph/nodes/visao.py`, `with_structured_output` no Gemini Flash, bypassa o roteador via `imagem_b64` no estado). Só descreve o que reconheceu, em linguagem natural — não escreve no estoque; usuário confirma via `POST /stock/items` numa mensagem separada. Limite de 8MB no upload. Falta: `thread_id` da foto some depois de uso (checkpoint com a imagem em base64 fica órfão no Mongo pra sempre, ver nota abaixo) |
 | Extra: complexidade do projeto | Em andamento | 6 domínios de negócio + guardrail duplo + juiz + RAG + integrações MCP/A2A + ranking Redis + Neo4j + visão já são acima da média |
 
 ### Checklist por matéria/entrega
@@ -58,14 +58,14 @@ coisa; a nota diz o que fazer primeiro.
 | API e integrações | FastAPI, health, chats, autenticação condicional, MCP e A2A manual (superfície única); ownership checado em `send_message`, `get_messages`, `/stream` e `DELETE /chats/{id}`; `GET /chats` tipado | Versionamento |
 | Persistência | PostgreSQL, MongoDB, Redis e Qdrant lazy; histórico, fatos estruturados e checkpoint; todos os domínios (`receitas`, `financeiro`, `estoque`, `compras`) em SQLAlchemy + `@transacional`; pool `psycopg2` removido | IDs seguros contra concorrência e validação real com Docker |
 | MCP | Tools em `src/frigus_ai/mcp.py`, contexto de usuário/estoque e testes MCP | Teste externo/ponta a ponta e documentação de cliente |
-| A2A | Contrato manual único em `api/routes/a2a.py`, com autenticação real por `X-API-Key` (`api/auth.py`); `a2a-sdk` removido do código (decisão registrada abaixo em "Estrutura") | Persistir sessão A2A além do `contextId` in-memory, se necessário |
-| Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, Prometheus e dashboard Grafana; `evals/sre_report.py` calcula custo, índice de erros, custo/resolução e ROI a partir dos contadores | Validar contra scrape real acumulado (não só um processo local) e substituir os placeholders (volume de mensagens/usuário, valor por resolução) por dado real |
-| Avaliação da disciplina | Métricas de runtime movidas pra `observability/`; `evals/` agora só tem `sre_report.py` (custo/erro/ROI) e o harness de cenários (`evals/scenarios.py` + `run_scenarios.py`) | Rodar o harness contra infra viva (Docker + API keys) e produzir o relatório final |
+| A2A | Contrato manual único em `api/routes/a2a.py`, com autenticação real por `X-API-Key` (`api/auth/dependencies.py`); `a2a-sdk` removido do código (decisão registrada abaixo em "Estrutura") | Persistir sessão A2A além do `contextId` in-memory, se necessário |
+| Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, Prometheus e dashboard Grafana; `observability/evals/sre_report.py` calcula custo, índice de erros, custo/resolução e ROI a partir dos contadores | Validar contra scrape real acumulado (não só um processo local) e substituir os placeholders (volume de mensagens/usuário, valor por resolução) por dado real |
+| Avaliação da disciplina | Métricas de runtime movidas pra `observability/`; `observability/evals/` agora só tem `sre_report.py` (custo/erro/ROI) e o harness de cenários (`observability/evals/scenarios.py` + `run_scenarios.py`) | Rodar o harness contra infra viva (Docker + API keys) e produzir o relatório final |
 | Extras | RAG, arquitetura documentados, ranking de desperdício em Redis (`infra/redis/ranking.py`), Neo4j conectado (models + tools de preferências + traversal `sugerir_receitas_compativeis`) e visão computacional (`POST /stock/foto`, `graph/nodes/visao.py`) | Sync automático Postgres → Neo4j (produtos/receitas); limpar `imagem_b64` do checkpoint da thread de foto |
 
 **Importante:** a escola não paga API de IA generativa — por isso o projeto já usa só providers com
 tier gratuito viável (Gemini, Groq) e Claude/Anthropic como opcional (`ANTHROPIC_API_KEY` tem
-default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
+default vazio em `src/frigus_ai/settings/`, então o projeto roda sem ela).
 
 ## Stack
 
@@ -73,7 +73,7 @@ default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
 - LangChain 1.2 / LangGraph 1.1 para orquestração de agentes
 - LLMs: Gemini (`gemini-3.6-flash`), Groq (`openai/gpt-oss-120b`), Claude
   (`claude-haiku-4-5`, `claude-sonnet-4-6`) e OpenRouter (`qwen/qwen3.8-27b:free`) mapeados em
-  `src/frigus_ai/models.py`. Provider sem API key configurada faz `build_llm` devolver `None` e fica
+  `src/frigus_ai/settings/llm.py` (enum `Model`) e `infra/llm/` (providers/builders). Provider sem API key configurada faz `build_llm` devolver `None` e fica
   fora da cadeia de fallback — só Gemini e Groq são obrigatórios
 - PostgreSQL (via Docker) para estoque/compras/receitas/financeiro, acessado via SQLAlchemy
   (`infra/postgres/connection.py`, `@transacional`; banco real no Supabase, schema
@@ -85,7 +85,7 @@ default vazio em `src/frigus_ai/settings.py`, então o projeto roda sem ela).
 - Qdrant para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf` (`graph/tools/faq/`)
 - Redis para rate limit de chat e ranking de desperdício (`src/frigus_ai/infra/redis/`)
 - Prometheus/LangSmith para observabilidade operacional; avaliações offline e relatórios da
-  disciplina devem ficar em `evals/`, separados do runtime
+  disciplina devem ficar em `observability/evals/`, separados do runtime
 - `pytest` (`tests/`, espelhando a estrutura do pacote) + `ruff` (lint) + CI no GitHub Actions
   (`.github/workflows/ci.yml`)
 
@@ -105,20 +105,23 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 │   ├── guardrail/       subsistema próprio: entrada/saida (nós), padroes, schemas, cache
 │   └── tools/           tools do LLM por domínio: estoque, compras, receitas, financeiro, faq,
 │                         spoonacular — cada uma com schemas.py + repo.py
+├── domain/              modelos de domínio (models.py: Role/ChatMessage/Fatos/Resumo), tipos de ID e novo_chat_id
 ├── repositories/        persistência: Postgres via SQLAlchemy (@transacional) e Mongo
-├── services/            casos de uso (chat_service, user_service, api_key_service, runner)
+├── services/            casos de uso (chat_service, user_service, auth_service, runner); stock/shopping/recipe_service atrás das rotas v1
 ├── infra/               conexões lazy: postgres (pool + engine + models), mongo, redis, qdrant,
 │                         neo4j, spoonacular
-├── api/                 app.py, routes, schemas, auth, middleware e handlers da API FastAPI
-├── observability/       métricas Prometheus de runtime (metrics.py, metrics_callback.py)
-├── evals/               avaliação offline: sre_report.py (custo/erro/ROI) e o harness de cenários
-├── privacy.py           PII: anonimizar/desanonimizar/redigir. Neutro — guardrail, repository e
+├── api/                 app.py (create_app), deps.py (Depends), routes/{v1,auth,health,metrics,a2a}, auth/, mcp.py, middleware/{request_id,metrics,security}, errors/ (handlers + ErrorResponse)
+├── (infra/logging/)     setup.py (logger colorido + request_id) e decorators.py (log_tool/log_classe); `Logging` é a fachada
+├── observability/       métricas Prometheus de runtime (metrics.py, metrics_callback.py) e evals/ (avaliação
+│                         offline: sre_report.py custo/erro/ROI e o harness de cenários)
+├── (domain/privacy.py)  PII: anonimizar/desanonimizar/redigir. Neutro — guardrail, repository e
 │                         service usam; por isso não mora dentro do guardrail
+├── main.py              dispatcher fino — `python -m frigus_ai.main <interface>` (`tui` [default] ou `api`)
 └── tui/                 app.py (Textual) + display.py + app.tcss — interface interativa
 
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (espelho do DDL do Supabase)
 prometheus/ grafana/    scrape config, datasource e dashboard (8 painéis)
-main.py                 dispatcher fino — `python main.py <interface>` (`tui` [default] ou `api`)
+
 ```
 
 Padrão de cada domínio de tool: `schemas.py` (Pydantic) + `repo.py` (as tools em si), com
@@ -128,9 +131,9 @@ qualquer tool nova (redis, qdrant, etc).
 Nenhuma interface (`api/`, `tui/`) deve chamar `frigus_ai.graph.builder` ou `frigus_ai.infra.*`
 diretamente — sempre via `frigus_ai.services.chat_service`. É esse limite que permite API/TUI
 existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir histórico.
-`src/frigus_ai/api/routes/chats.py` segue essa regra. Identidade real já não depende de
+`src/frigus_ai/api/routes/v1/chats.py` segue essa regra. Identidade real já não depende de
 `DEMO_USER_ID` fixo — `api/auth.py:resolver_usuario` resolve por `X-API-Key` ou cria/reaproveita o
-usuário local único quando `API_KEY_AUTH_ENABLED=false` (modo local/demo).
+usuário local único quando `API__KEY_AUTH_ENABLED=false` (modo local/demo).
 
 `interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa agora.
 `src/frigus_ai/mcp.py` existe; o A2A vive só em `api/routes/a2a.py` (ver docstring do arquivo).
@@ -144,7 +147,7 @@ O MCP e o A2A ainda devem ser tratados como integrações parcialmente concluíd
 contratos externos, autenticação e testes de ponta a ponta estejam fechados.
 
 `src/frigus_ai/observability/metrics.py` e `metrics_callback.py` são observabilidade de runtime
-(Prometheus, importados por todos os nós do grafo) — não devem morar em `evals/`. A pasta `evals/`
+(Prometheus, importados por todos os nós do grafo) — não devem morar em `observability/evals/`. A subpasta `observability/evals/`
 contém só avaliação offline: `sre_report.py` (custo/erro/ROI, lê os contadores do `observability/`
 via HTTP do Prometheus) e o harness de cenários (datasets, execução de casos, agregação e
 relatórios de custo, erro, latência, ROI e custo por resolução). Não misturar prompts/respostas
@@ -186,7 +189,7 @@ reais com métricas Prometheus nem commitar segredos.
   **português**; nomes de classes/tipos de infraestrutura (`Settings`, `Model`, `Route`) em inglês.
   Siga o idioma já usado no arquivo que você está editando.
 - Enums de domínio usam `StrEnum` (ver `graph/guardrail/schemas.py:Categoria`,
-  `schemas/models.py:Role`). **Exceção:** `graph/state.py:Route` e `graph/names.py:NodeLiteral` são
+  `domain/models.py:Role`). **Exceção:** `graph/state.py:Route` e `graph/names.py:NodeLiteral` são
   `Literal` + classe de constantes (não `StrEnum`) — valores guardados em `Estado` (checkpointado
   pelo `MongoDBSaver`) precisam ser `str` puro pro msgpack, sem allowlist extra
   (`LANGGRAPH_ALLOWED_MSGPACK_MODULES` foi removido de `graph/builder.py` por causa disso).
@@ -228,9 +231,9 @@ reais com métricas Prometheus nem commitar segredos.
   lógica de roteamento do grafo, e vice-versa.
 - **Contrato de retorno único.** Tools não retornam dict cru nem deixam exception vazar para o
   agente — usam `Response` (`graph/tools/response.py`). Ao criar tool nova, reusar essa classe.
-- **Config centralizada.** Uma única fonte de env vars (`src/frigus_ai/settings.py`,
+- **Config centralizada.** Uma única fonte de env vars (`src/frigus_ai/settings/`,
   `pydantic-settings`) e um único enum fechado de modelos/providers
-  (`src/frigus_ai/models.py:Model`/`PROVIDER_MAP`). Não ler `os.environ` direto em outros módulos.
+  (`settings/llm.py:Model` e `infra/llm/registry.py:PROVIDER_MAP`). Não ler `os.environ` direto em outros módulos.
 - **Ciclo de retentativa do Juiz é explícito no grafo**, não escondido em loop Python — ver
   `decidir_apos_juiz` em `graph/builder.py`. Qualquer novo especialista que produza resposta ao
   usuário deve passar pelo Juiz antes do Guardrail de Saída, seguindo esse mesmo padrão de edge
@@ -247,13 +250,13 @@ just check           # lint (roda no CI em push/PR pra main); `just fix` aplica 
 ```
 
 `just run` chama o console script `frigus-ai` (`[project.scripts]`), que é o mesmo
-`python main.py tui`. Ver `justfile` para as demais receitas.
+`python -m frigus_ai.main tui`. Ver `justfile` para as demais receitas.
 
 ## Ao adicionar uma tool nova
 
 1. Criar `graph/tools/<domínio>/schemas.py` com os modelos Pydantic de entrada/saída.
 2. Criar `graph/tools/<domínio>/repo.py` com as funções decoradas como tool (ver
-   `logging.py:Logging.log_tool`).
+   `infra/logging/decorators.py:log_tool`, via `Logging.log_tool`).
 3. Se for um serviço externo com estado de conexão, criar `connection.py` com init lazy.
 4. Se a tool precisa ser escopada por usuário/estoque, usar o `ContextVar` de
    `infra/postgres/context.py` — nunca adicionar `user_id`/`stock_id` ao schema da tool.

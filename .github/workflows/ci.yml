@@ -10,9 +10,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      LANGSMITH_TRACING: "false"
-      LANGSMITH_API_KEY: dummy
-      LANGSMITH_PROJECT: frigus-ai
+      OBSERVABILITY__LANGSMITH_TRACING: "false"
+      OBSERVABILITY__LANGSMITH_API_KEY: dummy
+      OBSERVABILITY__LANGSMITH_PROJECT: frigus-ai
 
     steps:
       - uses: actions/checkout@v7
