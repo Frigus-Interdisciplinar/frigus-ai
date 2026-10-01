@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from frigus_ai.exceptions import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
+from frigus_ai.domain.errors import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
 from frigus_ai.infra.postgres.models import Discard, StockMovement, StockProduct
 from frigus_ai.repositories.estoque_repository import _EstoquePostgresRepo
 

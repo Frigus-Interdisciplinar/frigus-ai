@@ -12,8 +12,8 @@ from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client import AsyncQdrantClient, models
 
-from frigus_ai.infra.qdrant.connection import get_async_qdrant_client, get_embeddings
-from frigus_ai.privacy import redigir_pii
+from frigus_ai.domain.privacy import redigir_pii
+from frigus_ai.infra.qdrant import get_async_qdrant_client, get_embeddings
 from frigus_ai.settings import settings
 
 _LIMITE = 3
@@ -29,7 +29,7 @@ class ChatEmbeddingsRepository:
         return get_async_qdrant_client()
 
     def _nome(self) -> str:
-        return settings.QDRANT_CHATS_COLLECTION
+        return settings.database.qdrant_chats_collection
 
     async def _existe(self) -> bool:
         return await self._client().collection_exists(self._nome())

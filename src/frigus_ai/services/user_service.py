@@ -4,10 +4,10 @@ fica em `repositories/identidade_repository.py`."""
 import asyncio
 from uuid import uuid4
 
-from frigus_ai.exceptions import EstoqueAtualNaoDefinido
-from frigus_ai.logging import Logging
+from frigus_ai.domain.errors import EstoqueAtualNaoDefinido
+from frigus_ai.domain.models import Fatos
+from frigus_ai.infra.logging import Logging
 from frigus_ai.repositories import fatos_repository, identidade_repository
-from frigus_ai.schemas.models import Fatos
 
 logger = Logging.get_logger(__name__)
 
@@ -31,7 +31,7 @@ class UserService:
     async def obter_ou_criar_padrao(self) -> str:
         """
         Reaproveita o primeiro usuário existente no Postgres, ou cria um novo. Bootstrap
-        usado pela TUI e pela API quando `API_KEY_AUTH_ENABLED=false` (sem tela de
+        usado pela TUI e pela API quando `API__KEY_AUTH_ENABLED=false` (sem tela de
         login) — substitui o antigo `DEMO_USER_ID` fixo, que assumia que o id 1 sempre
         existia no banco.
         """

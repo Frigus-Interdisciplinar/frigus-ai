@@ -6,18 +6,18 @@ from base64 import b64encode
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
-from frigus_ai.exceptions import ChatDeOutroUsuario, LimiteDeMensagensExcedido
+from frigus_ai.domain.errors import ChatDeOutroUsuario, LimiteDeMensagensExcedido
+from frigus_ai.domain.identifiers import novo_chat_id
+from frigus_ai.domain.models import ChatMessage, Fatos, Resumo, Role
 from frigus_ai.graph.llm import llm_rapido
 from frigus_ai.graph.prompts import load_prompt
+from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.redis.rate_limit import can_send_message
-from frigus_ai.logging import Logging
 from frigus_ai.repositories import chat_embeddings_repository, chat_repository
 from frigus_ai.repositories.chat_repository import ChatDocument
 from frigus_ai.schemas.execution import AnswerReady, ExecutionEvent, RunFailed
-from frigus_ai.schemas.models import ChatMessage, Fatos, Resumo, Role
 from frigus_ai.services import runner
 from frigus_ai.services.user_service import user_service
-from frigus_ai.types import novo_chat_id
 
 logger = Logging.get_logger(__name__)
 

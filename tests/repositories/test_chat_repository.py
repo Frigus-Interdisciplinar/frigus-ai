@@ -9,8 +9,8 @@ sem o par buscar/criar que duplicava sessão sob concorrência.
 import pytest
 
 import frigus_ai.repositories.chat_repository as chat_repo
+from frigus_ai.domain.models import Role
 from frigus_ai.repositories.chat_repository import Mensagem
-from frigus_ai.schemas.models import Role
 
 
 class _FakeCollection:

@@ -34,7 +34,7 @@ def client(monkeypatch):
 
 
 async def _total(client):
-    return (await client.count(settings.QDRANT_CHATS_COLLECTION)).count
+    return (await client.count(settings.database.qdrant_chats_collection)).count
 
 
 def test_id_do_ponto_e_deterministico_por_chat():
@@ -82,5 +82,5 @@ async def test_sem_collection_busca_e_remocao_nao_falham(client):
 async def test_pii_nao_vai_pro_indice(client):
     await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "leite; CPF 123.456.789-01")
 
-    [ponto] = (await client.scroll(settings.QDRANT_CHATS_COLLECTION))[0]
+    [ponto] = (await client.scroll(settings.database.qdrant_chats_collection))[0]
     assert "123.456.789-01" not in ponto.payload["resumo"]

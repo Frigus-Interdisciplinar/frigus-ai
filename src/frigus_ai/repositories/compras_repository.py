@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from frigus_ai.exceptions import ItemDeCompraNaoEncontrado, ProdutoNaoCadastrado
+from frigus_ai.domain.errors import ItemDeCompraNaoEncontrado, ProdutoNaoCadastrado
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
 from frigus_ai.infra.postgres.models import (
     Product,

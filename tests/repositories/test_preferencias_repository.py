@@ -10,7 +10,7 @@ Fakes são todos `async def`: o repository real usa `AsyncStructuredNode`/`adb`
 
 import pytest
 
-from frigus_ai.exceptions import IngredienteNaoEncontrado
+from frigus_ai.domain.errors import IngredienteNaoEncontrado
 from frigus_ai.infra.neo4j.models.ingredient import Ingredient
 from frigus_ai.infra.neo4j.models.user import User
 from frigus_ai.repositories import preferencias_repository as repo_module
@@ -169,7 +169,7 @@ async def test_receitas_sem_restricoes_monta_dicts_do_resultado_cru(monkeypatch)
         assert params == {"user_id": "user-1", "limit": 5}
         return [["recipe-1", "Frango com tomate", 30, "facil"]], None
 
-    monkeypatch.setattr(repo_module.adb, "cypher_query", _cypher_query)
+    monkeypatch.setattr(repo_module.neo4j.client, "cypher_query", _cypher_query)
 
     resultado = await _PreferenciasNeo4jRepo().receitas_sem_restricoes("user-1", 5)
 

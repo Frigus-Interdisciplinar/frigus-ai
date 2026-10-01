@@ -9,10 +9,11 @@ sempre com "Sem resposta".
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from frigus_ai.graph.agents import conversas_anteriores
+from frigus_ai.domain.models import Fatos
 from frigus_ai.repositories import chat_embeddings_repository
 from frigus_ai.schemas.execution import AnswerReady, NodeStarted, RunFinished
 from frigus_ai.services import runner
+from frigus_ai.services.user_service import user_service
 
 
 @pytest.fixture(autouse=True)
@@ -25,13 +26,38 @@ def _sem_qdrant(monkeypatch):
     monkeypatch.setattr(chat_embeddings_repository, "buscar_resumos_relevantes", _buscar)
 
 
-async def test_conversas_anteriores_ficam_disponiveis_pro_prompt():
-    await runner._carregar_conversas_anteriores("e o leite?", "chat-1", 7, imagem_b64=None)
-    assert conversas_anteriores.get() == ("comprou leite semana passada",)
+async def test_contexto_traz_fatos_e_conversas_anteriores(monkeypatch):
+    async def _buscar_fatos(user_id):
+        return Fatos(alergias=["lactose"])
 
-    # Turno com foto não busca — e não herda o valor do turno anterior.
-    await runner._carregar_conversas_anteriores("foto", "chat-1", 7, imagem_b64="abc")
-    assert conversas_anteriores.get() == ()
+    monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
+
+    fatos, conversas = await runner._carregar_contexto("e o leite?", "chat-1", "u1", imagem_b64=None)
+    assert fatos == Fatos(alergias=["lactose"])
+    assert conversas == ["comprou leite semana passada"]
+
+    # Turno com foto não busca conversas.
+    _, conversas = await runner._carregar_contexto("foto", "chat-1", "u1", imagem_b64="abc")
+    assert conversas == []
+
+
+async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
+    async def _quebra(user_id):
+        raise RuntimeError("postgres fora")
+
+    monkeypatch.setattr(user_service, "buscar_fatos", _quebra)
+
+    fatos, conversas = await runner._carregar_contexto("oi", "chat-1", "u1", imagem_b64=None)
+
+    assert fatos is None
+    assert conversas == ["comprou leite semana passada"]
+
+
+def test_estado_inicial_leva_fatos_como_dict_e_conversas_como_lista():
+    estado = runner._estado_inicial("oi", 1, fatos=Fatos(alergias=["lactose"]), conversas=("a",))
+
+    assert estado["fatos"]["alergias"] == ["lactose"]
+    assert estado["conversas_anteriores"] == ["a"]
 
 
 class _FakeGrafo:

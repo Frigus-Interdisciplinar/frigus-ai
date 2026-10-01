@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from frigus_ai.exceptions import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
+from frigus_ai.domain.errors import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
 from frigus_ai.infra.postgres.models import (
     AJUSTE,

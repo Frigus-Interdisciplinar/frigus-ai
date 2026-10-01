@@ -9,8 +9,8 @@ curto demais não gasta LLM, e só resumo `relevante` vira embedding. Tudo mocka
 
 import pytest
 
+from frigus_ai.domain.models import Fatos, Resumo
 from frigus_ai.repositories import chat_embeddings_repository, chat_repository
-from frigus_ai.schemas.models import Fatos, Resumo
 from frigus_ai.services import chat_service as chat_service_module
 from frigus_ai.services import runner
 from frigus_ai.services.chat_service import service as chat_service

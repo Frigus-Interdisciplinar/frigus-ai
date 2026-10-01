@@ -2,8 +2,8 @@
 Persistência crua (Postgres/Mongo) já tem teste próprio em
 tests/repositories/test_identidade_repository.py — aqui importa a decisão, não o banco."""
 
+from frigus_ai.domain.models import Fatos
 from frigus_ai.repositories import fatos_repository, identidade_repository
-from frigus_ai.schemas.models import Fatos
 from frigus_ai.services.user_service import user_service
 
 

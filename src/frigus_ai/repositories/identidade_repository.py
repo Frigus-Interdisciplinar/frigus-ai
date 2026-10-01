@@ -16,7 +16,7 @@ class _IdentidadeRepo(PostgresRepo):
         """
         Cria usuário + grupo + estoque + vínculo (bootstrap completo). `hash_password`
         é NOT NULL no schema e não há login por senha aqui — a credencial é a API key,
-        guardada só como hash no Redis (ver `services/api_key_service.py`).
+        guardada só como hash no Redis (ver `services/auth_service.py`).
         """
 
         if existente := s.scalar(select(User.id).where(User.email == email)):
