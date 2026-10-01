@@ -1,4 +1,7 @@
 import hashlib
+import hmac
+
+from frigus_ai.settings import settings
 
 API_KEY_TTL_TIME = 3600 * 24 * 30
 CHAT_TTL_TIME = 60
@@ -23,6 +26,11 @@ def chave_guardrail(digest: str) -> str:
 
 def _hash_api_key(api_key: str) -> str:
     """Só o hash vai pro Redis — a key em claro existe uma vez, na resposta do POST /keys."""
+
+    segredo = settings.api_keys.hash_secret.get_secret_value()
+    if segredo:
+        # HMAC: um vazamento do Redis sozinho não permite checar chaves candidatas offline.
+        return hmac.new(segredo.encode(), api_key.encode(), hashlib.sha256).hexdigest()
 
     return hashlib.sha256(api_key.encode()).hexdigest()
 

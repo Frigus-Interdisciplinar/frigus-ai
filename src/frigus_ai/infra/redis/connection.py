@@ -21,7 +21,7 @@ class RedisConn(Connector[Redis]):
             # Redis aqui só serve cache e rate limit, nada que justifique segurar o
             # request: melhor falhar rápido e seguir sem cache.
             self._client = Redis.from_url(
-                settings.REDIS_URL,
+                settings.database.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=3.0,
                 socket_timeout=3.0,

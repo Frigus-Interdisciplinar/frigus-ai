@@ -13,7 +13,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from frigus_ai.exceptions import AssessorIndisponivel
+from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.infra.assessor import client as assessor
 
 _AsyncClientReal = httpx.AsyncClient
@@ -23,8 +23,8 @@ _AsyncClientReal = httpx.AsyncClient
 def servidor(monkeypatch):
     """Configura o Assessor e troca o transporte do httpx por um handler controlado."""
 
-    monkeypatch.setattr(assessor.settings, "ASSESSOR_A2A_URL", "http://assessor")
-    monkeypatch.setattr(assessor.settings, "ASSESSOR_API_KEY", SecretStr("chave-frigus"))
+    monkeypatch.setattr(assessor.settings.api, "assessor_a2a_url", "http://assessor")
+    monkeypatch.setattr(assessor.settings.api_keys, "assessor_api_key", SecretStr("chave-frigus"))
 
     estado = {"resposta": httpx.Response(200, json={}), "requisicoes": []}
 
@@ -104,7 +104,7 @@ async def test_falha_vira_assessor_indisponivel(servidor, resposta):
 
 
 async def test_sem_url_configurada_nem_tenta(monkeypatch):
-    monkeypatch.setattr(assessor.settings, "ASSESSOR_A2A_URL", "")
+    monkeypatch.setattr(assessor.settings.api, "assessor_a2a_url", "")
 
     with pytest.raises(AssessorIndisponivel):
         await assessor.perguntar("saldo?", "chat-1")

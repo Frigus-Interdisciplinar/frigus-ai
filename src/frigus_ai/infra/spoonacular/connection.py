@@ -25,7 +25,7 @@ class SpoonacularConnector(Connector[httpx.AsyncClient]):
         if self._client is None:
             self._client = httpx.AsyncClient(
                 base_url=self._BASE_URL,
-                params={"apiKey": settings.SPOONACULAR_API_KEY.get_secret_value()},
+                params={"apiKey": settings.api_keys.spoonacular_api_key.get_secret_value()},
             )
 
         return self._client

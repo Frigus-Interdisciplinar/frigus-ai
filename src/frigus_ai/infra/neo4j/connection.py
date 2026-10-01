@@ -11,7 +11,7 @@ class Neo4jConn(Connector[AsyncDatabase]):
 
     def connect(self) -> AsyncDatabase:
         if not self._connected:
-            config.DATABASE_URL = settings.NEO4J_URI
+            config.DATABASE_URL = settings.database.neo4j_uri
             self._connected = True
         return adb
 
