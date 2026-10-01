@@ -1,7 +1,10 @@
 import os
+from typing import Literal, Self
 
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
+
+Environment = Literal["local", "test", "staging", "production"]
 
 
 class Settings(BaseSettings):
@@ -21,6 +24,8 @@ class Settings(BaseSettings):
     SPOONACULAR_API_KEY: SecretStr = SecretStr("")
 
     REDIS_URL: str
+
+    ENVIRONMENT: Environment = "local"
 
     API_KEY_AUTH_ENABLED: bool
     SIGNUP_SECRET: str = ""
@@ -46,6 +51,12 @@ class Settings(BaseSettings):
         "case_sensitive": False,
         "extra": "ignore",
     }
+
+    @model_validator(mode="after")
+    def _exigir_auth_em_producao(self) -> Self:
+        if self.ENVIRONMENT == "production" and not self.API_KEY_AUTH_ENABLED:
+            raise ValueError("API_KEY_AUTH_ENABLED precisa ser true quando ENVIRONMENT=production")
+        return self
 
 
 settings = Settings()  # type: ignore[call-arg,misc]
