@@ -4,7 +4,7 @@ from typing import Literal, Self
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
-Environment = Literal["local", "test", "staging", "production"]
+Environment = Literal["local", "production"]
 
 
 class Settings(BaseSettings):
