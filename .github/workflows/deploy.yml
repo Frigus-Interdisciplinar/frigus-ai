@@ -1,0 +1,72 @@
+name: Deploy
+
+# Roda só depois do CI passar na main (ou manualmente). Fluxo: Infisical (fonte das envs de
+# produção) → envs do app no FastAPI Cloud → deploy.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
+      FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          version: "0.11.16"
+
+      - name: Instalar dependências
+        run: uv sync --locked
+
+      - name: Baixar envs de produção do Infisical
+        uses: Infisical/secrets-action@v1.0.9
+        with:
+          method: universal
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          project-slug: frigus-ai-jf4-s
+          env-slug: prod
+          secret-path: /
+          export-type: file
+          file-output-path: /.env.infisical
+
+      - name: Sincronizar envs com o FastAPI Cloud
+        run: |
+          sudo chown "$USER" /.env.infisical
+          uv run python - <<'EOF'
+          import subprocess
+          from dotenv import dotenv_values
+
+          for nome, valor in dotenv_values("/.env.infisical").items():
+              if not valor:
+                  print(f"pulando {nome} (vazia)")
+                  continue
+              subprocess.run(
+                  ["uv", "run", "fastapi", "cloud", "env", "set", nome, "--value-stdin", "--secret", "--no-redeploy"],
+                  input=valor, text=True, check=True, stdout=subprocess.DEVNULL,
+              )
+              print(f"ok {nome}")
+          EOF
+
+      - name: Deploy
+        run: uv run fastapi deploy
+
+      - name: Limpar arquivo de envs
+        if: always()
+        run: sudo rm -f /.env.infisical

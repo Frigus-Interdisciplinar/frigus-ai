@@ -36,7 +36,7 @@ dependencies = [
     "redis>=8.1.0",
     "qdrant-client>=1.19.0",
     "textual>=8.2.8",
-    "fastapi>=0.141.1",
+    "fastapi[standard]>=0.141.1",
     "uvicorn>=0.52.4",
     "langchain-openai>=1.6.0",
     "mcp>=2.1.1",
@@ -74,3 +74,6 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "ruff>=0.16.2",
 ]
+
+[tool.fastapi]
+entrypoint = "frigus_ai.api.app:app"
