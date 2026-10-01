@@ -4,11 +4,11 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from frigus_ai.infra.mongo.connection import mongo
+from frigus_ai.infra.logging import Logging
+from frigus_ai.infra.mongo import mongo
 from frigus_ai.infra.postgres.connection import postgres
-from frigus_ai.infra.qdrant.connection import get_qdrant_client
+from frigus_ai.infra.qdrant import get_qdrant_client
 from frigus_ai.infra.redis.connection import get_client
-from frigus_ai.logging import Logging
 from frigus_ai.schemas.health import HealthCheckResponse
 
 router = APIRouter(prefix="/health", tags=["health"])

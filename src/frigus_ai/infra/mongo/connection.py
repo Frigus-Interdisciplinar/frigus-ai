@@ -13,7 +13,7 @@ class MongoConn(Connector[MongoClient[dict[str, Any]]]):
 
     def connect(self) -> MongoClient[dict[str, Any]]:
         if self._client is None:
-            self._client = MongoClient(settings.MONGODB_URI)
+            self._client = MongoClient(settings.database.mongodb_uri)
         return self._client
 
     @property

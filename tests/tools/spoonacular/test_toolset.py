@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from frigus_ai.graph.tools.spoonacular import toolset as core
 
@@ -10,7 +11,7 @@ get_recipe_information = _tools[1]
 
 @pytest.fixture(autouse=True)
 def _isola(monkeypatch):
-    monkeypatch.setattr(core.settings, "SPOONACULAR_API_KEY", "test-key")
+    monkeypatch.setattr(core.settings.api_keys, "spoonacular_api_key", SecretStr("test-key"))
     core._get.cache_clear()
     yield
     core._get.cache_clear()
@@ -126,7 +127,7 @@ def test_cache_evita_segunda_chamada(monkeypatch):
 
 def test_sem_api_key_nao_chama_a_api(monkeypatch):
     fake = _fake(monkeypatch, [])
-    monkeypatch.setattr(core.settings, "SPOONACULAR_API_KEY", "")
+    monkeypatch.setattr(core.settings.api_keys, "spoonacular_api_key", SecretStr(""))
 
     r = find_recipes_by_ingredients.invoke({"ingredients": ["ovo"]})
 

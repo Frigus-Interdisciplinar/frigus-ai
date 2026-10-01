@@ -1,10 +1,10 @@
+from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.redis.connection import get_client
 from frigus_ai.infra.redis.keys import (
     CHAT_TTL_TIME,
     N_MESSAGES_ACCEPTED,
     _chave_mensagem,
 )
-from frigus_ai.logging import Logging
 
 logger = Logging.get_logger("redis_chat")
 

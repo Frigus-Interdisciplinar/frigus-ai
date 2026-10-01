@@ -4,13 +4,15 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from frigus_ai.graph.agents import router_app
 from frigus_ai.graph.names import ROTEADOR
+from frigus_ai.graph.nodes.contexto import contexto_do_estado
 from frigus_ai.graph.state import (
+    ContextoPrompt,
     Estado,
     Roteamento,
     Route,
     RouterUpdate,
 )
-from frigus_ai.logging import Logging
+from frigus_ai.infra.logging import Logging
 from frigus_ai.observability.metrics import ROUTER_DECISIONS, medir_node
 
 log = Logging.get_logger(__name__)
@@ -21,12 +23,12 @@ _NAO_ENTENDI = (
 )
 
 
-async def _rotear(mensagens: Sequence[AnyMessage]) -> Roteamento:
+async def _rotear(mensagens: Sequence[AnyMessage], contexto: ContextoPrompt) -> Roteamento:
     """Falha de chamada ou saída fora do schema vira `fim` com resposta genérica — o turno
     nunca cai por causa do roteador."""
 
     try:
-        saida = await router_app.ainvoke({"messages": list(mensagens)})
+        saida = await router_app.ainvoke({"messages": list(mensagens)}, context=contexto)
         roteamento = saida["structured_response"]
     except Exception as e:
         log.warning("Roteador falhou, respondendo sem especialista: %s", e)
@@ -50,7 +52,7 @@ def _ultima_pergunta(mensagens: Sequence[AnyMessage]) -> str:
 @medir_node(ROTEADOR)
 async def no_roteador(estado: Estado) -> RouterUpdate:
 
-    roteamento = await _rotear(estado["messages"])
+    roteamento = await _rotear(estado["messages"], contexto_do_estado(estado))
     pergunta   = _ultima_pergunta(estado["messages"])
 
     log.debug("Rota escolhida: %s | pergunta: '%s'", roteamento.rota, pergunta)

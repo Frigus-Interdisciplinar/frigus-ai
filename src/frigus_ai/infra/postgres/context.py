@@ -10,7 +10,7 @@ adivinhar ou inventar IDs de estoque.
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from frigus_ai.exceptions import EstoqueAtualNaoDefinido, UsuarioDaSessaoNaoDefinido
+from frigus_ai.domain.errors import EstoqueAtualNaoDefinido, UsuarioDaSessaoNaoDefinido
 
 _current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 _current_stock_id: ContextVar[int | None] = ContextVar("current_stock_id", default=None)

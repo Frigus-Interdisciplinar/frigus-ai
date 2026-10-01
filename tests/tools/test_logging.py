@@ -3,7 +3,7 @@ Regressão de vazamento em log: `log_tool` logava args e result inteiros das too
 ou seja, alimentos, gastos e nomes do usuário em texto puro no log local.
 """
 
-from frigus_ai.logging import Logging
+from frigus_ai.infra.logging import Logging
 
 
 @Logging.log_tool

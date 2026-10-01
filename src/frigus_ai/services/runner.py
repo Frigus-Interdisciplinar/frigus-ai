@@ -6,12 +6,12 @@ from typing import cast, get_args
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from frigus_ai.graph.agents import conversas_anteriores
+from frigus_ai.domain.models import Fatos
 from frigus_ai.graph.builder import fluxo_agentes
 from frigus_ai.graph.names import NodeLiteral
 from frigus_ai.graph.state import EntradaGrafo, RouteLiteral
+from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import session_context
-from frigus_ai.logging import Logging
 from frigus_ai.observability.metrics import GRAPH_DURATION, GRAPH_RUNS
 from frigus_ai.observability.metrics_callback import PrometheusCallbackHandler
 from frigus_ai.repositories import chat_embeddings_repository
@@ -25,6 +25,7 @@ from frigus_ai.schemas.execution import (
     RunFinished,
     RunStarted,
 )
+from frigus_ai.services.user_service import user_service
 
 logger = Logging.get_logger(__name__)
 
@@ -51,7 +52,11 @@ def _extrair_resposta(estado: Mapping[str, object]) -> str | None:
 
 
 def _estado_inicial(
-    conteudo: str, stock_id: int | None, imagem_b64: str | None = None
+    conteudo: str,
+    stock_id: int | None,
+    imagem_b64: str | None = None,
+    fatos: Fatos | None = None,
+    conversas: Sequence[str] = (),
 ) -> EntradaGrafo:
     """
     Só os campos de `EntradaGrafo`: o resto do `Estado` é interno do grafo. `agentes_chamados`
@@ -66,18 +71,28 @@ def _estado_inicial(
     )
     if imagem_b64:
         entrada["imagem_b64"] = imagem_b64
+    if fatos is not None:
+        entrada["fatos"] = fatos.model_dump()
+    if conversas:
+        entrada["conversas_anteriores"] = list(conversas)
 
     return entrada
 
 
-async def _carregar_conversas_anteriores(
+async def _carregar_contexto(
     conteudo: str, session_id: str, user_id: str, imagem_b64: str | None
-) -> None:
+) -> tuple[Fatos | None, list[str]]:
     """
-    Memória de longo prazo é opcional: Qdrant/embedding fora do ar não pode derrubar o
-    turno. Sempre seta (vazio inclusive) — o ContextVar não é resetado no fim, então é
-    isso que impede o valor de um turno vazar pro próximo na mesma task (MCP/TUI).
+    Fatos do usuário e conversas anteriores relevantes, buscados aqui (fora do event loop
+    do grafo) e entregues pelo estado. Os dois são opcionais: Postgres/Mongo/Qdrant fora do
+    ar não pode derrubar o turno — o prompt só sai sem essas seções.
     """
+
+    fatos: Fatos | None = None
+    try:
+        fatos = await user_service.buscar_fatos(user_id)
+    except Exception as e:
+        logger.warning("Busca de fatos falhou, seguindo sem: %s", e)
 
     resumos: list[str] = []
     if not imagem_b64:  # foto não tem pergunta em texto pra buscar
@@ -88,7 +103,7 @@ async def _carregar_conversas_anteriores(
         except Exception as e:
             logger.warning("Busca de conversas anteriores falhou, seguindo sem: %s", e)
 
-    conversas_anteriores.set(tuple(resumos))
+    return fatos, resumos
 
 
 def _config(session_id: str, user_id: str) -> RunnableConfig:
@@ -128,7 +143,7 @@ async def executar(
     inicio = time.perf_counter()
     outcome = "error"
 
-    await _carregar_conversas_anteriores(conteudo, session_id, user_id, imagem_b64)
+    fatos, conversas = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
 
     try:
         # stock_id/user_id ficam disponíveis via contextvars para as tools de
@@ -136,7 +151,7 @@ async def executar(
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
             estado_final = await grafo.ainvoke(
-                _estado_inicial(conteudo, stock_id, imagem_b64),
+                _estado_inicial(conteudo, stock_id, imagem_b64, fatos, conversas),
                 config=_config(session_id, user_id),
             )
 
@@ -166,7 +181,7 @@ async def executar_stream(
 
     yield RunStarted()
 
-    await _carregar_conversas_anteriores(conteudo, session_id, user_id, imagem_b64)
+    fatos, conversas = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
 
     inicio = time.perf_counter()
     outcome = "error"
@@ -177,7 +192,7 @@ async def executar_stream(
             grafo = await fluxo_agentes.get()
 
             async for event in grafo.astream_events(
-                _estado_inicial(conteudo, stock_id, imagem_b64),
+                _estado_inicial(conteudo, stock_id, imagem_b64, fatos, conversas),
                 config=_config(session_id, user_id),
                 version="v2",
             ):

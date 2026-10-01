@@ -4,7 +4,6 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
 from frigus_ai.infra.base import Connector
-from frigus_ai.models import Model
 from frigus_ai.settings import settings
 
 
@@ -15,8 +14,8 @@ class QdrantConn(Connector[QdrantClient]):
     def connect(self) -> QdrantClient:
         if self._client is None:
             self._client = QdrantClient(
-                url=settings.QDRANT_URL,
-                api_key=settings.QDRANT_API_KEY.get_secret_value() or None,
+                url=settings.database.qdrant_url,
+                api_key=settings.database.qdrant_api_key.get_secret_value() or None,
             )
         return self._client
 
@@ -35,8 +34,8 @@ class AsyncQdrantConn(Connector[AsyncQdrantClient]):
     def connect(self) -> AsyncQdrantClient:
         if self._client is None:
             self._client = AsyncQdrantClient(
-                url=settings.QDRANT_URL,
-                api_key=settings.QDRANT_API_KEY.get_secret_value() or None,
+                url=settings.database.qdrant_url,
+                api_key=settings.database.qdrant_api_key.get_secret_value() or None,
             )
         return self._client
 
@@ -63,8 +62,8 @@ def get_embeddings(task_type: str) -> GoogleGenerativeAIEmbeddings:
     indexar, "retrieval_query" pra buscar — o Gemini otimiza o vetor pra cada lado."""
 
     return GoogleGenerativeAIEmbeddings(
-        model=Model.EMBEDDING_MODEL,
-        google_api_key=settings.GEMINI_API_KEY,
+        model=settings.llm.embedding_model,
+        google_api_key=settings.llm.gemini_api_key,
         task_type=task_type,
     )
 

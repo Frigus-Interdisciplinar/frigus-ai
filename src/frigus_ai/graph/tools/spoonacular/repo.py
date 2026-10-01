@@ -6,10 +6,10 @@ from typing import NamedTuple, cast
 import httpx
 from langchain_core.tools import BaseTool, StructuredTool
 
-from frigus_ai.exceptions import ApiKeyNaoConfiguradaError, CotaExcedidaError
+from frigus_ai.domain.errors import ApiKeyNaoConfiguradaError, CotaExcedidaError
 from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.response import Response, ToolResponse
-from frigus_ai.infra.spoonacular.connection import spoonacular
+from frigus_ai.infra.spoonacular import spoonacular
 from frigus_ai.settings import settings
 
 from .schemas import (
@@ -70,7 +70,7 @@ _get = _CachedGet()
 
 
 async def _chamar(path: _Path, params: dict[str, _ParamValue]) -> object:
-    if not settings.SPOONACULAR_API_KEY:
+    if not settings.api_keys.spoonacular_api_key:
         raise ApiKeyNaoConfiguradaError
 
     chave: _Params = tuple(_Param(nome, valor) for nome, valor in sorted(params.items()))

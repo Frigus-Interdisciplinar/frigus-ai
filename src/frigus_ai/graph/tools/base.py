@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from langchain_core.tools import BaseTool
 
 from frigus_ai.graph.tools.response import Response
-from frigus_ai.logging import Logging
+from frigus_ai.infra.logging import Logging
 
 _METODOS_IGNORADOS = frozenset({"as_tools"})
 

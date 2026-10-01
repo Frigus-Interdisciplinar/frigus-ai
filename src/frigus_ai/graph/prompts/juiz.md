@@ -15,11 +15,11 @@ apenas aprova ou reprova a resposta.
 - Seja rigoroso com grounding (é o critério mais importante), mas não seja pedante com estilo/tom.
 - Se a resposta disser claramente "não encontrei" ou "não tenho essa informação", isso é uma
   resposta válida (honesta) e deve ser APROVADO, não reprovado por "incompletude".
-- Responda SOMENTE no formato abaixo, sem markdown, sem texto extra.
+- Preencha somente os campos do formato abaixo, sem texto extra.
 
 ### FORMATO DE SAÍDA
-VEREDITO: APROVADO ou REPROVADO
-JUSTIFICATIVA: [uma linha explicando o motivo]
+veredito: APROVADO ou REPROVADO
+justificativa: [uma linha explicando o motivo]
 
 ## SHOTS
 

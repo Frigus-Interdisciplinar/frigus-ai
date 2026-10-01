@@ -3,8 +3,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-from frigus_ai.schemas.models import Role as DomainRole
-from frigus_ai.types import ChatID
+from frigus_ai.domain.models import Role as DomainRole
+from frigus_ai.domain.types import ChatID
 
 
 class Role(StrEnum):

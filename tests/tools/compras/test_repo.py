@@ -59,7 +59,7 @@ def test_add_shopping_list_product_usa_o_stock_id_do_contexto(monkeypatch):
 
 
 def test_add_shopping_list_product_sem_categoria_vira_response_error(monkeypatch):
-    from frigus_ai.exceptions import ProdutoNaoCadastrado
+    from frigus_ai.domain.errors import ProdutoNaoCadastrado
 
     _fingir(monkeypatch, "adicionar_item", erro=ProdutoNaoCadastrado())
 
@@ -101,7 +101,7 @@ def test_mark_purchased_sem_identificador_nao_chama_repositorio(monkeypatch):
 
 
 def test_mark_purchased_item_nao_encontrado_vira_response_error(monkeypatch):
-    from frigus_ai.exceptions import ItemDeCompraNaoEncontrado
+    from frigus_ai.domain.errors import ItemDeCompraNaoEncontrado
 
     _fingir(monkeypatch, "marcar_status", erro=ItemDeCompraNaoEncontrado())
 

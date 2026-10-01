@@ -59,7 +59,7 @@ reprovado (loga um aviso), para nunca travar o usuário.
 
 ```
 frigus-ai/
-├── main.py                          # Dispatcher — `python main.py <interface>`
+├── main.py                          # Dispatcher — `python -m frigus_ai.main <interface>`
 ├── pyproject.toml
 ├── docker-compose.yml               # Postgres + Mongo + Redis + Qdrant
 │
@@ -106,7 +106,7 @@ frigus-ai/
     │       ├── schemas.py           # Categoria, Motivo, RespostaBloqueio, RESPOSTAS_BLOQUEIO
     │       └── cache.py             # veredito do classificador no Redis (evita LLM repetida)
     │
-    ├── privacy.py                   # PII: anonimizar/desanonimizar/redigir. Neutro de propósito —
+    ├── domain/privacy.py            # PII: anonimizar/desanonimizar/redigir. Neutro de propósito —
     │                                # guardrail, repository e service usam (ver docstring)
     │
     └── tools/
@@ -148,7 +148,7 @@ usam sequence — os IDs vêm do banco.
 ## API HTTP
 
 `src/frigus_ai/api/` — FastAPI. Autenticação por `X-API-Key` condicional
-(`API_KEY_AUTH_ENABLED`): ligada, resolve o usuário pela key; desligada (modo local/demo),
+(`API__KEY_AUTH_ENABLED`): ligada, resolve o usuário pela key; desligada (modo local/demo),
 reaproveita ou cria um usuário local único — não há mais `DEMO_USER_ID` fixo.
 
 Rotas de domínio (`chats`, `keys`, `stock`, `shopping-list`, `recipes`, `profile`) ficam sob
@@ -198,18 +198,18 @@ cada trabalho começar:
 
 ### Variáveis de ambiente
 
-Copie `.env.example` para `.env` e preencha:
+Copie `.env.example` para `.env` e preencha (o prefixo antes de `__` é o grupo de `settings/`):
 
 ```env
-GEMINI_API_KEY=...          # obrigatória
-GROQ_API_KEY=...            # obrigatória
-ANTHROPIC_API_KEY=...       # opcional
-OPENROUTER_API_KEY=...      # opcional — 3º provider na cadeia de fallback
-SPOONACULAR_API_KEY=...     # opcional — receitas externas
-POSTGRES_URI=postgresql://frigus:frigus@localhost:5432/frigus
-MONGODB_URI=mongodb://localhost:27017
-REDIS_URL=redis://localhost:6379/0
-QDRANT_URL=http://localhost:6333
+LLM__GEMINI_API_KEY=...          # obrigatória
+LLM__GROQ_API_KEY=...            # obrigatória
+LLM__ANTHROPIC_API_KEY=...       # opcional
+LLM__OPENROUTER_API_KEY=...      # opcional — 3º provider na cadeia de fallback
+API_KEYS__SPOONACULAR_API_KEY=...     # opcional — receitas externas
+DATABASE__POSTGRES_URI=postgresql://frigus:frigus@localhost:5432/frigus
+DATABASE__MONGODB_URI=mongodb://localhost:27017
+DATABASE__REDIS_URL=redis://localhost:6379/0
+DATABASE__QDRANT_URL=http://localhost:6333
 ```
 
 ### Instalação
@@ -230,7 +230,7 @@ docker compose up -d
 ### Execução
 
 ```bash
-just run          # equivalente a `python main.py tui` (default)
+just run          # equivalente a `python -m frigus_ai.main tui` (default)
 just run api       # sobe a API (FastAPI/uvicorn) em localhost:8000 — sem auth ainda
 ```
 

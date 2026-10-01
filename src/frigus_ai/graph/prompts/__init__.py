@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from frigus_ai.schemas.models import Fatos
+from frigus_ai.domain.models import Fatos
 
 _PASTA = Path(__file__).parent
 _MARCADOR_SECAO = "## "
@@ -39,6 +39,7 @@ OBRIGATORIEDADE_TOOLS = """
 ### OBRIGATORIEDADE DE TOOLS
 - TODA resposta que contenha produtos, quantidades, preços, datas de validade ou receitas DEVE ser precedida de uma chamada de tool nesta mesma execução.
 - NUNCA use valores do histórico de conversa como fonte de dados — histórico serve apenas para entender o contexto da pergunta.
+- Toda tool devolve um objeto JSON com "status". Sucesso: {"status": "ok", ...dados}. Falha: {"status": "error", "message": "<motivo>"} — leia o "message" para decidir: corrija o argumento e tente de novo se o erro apontar um valor inválido; senão, explique a falha ao usuário.
 - Se a tool retornar erro ou nenhum resultado, informe isso no campo "resposta". Jamais invente um produto, preço ou data substituta.
 """
 
@@ -152,7 +153,10 @@ def load_prompt(
     if metadados.get("usa_tools_obrigatorias") == "true":
         partes.append(OBRIGATORIEDADE_TOOLS)
 
-    partes.append(f"### PAPEL\n{secoes.get('papel', '')}")
+    if not secoes.get("papel"):
+        raise ValueError(f"Prompt {nome_arquivo}.md não tem a seção ## PAPEL")
+
+    partes.append(f"### PAPEL\n{secoes['papel']}")
 
     if secoes.get("shots"):
         partes.append(secoes["shots"])

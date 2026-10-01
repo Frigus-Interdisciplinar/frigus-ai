@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
-from frigus_ai.logging import DebugLevel, Logging
+from frigus_ai.infra.logging import DebugLevel, Logging
 
 
 class Connector[T](ABC):
@@ -11,9 +10,3 @@ class Connector[T](ABC):
 
     @abstractmethod
     def connect(self) -> T: ...
-
-
-class Repository(ABC):
-    """Base marker for repositories that own an infrastructure connector."""
-
-    connector: Any

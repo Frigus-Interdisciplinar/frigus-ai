@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
 from frigus_ai.api.routes import a2a as rotas
-from frigus_ai.exceptions import ChatDeOutroUsuario, LimiteDeMensagensExcedido
+from frigus_ai.domain.errors import ChatDeOutroUsuario, LimiteDeMensagensExcedido
 from frigus_ai.services.user_service import user_service
 
 
@@ -145,5 +145,5 @@ def test_url_do_card_aponta_pro_endpoint_que_existe(cliente):
     client, _ = cliente
     card = client.get("/.well-known/agent-card.json").json()
 
-    caminho = card["url"].removeprefix(rotas.settings.A2A_BASE_URL)
+    caminho = card["url"].removeprefix(rotas.settings.api.a2a_base_url)
     assert client.post(caminho, json=_rpc(params=_mensagem())).status_code == 200

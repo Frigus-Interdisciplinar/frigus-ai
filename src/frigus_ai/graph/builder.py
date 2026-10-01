@@ -1,6 +1,8 @@
 import asyncio
 from typing import get_args
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -50,7 +52,13 @@ from frigus_ai.graph.state import (
     SaidaGrafo,
     VisaoUpdate,
 )
-from frigus_ai.infra.mongo.connection import mongo
+from frigus_ai.infra.logging import Logging
+from frigus_ai.infra.mongo import mongo
+from frigus_ai.settings import settings
+
+logger = Logging.get_logger(__name__)
+
+_PING_TIMEOUT_S = 5
 
 type GrafoFrigus = CompiledStateGraph[Estado, None, EntradaGrafo, SaidaGrafo]
 
@@ -188,6 +196,29 @@ def _construir_grafo() -> StateGraph:
     return grafo
 
 
+async def _criar_checkpointer() -> BaseCheckpointSaver:
+    """
+    O cliente do Mongo conecta de forma preguiçosa: sem o `ping`, o construtor do
+    `MongoDBSaver` passa com o banco fora do ar e o erro só estoura na primeira invocação.
+    Fallback pra `MemorySaver` só em `local`; em production uma queda silenciosa perderia os
+    checkpoints a cada restart sem ninguém saber — lá o boot falha alto.
+    """
+
+    try:
+        await asyncio.wait_for(asyncio.to_thread(mongo.client.admin.command, "ping"), _PING_TIMEOUT_S)
+        return MongoDBSaver(
+            mongo.client,
+            db_name=mongo.banco.name,
+            checkpoint_collection_name="graph_checkpoints",
+            writes_collection_name="graph_checkpoint_writes",
+        )
+    except Exception as e:
+        if settings.environment != "local":
+            raise
+        logger.warning("Mongo indisponível (%s) — checkpoints em memória (somem no restart).", e)
+        return MemorySaver()
+
+
 class FluxoAgentes:
     """
     Compila o grafo + prepara o checkpointer uma vez por processo e reusa nas requests.
@@ -207,12 +238,7 @@ class FluxoAgentes:
 
         async with self._lock:
             if self._compilado is None:
-                checkpointer = MongoDBSaver(
-                    mongo.client,
-                    db_name=mongo.banco.name,
-                    checkpoint_collection_name="graph_checkpoints",
-                    writes_collection_name="graph_checkpoint_writes",
-                )
+                checkpointer = await _criar_checkpointer()
                 self._compilado = _construir_grafo().compile(checkpointer=checkpointer)
 
         return self._compilado

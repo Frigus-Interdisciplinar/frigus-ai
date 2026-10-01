@@ -1,57 +1,18 @@
-
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-
 from frigus_ai.graph.state import InventarioGeladeira
-from frigus_ai.models import API_KEYS, BUILDERS, PROVIDER_MAP, Model
+from frigus_ai.infra.llm import build_llm
+from frigus_ai.settings import settings
+from frigus_ai.settings.llm import Model
 
+_cfg = settings.llm
 
-def build_llm(
-    temperature: float,
-    top_p: float | None = None,
-    model: str | None = None
-) -> ChatGoogleGenerativeAI | ChatGroq | ChatAnthropic | ChatOpenAI | None:
-    """
-    Cria uma LLM com base no modelo informado.
-    top_p só é aplicado para modelos Gemini.
-    Devolve None se o provider não tiver API key configurada (providers opcionais).
-    """
-
-    provider = PROVIDER_MAP.get(model)
-    api_key = API_KEYS.get(provider)
-
-    if provider is None:
-        raise ValueError(f"Modelo desconhecido: {model}")
-
-    if not api_key:
-        return None
-
-    kwargs = {
-        "model": model,
-        "temperature": temperature,
-        "api_key": api_key,
-    }
-
-    if top_p is not None and provider == "gemini":
-        kwargs["top_p"] = top_p
-
-    # gpt-oss é modelo de raciocínio: sem isso o chain-of-thought vem dentro do content.
-    if provider == "groq":
-        kwargs["reasoning_format"] = "hidden"
-
-    return BUILDERS[provider](**kwargs)
-
-
-_llm_visao_base  = build_llm(model=Model.GEMINI_FLASH, temperature=0.1)
+_llm_visao_base  = build_llm(Model.GEMINI_FLASH, _cfg.vision_temperature, _cfg)
 llm_visao        = _llm_visao_base.with_structured_output(InventarioGeladeira) if _llm_visao_base else None
-llm_gemini       = build_llm(model=Model.GEMINI_FLASH, temperature=0.7, top_p=0.95)
-llm_groq         = build_llm(model=Model.GPT_OSS_120B, temperature=0.7)
-llm_rapido       = build_llm(model=Model.GPT_OSS_120B, temperature=0.0)
-llm_guardrail    = build_llm(model=Model.GEMINI_FLASH, temperature=0.0)
-llm_juiz         = build_llm(model=Model.GEMINI_FLASH, temperature=0.0)
-llm_openrouter   = build_llm(model=Model.QWEN_3_8_FREE, temperature=0.7)
+llm_gemini       = build_llm(Model.GEMINI_FLASH, _cfg.default_temperature, _cfg, top_p=0.95)
+llm_groq         = build_llm(Model.GPT_OSS_120B, _cfg.default_temperature, _cfg)
+llm_rapido       = build_llm(Model.GPT_OSS_120B, _cfg.guardrail_temperature, _cfg)
+llm_guardrail    = build_llm(Model.GEMINI_FLASH, _cfg.guardrail_temperature, _cfg)
+llm_juiz         = build_llm(Model.GEMINI_FLASH, _cfg.guardrail_temperature, _cfg)
+llm_openrouter   = build_llm(Model.QWEN_3_8_FREE, _cfg.default_temperature, _cfg)
 llm_especialista = llm_gemini.with_fallbacks([m for m in (llm_groq, llm_openrouter) if m])
 
 
@@ -65,63 +26,3 @@ __all__ = [
     "llm_rapido",
     "llm_visao",
 ]
-
-
-# from typing import cast
-
-# from langchain_core.language_models import BaseChatModel
-
-# from assessor_ai.models import API_KEYS, BUILDERS, PROVIDER_MAP, Model
-
-
-# def build_llm(
-#     temperature: float,
-#     top_p: float | None = None,
-#     model: Model | None = None
-# ) -> BaseChatModel:
-#     """
-#     Cria uma LLM com base no modelo informado.
-#     top_p só é aplicado para modelos Gemini.
-#     """
-
-#     if model is None:
-#         raise ValueError("Modelo não informado")
-
-#     provider = PROVIDER_MAP.get(model)
-
-#     if provider is None:
-#         raise ValueError(f"Modelo desconhecido: {model}")
-
-#     kwargs = {
-#         "model": model,
-#         "temperature": temperature,
-#         "api_key": API_KEYS.get(provider),
-#     }
-
-#     if top_p is not None and provider == "gemini":
-#         kwargs["top_p"] = top_p
-
-#     # gpt-oss é modelo de raciocínio: sem isso o chain-of-thought vem dentro do content
-#     # e polui os regex de ROUTE= (nodes/router.py) e RESPOSTA: (guardrail de saída).
-#     if provider == "groq":
-#         kwargs["reasoning_format"] = "hidden"
-
-#     return cast(BaseChatModel, BUILDERS[provider](**kwargs))
-
-
-
-# llm_gemini = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.7, top_p=0.95)
-# llm_groq   = build_llm(model=Model.GPT_OSS_120B, temperature=0.7)
-# llm_rapido = build_llm(model=Model.GPT_OSS_120B, temperature=0.0)
-# llm_guardrail = build_llm(model=Model.GEMINI_2_5_FLASH, temperature=0.0)
-# llm_especialista = llm_gemini.with_fallbacks([llm_groq])
-
-
-
-# __all__ = [
-#     "llm_especialista",
-#     "llm_gemini",
-#     "llm_groq",
-#     "llm_guardrail",
-#     "llm_rapido",
-# ]

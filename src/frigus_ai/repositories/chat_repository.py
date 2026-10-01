@@ -13,10 +13,10 @@ from typing import TypedDict
 
 from langsmith import traceable
 
-from frigus_ai.infra.mongo.connection import mongo
-from frigus_ai.logging import Logging
-from frigus_ai.privacy import anonimizar_entrada
-from frigus_ai.schemas.models import ChatMessage, Role
+from frigus_ai.domain.models import ChatMessage, Role
+from frigus_ai.domain.privacy import anonimizar_entrada
+from frigus_ai.infra.logging import Logging
+from frigus_ai.infra.mongo import mongo
 
 logger = Logging.get_logger(__name__)
 

@@ -7,8 +7,8 @@ global:
 scrape_configs:
   - job_name: frigus-api
     metrics_path: /metrics
-    # Se a API tiver METRICS_TOKEN, descomente e use o mesmo valor:
+    # Se a API tiver API_KEYS__METRICS_TOKEN, descomente e use o mesmo valor:
     # authorization:
-    #   credentials: "<METRICS_TOKEN>"
+    #   credentials: "<API_KEYS__METRICS_TOKEN>"
     static_configs:
       - targets: ["host.docker.internal:8000"]

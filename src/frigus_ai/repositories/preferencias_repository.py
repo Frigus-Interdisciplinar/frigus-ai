@@ -15,9 +15,8 @@ overhead sem motivo.
 
 from typing import Literal, TypedDict
 
-from neomodel import adb
-
-from frigus_ai.exceptions import IngredienteNaoEncontrado
+from frigus_ai.domain.errors import IngredienteNaoEncontrado
+from frigus_ai.infra.neo4j.connection import neo4j
 from frigus_ai.infra.neo4j.models.ingredient import Ingredient
 from frigus_ai.infra.neo4j.models.user import User
 
@@ -38,6 +37,7 @@ class ReceitaCompativel(TypedDict):
 
 
 async def _ingrediente(nome: str) -> Ingredient:
+    neo4j.connect()
     ingrediente = await Ingredient.nodes.first_or_none(name=nome)
 
     if ingrediente is None:
@@ -47,6 +47,7 @@ async def _ingrediente(nome: str) -> Ingredient:
 
 
 async def _buscar_usuario(user_id: str) -> User | None:
+    neo4j.connect()
     return await User.nodes.first_or_none(uid=user_id)
 
 
@@ -57,6 +58,7 @@ async def _obter_ou_criar_usuario(user_id: str) -> User:
     chave, o que faria dois usuários com o mesmo nome colidirem no mesmo node.
     """
 
+    neo4j.connect()
     usuarios = await User.nodes.bulk_get_or_create(
         {"uid": user_id, "name": user_id}, merge_by={"keys": ["uid"]}
     )
@@ -128,7 +130,7 @@ class _PreferenciasNeo4jRepo:
                    r.difficulty AS difficulty
             LIMIT $limit
         """
-        resultados, _ = await adb.cypher_query(query, {"user_id": user_id, "limit": limit})
+        resultados, _ = await neo4j.client.cypher_query(query, {"user_id": user_id, "limit": limit})
 
         return [
             {

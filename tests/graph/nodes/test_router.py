@@ -15,7 +15,7 @@ class _FakeRoteador:
     def __init__(self, resultado):
         self._resultado = resultado
 
-    async def ainvoke(self, entrada):
+    async def ainvoke(self, entrada, **_kwargs):
         if isinstance(self._resultado, Exception):
             raise self._resultado
         return {"messages": entrada["messages"], "structured_response": self._resultado}

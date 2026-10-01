@@ -17,14 +17,14 @@ from datetime import date, timedelta
 from langchain_core.messages import AIMessage
 from langgraph.config import get_config
 
-from frigus_ai.exceptions import AssessorIndisponivel
+from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.graph.names import A2A_ASSESSOR
 from frigus_ai.graph.state import AssessorUpdate, Estado
 from frigus_ai.infra.assessor import client as assessor
+from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import current_stock_id
 from frigus_ai.infra.redis import ranking
-from frigus_ai.logging import Logging
-from frigus_ai.observability.metrics import medir_node
+from frigus_ai.observability import medir_node
 from frigus_ai.repositories import financeiro_repository
 
 logger = Logging.get_logger(__name__)

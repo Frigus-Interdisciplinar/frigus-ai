@@ -10,7 +10,6 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import LLMResult
 
 from frigus_ai.graph.names import NodeLiteral
-from frigus_ai.models import Model
 from frigus_ai.observability.metrics import (
     LLM_DURATION,
     LLM_RUNS,
@@ -18,6 +17,7 @@ from frigus_ai.observability.metrics import (
     TOOL_DURATION,
     TOOL_RUNS,
 )
+from frigus_ai.settings.llm import Model
 
 _ALLOWED_NODES = frozenset(get_args(NodeLiteral))
 _ALLOWED_PROVIDERS = frozenset({"google_genai", "groq", "anthropic", "openai"})

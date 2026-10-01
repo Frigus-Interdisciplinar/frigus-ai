@@ -2,7 +2,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 
 from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.response import Response
-from frigus_ai.infra.qdrant.connection import get_embeddings, get_qdrant_client
+from frigus_ai.infra.qdrant import get_embeddings, get_qdrant_client
 from frigus_ai.settings import settings
 
 from .schemas import FaqRetrieverArgs, SearchResponse
@@ -20,7 +20,7 @@ class FaqRepo(ToolSet):
         vetor = get_embeddings(_TASK_TYPE_QUERY).embed_query(question)
 
         pontos = client.query_points(
-            collection_name=settings.QDRANT_COLLECTION_NAME,
+            collection_name=settings.database.qdrant_collection_name,
             query=vetor,
             limit=_K_NUMBER,
         ).points

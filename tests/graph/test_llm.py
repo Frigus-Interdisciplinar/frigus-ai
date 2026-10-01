@@ -1,5 +1,5 @@
 """
-Cobre a tabela de providers de `frigus_ai/models.py` e o contrato de `build_llm`
+Cobre a tabela de providers de `frigus_ai/infra/llm/` e o contrato de `build_llm`
 com provider opcional (sem API key -> None, fora da cadeia de fallback).
 """
 
@@ -8,7 +8,9 @@ import importlib
 from langchain_openai import ChatOpenAI
 
 from frigus_ai.graph import llm as llm_mod
-from frigus_ai.models import BUILDERS, PROVIDER_MAP, Model
+from frigus_ai.infra.llm import BUILDERS, PROVIDER_MAP, build_llm
+from frigus_ai.settings import settings
+from frigus_ai.settings.llm import Model
 
 
 def test_openrouter_resolve_para_chatopenai_com_base_url():
@@ -21,13 +23,13 @@ def test_openrouter_resolve_para_chatopenai_com_base_url():
 
 
 def test_build_llm_sem_api_key_devolve_none():
-    assert llm_mod.build_llm(model=Model.QWEN_3_8_FREE, temperature=0.7) is None
+    assert build_llm(Model.QWEN_3_8_FREE, 0.7, settings.llm) is None
     assert llm_mod.llm_openrouter is None
 
 
 def test_provider_desconhecido_levanta():
     try:
-        llm_mod.build_llm(model="modelo-que-nao-existe", temperature=0.0)
+        build_llm("modelo-que-nao-existe", 0.0, settings.llm)
     except ValueError as e:
         assert "desconhecido" in str(e)
     else:
@@ -35,12 +37,12 @@ def test_provider_desconhecido_levanta():
 
 
 def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key")
+    monkeypatch.setenv("LLM__OPENROUTER_API_KEY", "fake-key")
 
-    import frigus_ai.models
     import frigus_ai.settings
+    import frigus_ai.settings.base
 
-    for mod in (frigus_ai.settings, frigus_ai.models):
+    for mod in (frigus_ai.settings.base, frigus_ai.settings):
         importlib.reload(mod)
     recarregado = importlib.reload(llm_mod)
 
@@ -50,7 +52,7 @@ def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
     finally:
         # setenv("") em vez de delenv: `OPENROUTER_API_KEY` não tem default no
         # `Settings` (é obrigatória, embora vazia conte como "provider desligado").
-        monkeypatch.setenv("OPENROUTER_API_KEY", "")
-        for mod in (frigus_ai.settings, frigus_ai.models):
+        monkeypatch.setenv("LLM__OPENROUTER_API_KEY", "")
+        for mod in (frigus_ai.settings.base, frigus_ai.settings):
             importlib.reload(mod)
         importlib.reload(llm_mod)

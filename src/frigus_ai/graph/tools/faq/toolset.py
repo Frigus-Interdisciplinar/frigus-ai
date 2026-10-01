@@ -1,6 +1,6 @@
 """Compatibilidade temporária; use ``repo.FaqRepo``."""
 
-from frigus_ai.infra.qdrant.connection import get_embeddings, get_qdrant_client
+from frigus_ai.infra.qdrant import get_embeddings, get_qdrant_client
 from frigus_ai.settings import settings
 
 from . import repo

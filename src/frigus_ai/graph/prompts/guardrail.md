@@ -23,10 +23,9 @@ clínica ou diagnóstico médico, ou (c) afirmar certeza absoluta sobre prazo de
 ressalva ("pode confiar 100%", "nunca vai estragar").
 Se estiver adequada, repita-a sem alterações.
 
-Responda SOMENTE:
-STATUS: APROVADO ou CORRIGIDO
-RESPOSTA:
-[texto final]
+Preencha:
+revisada: o texto final (a resposta original, se estava adequada)
+modificada: true se você alterou a resposta, false se a repetiu sem alterações
 
 Resposta para revisar:
 {resposta}

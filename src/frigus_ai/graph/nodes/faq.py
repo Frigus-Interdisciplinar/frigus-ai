@@ -2,14 +2,20 @@ from langchain_core.messages import AIMessage
 
 from frigus_ai.graph.agents import faq_app
 from frigus_ai.graph.names import FAQ
-from frigus_ai.graph.nodes.contexto import mensagens_do_turno, responder
+from frigus_ai.graph.nodes.contexto import (
+    contexto_do_estado,
+    mensagens_do_turno,
+    responder,
+)
 from frigus_ai.graph.state import Estado, FaqUpdate
-from frigus_ai.observability.metrics import medir_node
+from frigus_ai.observability import medir_node
 
 
 @medir_node(FAQ)
 async def no_faq(estado: Estado) -> FaqUpdate:
-    resposta = await responder(faq_app, mensagens_do_turno(estado, apenas_pergunta=True))
+    resposta = await responder(
+        faq_app, mensagens_do_turno(estado, apenas_pergunta=True), contexto_do_estado(estado)
+    )
 
     return FaqUpdate(
         agentes_chamados=[FAQ],

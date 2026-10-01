@@ -57,7 +57,7 @@ async def test_definir_preferencia_ok(monkeypatch):
 
 
 async def test_definir_preferencia_ingrediente_nao_encontrado_vira_response_error(monkeypatch):
-    from frigus_ai.exceptions import IngredienteNaoEncontrado
+    from frigus_ai.domain.errors import IngredienteNaoEncontrado
 
     async def _falha(user_id, ingrediente_nome, tipo):
         raise IngredienteNaoEncontrado(ingrediente_nome)

@@ -12,7 +12,7 @@ config = context.config
 
 # URL vem de Settings (mesma POSTGRES_URI do resto do app), não de alembic.ini —
 # uma fonte só de configuração de conexão.
-config.set_main_option("sqlalchemy.url", settings.POSTGRES_URI)
+config.set_main_option("sqlalchemy.url", settings.database.postgres_uri)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

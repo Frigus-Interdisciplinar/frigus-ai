@@ -7,9 +7,9 @@ isso fica em `services/user_service.py`.
 
 from datetime import UTC, datetime
 
-from frigus_ai.infra.mongo.connection import mongo
-from frigus_ai.logging import Logging
-from frigus_ai.schemas.models import Fatos
+from frigus_ai.domain.models import Fatos
+from frigus_ai.infra.logging import Logging
+from frigus_ai.infra.mongo import mongo
 
 logger = Logging.get_logger(__name__)
 

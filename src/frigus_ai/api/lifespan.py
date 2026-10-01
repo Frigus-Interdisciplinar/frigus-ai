@@ -9,10 +9,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from frigus_ai.api.mcp import lifespan_mcp
 from frigus_ai.graph.builder import fluxo_agentes
-from frigus_ai.infra.spoonacular.connection import spoonacular
-from frigus_ai.logging import Logging
-from frigus_ai.mcp import lifespan_mcp
+from frigus_ai.infra.logging import Logging
+from frigus_ai.infra.spoonacular import spoonacular
 
 logger = Logging.get_logger(__name__)
 

@@ -15,7 +15,7 @@ from uuid import NAMESPACE_URL, uuid5
 import httpx
 from pydantic import ValidationError
 
-from frigus_ai.exceptions import AssessorIndisponivel
+from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.infra.assessor.schemas import (
     Message,
     Part,
@@ -50,16 +50,16 @@ def _requisicao(pergunta: str, session_id: str) -> SendMessageRequest:
 
 
 async def perguntar(pergunta: str, session_id: str) -> str:
-    if not settings.ASSESSOR_A2A_URL:
+    if not settings.api.assessor_a2a_url:
         raise AssessorIndisponivel("ASSESSOR_A2A_URL não configurada.")
 
-    chave = settings.ASSESSOR_API_KEY.get_secret_value()
+    chave = settings.api_keys.assessor_api_key.get_secret_value()
     headers = {"A2A-Version": _VERSAO_A2A, **({"X-API-Key": chave} if chave else {})}
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resposta = await client.post(
-                f"{settings.ASSESSOR_A2A_URL.rstrip('/')}/a2a",
+                f"{settings.api.assessor_a2a_url.rstrip('/')}/a2a",
                 json=_requisicao(pergunta, session_id).model_dump(mode="json", exclude_none=True),
                 headers=headers,
             )

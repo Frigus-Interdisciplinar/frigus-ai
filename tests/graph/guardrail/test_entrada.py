@@ -8,11 +8,11 @@ esses casos nunca tocam a rede. O caminho que cai no LLM fica de fora daqui.
 
 import pytest
 
+from frigus_ai.domain.privacy import anonimizar_entrada
 from frigus_ai.graph.guardrail import entrada as mod
 from frigus_ai.graph.guardrail.entrada import guardrail_entrada
 from frigus_ai.graph.guardrail.padroes import pede_dado_interno, tem_injecao
 from frigus_ai.graph.guardrail.schemas import Categoria, Classificacao
-from frigus_ai.privacy import anonimizar_entrada
 
 # --------------------- detecção de injeção ---------------------
 

@@ -16,10 +16,15 @@ from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
-from frigus_ai.graph.state import Estado
+from frigus_ai.domain.models import Fatos
+from frigus_ai.graph.state import ContextoPrompt, Estado
+from frigus_ai.infra.logging import Logging
+from frigus_ai.settings import settings
+
+logger = Logging.get_logger(__name__)
 
 
 class RespostaAgenteInvalida(RuntimeError):
@@ -48,7 +53,7 @@ def _texto(conteudo: Any) -> str:
 # saída), então 21 ≈ 7 turnos. Sem poda, `thread_id` de vida longa cresce para sempre: o
 # documento no Mongo incha e, pior, TODO turno relê o histórico inteiro pra dentro do
 # contexto do LLM — custo em token cresce junto, não só memória.
-MAX_MENSAGENS = 21
+MAX_MENSAGENS = settings.llm.max_historico_mensagens
 
 
 def podar_historico(mensagens: Sequence[AnyMessage]) -> list[RemoveMessage]:
@@ -61,6 +66,10 @@ def podar_historico(mensagens: Sequence[AnyMessage]) -> list[RemoveMessage]:
     mensagem final. Se algum dia um `ToolMessage` entrar no estado, cortar por índice pode
     separar um tool_call da sua resposta e quebrar a próxima chamada do modelo.
     """
+
+    if any(isinstance(m, ToolMessage) for m in mensagens):
+        logger.warning("ToolMessage no estado — poda desativada para não separar tool_call/resposta.")
+        return []
 
     excedente = len(mensagens) - MAX_MENSAGENS
     if excedente <= 0:
@@ -89,10 +98,23 @@ def mensagens_do_turno(estado: Estado, apenas_pergunta: bool = False) -> list[An
     return mensagens
 
 
-async def responder(app: Runnable[Any, Any], mensagens: Sequence[AnyMessage]) -> str:
+def contexto_do_estado(estado: Estado) -> ContextoPrompt:
+    """Fatos e conversas anteriores que o runner pré-carregou, no formato que o agente lê."""
+
+    fatos = estado.get("fatos")
+
+    return ContextoPrompt(
+        fatos=Fatos(**fatos) if fatos is not None else None,
+        conversas=tuple(estado.get("conversas_anteriores", ())),
+    )
+
+
+async def responder(
+    app: Runnable[Any, Any], mensagens: Sequence[AnyMessage], contexto: ContextoPrompt | None = None
+) -> str:
     """Roda um agente compilado e devolve o texto da última mensagem que ele produziu."""
 
-    saida = await app.ainvoke({"messages": list(mensagens)})
+    saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
 
     return _texto(saida["messages"][-1].content)
 
@@ -112,6 +134,7 @@ async def perguntar(llm: BaseChatModel, entrada: str | Sequence[AnyMessage]) -> 
 __all__ = [
     "MAX_MENSAGENS",
     "RespostaAgenteInvalida",
+    "contexto_do_estado",
     "mensagens_do_turno",
     "perguntar",
     "podar_historico",

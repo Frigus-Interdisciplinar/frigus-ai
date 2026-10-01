@@ -8,7 +8,7 @@ mensagem limpa com `dados_especialista` vazio (o sinal pro builder pular o Juiz)
 
 import pytest
 
-from frigus_ai.exceptions import AssessorIndisponivel
+from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.graph.nodes import assessor as mod
 from frigus_ai.infra.postgres.context import session_context
 from frigus_ai.infra.redis.ranking import ItemRanking

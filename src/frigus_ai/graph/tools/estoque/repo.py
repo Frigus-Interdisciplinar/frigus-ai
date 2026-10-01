@@ -14,9 +14,9 @@ from frigus_ai.graph.tools.estoque.schemas import (
     UpdateStockQuantityArgs,
 )
 from frigus_ai.graph.tools.response import Response
+from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import current_stock_id, current_user_id
 from frigus_ai.infra.redis import ranking
-from frigus_ai.logging import Logging
 from frigus_ai.repositories import estoque_repository
 from frigus_ai.repositories.estoque_repository import FiltrosEstoque, ProdutoNovo
 

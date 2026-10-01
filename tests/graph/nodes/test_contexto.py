@@ -48,3 +48,11 @@ def test_mensagem_sem_id_e_ignorada():
     historico = [HumanMessage(content="sem id") for _ in range(MAX_MENSAGENS + 3)]
 
     assert podar_historico(historico) == []
+
+
+def test_toolmessage_no_estado_desativa_a_poda():
+    from langchain_core.messages import ToolMessage
+
+    historico = [*_historico(MAX_MENSAGENS + 4), ToolMessage(content="x", tool_call_id="t1")]
+
+    assert podar_historico(historico) == []
