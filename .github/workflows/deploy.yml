@@ -60,8 +60,9 @@ jobs:
                   print(f"pulando {nome} (vazia)")
                   continue
               subprocess.run(
-                  ["uv", "run", "fastapi", "cloud", "env", "set", nome, "--value-stdin", "--secret", "--no-redeploy"],
-                  input=valor, text=True, check=True, stdout=subprocess.DEVNULL,
+                  ["uv", "run", "fastapi", "cloud", "env", "set", nome, "--value-stdin", "--secret", "--no-redeploy",
+                   "--app-id", os.environ["FASTAPI_CLOUD_APP_ID"]],
+                  input=valor, text=True, check=True,
               )
               print(f"ok {nome}")
           EOF
