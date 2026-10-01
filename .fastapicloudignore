@@ -1,0 +1,19 @@
+# Fora do upload pro FastAPI Cloud: segredos, front, testes e infra local
+.env
+.env.*
+.infisical.json
+.venv
+.git
+.github
+.claude
+.agents
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+dist
+web
+tests
+grafana
+prometheus
+docker-compose.yml
