@@ -4,7 +4,7 @@
 `Fatos`: saída do LLM de extração, merge automático e `PUT /profile` manual.
 """
 
-from frigus_ai.schemas.models import Fatos
+from frigus_ai.domain.models import Fatos
 
 
 def test_normaliza_grafia_diferente_pro_valor_canonico():

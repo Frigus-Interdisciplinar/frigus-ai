@@ -1,21 +1,6 @@
-"""Tipos de domínio compartilhados entre services e schemas de API."""
-
-from dataclasses import dataclass
-from enum import StrEnum
+"""Memória de longo prazo: fatos estruturados do usuário e resumo de conversa."""
 
 from pydantic import BaseModel, field_validator
-
-
-class Role(StrEnum):
-    HUMAN = "human"
-    AI = "ai"
-
-
-@dataclass(frozen=True)
-class ChatMessage:
-    role: Role
-    content: str
-
 
 RESTRICOES_CANONICAS = [
     "Vegetariano",
@@ -86,3 +71,6 @@ class Fatos(BaseModel):
         for valor in valores:
             vistos.setdefault(_normalizar_restricao(valor), None)
         return list(vistos)
+
+
+__all__ = ["RESTRICOES_CANONICAS", "Fatos", "Resumo"]

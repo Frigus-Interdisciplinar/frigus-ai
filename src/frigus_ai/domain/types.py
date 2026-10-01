@@ -9,7 +9,6 @@ mas só onde vira schema Pydantic — por isso estes tipos existem para uso em
 """
 
 from typing import Annotated
-from uuid import uuid4
 
 from pydantic import Field
 
@@ -36,13 +35,8 @@ APIKey = Annotated[
 ]
 
 
-def novo_chat_id() -> str:
-    return str(uuid4())
-
-
 __all__ = [
     "APIKey", 
     "ChatID", 
-    "UserID", 
-    "novo_chat_id"
+    "UserID"
 ]

@@ -5,24 +5,37 @@ Cada classe carrega a tradução HTTP (`status_code`, `code`) e a mensagem que p
 (`public_message`). `str(exc)` é a mensagem interna: vai pro log, nunca pra resposta.
 """
 
+from enum import StrEnum
+
 from fastapi import status
 
-from frigus_ai.schemas.errors import ErrorCode
+
+class ErrorCode(StrEnum):
+    CHAT_DE_OUTRO_USUARIO = "chat_de_outro_usuario"
+    LIMITE_DE_MENSAGENS = "limite_de_mensagens"
+    FALHA_NO_AGENTE = "falha_no_agente"
+    ERRO_INTERNO = "erro_interno"
+    ERRO_NO_CHAT = "erro_no_chat"
+    ESTOQUE_ITEM_NAO_ENCONTRADO = "estoque_item_nao_encontrado"
+    QUANTIDADE_NEGATIVA = "quantidade_negativa"
+    COMPRA_ITEM_NAO_ENCONTRADO = "compra_item_nao_encontrado"
+    PRODUTO_NAO_CADASTRADO = "produto_nao_cadastrado"
+    ESTOQUE_NAO_DEFINIDO = "estoque_nao_definido"
 
 
 class FrigusError(Exception):
-    """Erro base do projeto — toda exception de domínio herda daqui."""
+    """Raiz de tudo que o projeto levanta de propósito."""
+
+
+class DomainError(FrigusError):
+    """Erro de domínio traduzível pra HTTP; subclasse só sobrescreve o que muda."""
 
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     code: ErrorCode = ErrorCode.ERRO_INTERNO
     public_message: str = "Não foi possível concluir a operação."
 
 
-class ServiceError(FrigusError):
-    """Erro base dos services."""
-
-
-class ContextoDeSessaoError(FrigusError):
+class ContextoDeSessaoError(DomainError):
     """Erro base de contexto de sessão (user_id/stock_id) do Postgres."""
 
 
@@ -40,7 +53,7 @@ class EstoqueAtualNaoDefinido(ContextoDeSessaoError):
         super().__init__("current_stock_id não definido — usuário sem grupo/estoque associado.")
 
 
-class ChatError(FrigusError):
+class ChatError(DomainError):
     """Erro base dos casos de uso de chat (services/chat/service.py)."""
 
     status_code = status.HTTP_502_BAD_GATEWAY
@@ -73,7 +86,7 @@ class LimiteDeMensagensExcedido(ChatError):
     public_message = "Limite de mensagens excedido; tente novamente em instantes."
 
 
-class EstoqueError(FrigusError):
+class EstoqueError(DomainError):
     """Erro base das operações de estoque (repositories/estoque_repository.py)."""
 
 
@@ -95,7 +108,7 @@ class QuantidadeNegativa(EstoqueError):
         super().__init__("Quantidade final não pode ser negativa.")
 
 
-class ComprasError(FrigusError):
+class ComprasError(DomainError):
     """Erro base das operações de compras (repositories/compras_repository.py)."""
 
 
@@ -119,7 +132,7 @@ class ProdutoNaoCadastrado(ComprasError):
         )
 
 
-class PreferenciasError(FrigusError):
+class PreferenciasError(DomainError):
     """Erro base das operações de preferências (repositories/preferencias_repository.py)."""
 
 
@@ -128,7 +141,7 @@ class IngredienteNaoEncontrado(PreferenciasError):
         super().__init__(f"Ingrediente {nome!r} não encontrado.")
 
 
-class AssessorError(FrigusError):
+class AssessorError(DomainError):
     """Erro base das chamadas A2A ao Assessor financeiro (infra/assessor/client.py)."""
 
 
@@ -136,7 +149,7 @@ class AssessorIndisponivel(AssessorError):
     """Assessor não configurado, fora do ar, ou respondeu algo que não dá pra usar."""
 
 
-class SpoonacularError(FrigusError):
+class SpoonacularError(DomainError):
     """Erro base das chamadas à API da Spoonacular."""
 
 
