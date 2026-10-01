@@ -1,7 +1,9 @@
 name: Deploy
 
-# Roda só depois do CI passar na main (ou manualmente). Fluxo: Infisical (fonte das envs de
-# produção) → envs do app no FastAPI Cloud → deploy.
+# Roda só depois do CI passar na main (ou manualmente). Só faz o deploy: o token de deploy do
+# FastAPI Cloud não gerencia env vars (`fastapi cloud env set` exige login de usuário), então as
+# envs de produção são aplicadas à mão (dashboard ou `fastapi cloud env set`), com o Infisical
+# como fonte.
 on:
   workflow_run:
     workflows: [CI]
@@ -34,42 +36,5 @@ jobs:
       - name: Instalar dependências
         run: uv sync --locked
 
-      - name: Baixar envs de produção do Infisical
-        uses: Infisical/secrets-action@v1.0.9
-        with:
-          method: universal
-          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
-          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
-          project-slug: frigus-ai-jf4-s
-          env-slug: prod
-          secret-path: /
-          export-type: file
-          file-output-path: /.env.infisical
-
-      - name: Sincronizar envs com o FastAPI Cloud
-        run: |
-          uv run python - <<'EOF'
-          import os
-          import subprocess
-          from dotenv import dotenv_values
-
-          # a action trata "/.env.infisical" como relativo ao workspace
-          caminho = next(c for c in (".env.infisical", "/.env.infisical") if os.path.exists(c))
-          for nome, valor in dotenv_values(caminho).items():
-              if not valor:
-                  print(f"pulando {nome} (vazia)")
-                  continue
-              subprocess.run(
-                  ["uv", "run", "fastapi", "cloud", "env", "set", nome, "--value-stdin", "--secret", "--no-redeploy",
-                   "--app-id", os.environ["FASTAPI_CLOUD_APP_ID"]],
-                  input=valor, text=True, check=True,
-              )
-              print(f"ok {nome}")
-          EOF
-
       - name: Deploy
         run: uv run fastapi deploy
-
-      - name: Limpar arquivo de envs
-        if: always()
-        run: rm -f .env.infisical
