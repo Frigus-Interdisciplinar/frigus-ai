@@ -8,13 +8,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
-from frigus_ai.api.routes import chats as rotas
-from frigus_ai.exceptions import (
+from frigus_ai.domain.errors import (
     ChatDeOutroUsuario,
     FalhaNoAgente,
     LimiteDeMensagensExcedido,
 )
 from frigus_ai.schemas.execution import AnswerReady, NodeStarted
+from frigus_ai.services.chat_service import service as chat_service
 from frigus_ai.services.user_service import user_service
 
 CHAT_ID = "chat-de-teste"
@@ -22,7 +22,7 @@ CHAT_ID = "chat-de-teste"
 
 @pytest.fixture
 def cliente(monkeypatch):
-    async def _iniciar_sessao(user_id):
+    async def _resolver_stock_id(user_id):
         return 1
 
     async def _garantir_limite(user_id):
@@ -35,12 +35,12 @@ def cliente(monkeypatch):
         """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
         return
 
-    monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
-    monkeypatch.setattr(rotas.chat_service, "garantir_limite", _garantir_limite)
-    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _validar_ownership)
+    monkeypatch.setattr(user_service, "resolver_stock_id", _resolver_stock_id)
+    monkeypatch.setattr(chat_service, "garantir_limite", _garantir_limite)
+    monkeypatch.setattr(chat_service, "validar_ownership", _validar_ownership)
     monkeypatch.setattr(user_service, "obter_ou_criar_padrao", _obter_ou_criar_padrao)
     # raise_server_exceptions=False: o handler de `Exception` genérico
-    # (api/exception_handler.py) vira o `error_handler` do ServerErrorMiddleware, que
+    # (api/errors/handlers.py) vira o `error_handler` do ServerErrorMiddleware, que
     # SEMPRE relança a exceção depois de montar a resposta (é assim que um servidor de
     # verdade loga o erro) — sem isso o TestClient propaga a exceção crua em vez de
     # devolver o 500 que o cliente HTTP realmente recebe.
@@ -51,7 +51,7 @@ def _stub_send_message(monkeypatch, erro: Exception):
     async def _falha(*args, **kwargs):
         raise erro
 
-    monkeypatch.setattr(rotas.chat_service, "send_message", _falha)
+    monkeypatch.setattr(chat_service, "send_message", _falha)
 
 
 def test_limite_de_mensagens_vira_429_com_retry_after(cliente, monkeypatch):
@@ -86,11 +86,29 @@ def test_erro_de_dominio_nao_vaza_mensagem_interna(cliente, monkeypatch):
     assert r.json()["code"] == "falha_no_agente"
 
 
+def test_request_id_ecoado_e_presente_no_erro(cliente, monkeypatch):
+    _stub_send_message(monkeypatch, FalhaNoAgente("x"))
+
+    r = cliente.post(f"/v1/chats/{CHAT_ID}/messages", json={"content": "oi"}, headers={"X-Request-ID": "abc-123"})
+
+    assert r.headers["X-Request-ID"] == "abc-123"
+    assert r.json()["request_id"] == "abc-123"
+
+
+def test_request_id_invalido_e_substituido(cliente, monkeypatch):
+    _stub_send_message(monkeypatch, FalhaNoAgente("x"))
+
+    r = cliente.post(f"/v1/chats/{CHAT_ID}/messages", json={"content": "oi"}, headers={"X-Request-ID": "a" * 200})
+
+    assert r.headers["X-Request-ID"] != "a" * 200
+    assert r.json()["request_id"] == r.headers["X-Request-ID"]
+
+
 def test_send_message_ok(cliente, monkeypatch):
     async def _ok(conteudo, chat_id, user_id, stock_id):
         return f"eco: {conteudo}"
 
-    monkeypatch.setattr(rotas.chat_service, "send_message", _ok)
+    monkeypatch.setattr(chat_service, "send_message", _ok)
 
     r = cliente.post(f"/v1/chats/{CHAT_ID}/messages", json={"content": "oi"})
 
@@ -107,8 +125,8 @@ def test_delete_chat_devolve_202_e_agenda_encerramento(cliente, monkeypatch):
     async def _encerrar(session_id, user_id):
         chamadas.append((session_id, user_id))
 
-    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _dono_ok)
-    monkeypatch.setattr(rotas.chat_service, "encerrar_sessao", _encerrar)
+    monkeypatch.setattr(chat_service, "validar_ownership", _dono_ok)
+    monkeypatch.setattr(chat_service, "encerrar_sessao", _encerrar)
 
     r = cliente.delete(f"/v1/chats/{CHAT_ID}")
 
@@ -126,8 +144,8 @@ def test_delete_chat_de_outro_dono_vira_403_e_nao_agenda_nada(cliente, monkeypat
     async def _encerrar(session_id, user_id):
         chamadas.append((session_id, user_id))
 
-    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _dono_errado)
-    monkeypatch.setattr(rotas.chat_service, "encerrar_sessao", _encerrar)
+    monkeypatch.setattr(chat_service, "validar_ownership", _dono_errado)
+    monkeypatch.setattr(chat_service, "encerrar_sessao", _encerrar)
 
     r = cliente.delete(f"/v1/chats/{CHAT_ID}")
 
@@ -148,7 +166,7 @@ def test_list_chats_devolve_schema_tipado(cliente, monkeypatch):
             }
         ]
 
-    monkeypatch.setattr(rotas.chat_service, "listar_chats", _listar)
+    monkeypatch.setattr(chat_service, "listar_chats", _listar)
 
     r = cliente.get("/v1/chats")
 
@@ -171,7 +189,7 @@ def test_stream_devolve_eventos_por_no_e_resposta(cliente, monkeypatch):
         yield NodeStarted(node="estoque_node")
         yield AnswerReady(content=f"eco: {conteudo}")
 
-    monkeypatch.setattr(rotas.chat_service, "stream_message", _stream)
+    monkeypatch.setattr(chat_service, "stream_message", _stream)
 
     with cliente.stream(
         "POST", f"/v1/chats/{CHAT_ID}/messages/stream", json={"content": "oi"}
@@ -191,7 +209,7 @@ def test_stream_com_limite_excedido_vira_429_antes_do_stream(cliente, monkeypatc
     async def _garantir_limite(user_id):
         raise LimiteDeMensagensExcedido("Você atingiu o limite.")
 
-    monkeypatch.setattr(rotas.chat_service, "garantir_limite", _garantir_limite)
+    monkeypatch.setattr(chat_service, "garantir_limite", _garantir_limite)
 
     r = cliente.post(f"/v1/chats/{CHAT_ID}/messages/stream", json={"content": "oi"})
 
@@ -209,7 +227,7 @@ def test_stream_rejeita_chat_de_outro_dono(cliente, monkeypatch):
     async def _de_outro(session_id, user_id):
         raise ChatDeOutroUsuario(session_id)
 
-    monkeypatch.setattr(rotas.chat_service, "validar_ownership", _de_outro)
+    monkeypatch.setattr(chat_service, "validar_ownership", _de_outro)
 
     resposta = cliente.post(f"/v1/chats/{CHAT_ID}/messages/stream", json={"content": "oi"})
 
@@ -221,8 +239,19 @@ def test_historico_repassa_limit_e_barra_fora_da_faixa(cliente, monkeypatch):
         _get_history.limit = limit
         return []
 
-    monkeypatch.setattr(rotas.chat_service, "get_history", _get_history)
+    monkeypatch.setattr(chat_service, "get_history", _get_history)
 
     assert cliente.get(f"/v1/chats/{CHAT_ID}/messages?limit=20").status_code == 200
     assert _get_history.limit == 20
     assert cliente.get(f"/v1/chats/{CHAT_ID}/messages?limit=500").status_code == 422
+
+
+def test_erro_de_dominio_sem_metadata_propria_vira_500_generico(cliente, monkeypatch):
+    from frigus_ai.domain.errors import SpoonacularError
+
+    _stub_send_message(monkeypatch, SpoonacularError("chave sk-123 inválida"))
+
+    r = cliente.post(f"/v1/chats/{CHAT_ID}/messages", json={"content": "oi"})
+
+    assert r.status_code == 500
+    assert "sk-123" not in r.text

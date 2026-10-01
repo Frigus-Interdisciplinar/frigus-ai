@@ -10,10 +10,10 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from frigus_ai import mcp as mcp_server
-from frigus_ai.api import auth
 from frigus_ai.api import lifespan as lifespan_module
+from frigus_ai.api import mcp as mcp_server
 from frigus_ai.api.app import app
+from frigus_ai.api.auth import dependencies as auth
 from frigus_ai.infra.postgres.context import current_stock_id, current_user_id
 
 _HEADERS = {
@@ -31,8 +31,8 @@ def cliente():
     """
 
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(auth.settings, "API_KEY_AUTH_ENABLED", True)
-        mp.setattr(auth.api_key_service, "get_user_id_by_api_key", lambda key: 42 if key == "boa" else None)
+        mp.setattr(auth.settings.api, "key_auth_enabled", True)
+        mp.setattr(auth.auth_service, "get_user_id_by_api_key", lambda key: 42 if key == "boa" else None)
         async def _resolver_stock_id(user_id):
             return 99
 

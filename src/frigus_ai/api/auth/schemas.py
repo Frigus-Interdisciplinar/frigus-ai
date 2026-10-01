@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 
-from frigus_ai.types import APIKey, UserID
+from frigus_ai.domain.types import APIKey, UserID
 
 
 class KeyCreate(BaseModel):

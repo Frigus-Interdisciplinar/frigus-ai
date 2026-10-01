@@ -7,21 +7,20 @@ a extração automática só adiciona (`user_service.atualizar_fatos_por_extraca
 
 from fastapi import APIRouter
 
-from frigus_ai.api.auth import CurrentUserDep
-from frigus_ai.schemas.models import Fatos
-from frigus_ai.services.user_service import user_service
+from frigus_ai.api.deps import CurrentUserDep, UserServiceDep
+from frigus_ai.domain.models import Fatos
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 
 @router.get("")
-async def get_profile(user_id: CurrentUserDep) -> Fatos:
-    return await user_service.buscar_fatos(user_id)
+async def get_profile(user_id: CurrentUserDep, service: UserServiceDep) -> Fatos:
+    return await service.buscar_fatos(user_id)
 
 
 @router.put("")
-async def update_profile(payload: Fatos, user_id: CurrentUserDep) -> Fatos:
-    await user_service.sobrescrever_fatos(user_id, payload)
+async def update_profile(payload: Fatos, user_id: CurrentUserDep, service: UserServiceDep) -> Fatos:
+    await service.sobrescrever_fatos(user_id, payload)
     return payload
 
 

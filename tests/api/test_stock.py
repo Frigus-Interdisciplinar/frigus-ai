@@ -8,8 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
-from frigus_ai.api.routes import stock as rotas
-from frigus_ai.exceptions import ItemDeEstoqueNaoEncontrado
+from frigus_ai.api.routes.v1 import stock as rotas
+from frigus_ai.domain.errors import ItemDeEstoqueNaoEncontrado
+from frigus_ai.repositories import estoque_repository
+from frigus_ai.services.chat_service import service as chat_service
 from frigus_ai.services.user_service import user_service
 
 
@@ -33,7 +35,7 @@ def test_create_item_calcula_status_e_devolve_201(cliente, monkeypatch):
         assert dados["product_status"] == "Fresco"
         return 42, dados["quantity"]
 
-    monkeypatch.setattr(rotas.estoque_repository, "adicionar_produto", _adicionar_produto)
+    monkeypatch.setattr(estoque_repository, "adicionar_produto", _adicionar_produto)
 
     r = cliente.post(
         "/v1/stock/items",
@@ -60,7 +62,7 @@ def test_item_nao_encontrado_vira_404(cliente, monkeypatch):
     def _atualizar_quantidade(*args, **kwargs):
         raise ItemDeEstoqueNaoEncontrado
 
-    monkeypatch.setattr(rotas.estoque_repository, "atualizar_quantidade", _atualizar_quantidade)
+    monkeypatch.setattr(estoque_repository, "atualizar_quantidade", _atualizar_quantidade)
 
     r = cliente.put("/v1/stock/items/999", json={"delta": 1})
 
@@ -92,7 +94,7 @@ def test_analisar_foto_devolve_a_resposta_do_grafo(cliente, monkeypatch):
         chamado_com["args"] = (user_id, stock_id, imagem)
         return "Você tem leite e ovos na geladeira."
 
-    monkeypatch.setattr(rotas.chat_service, "analisar_foto", _analisar_foto)
+    monkeypatch.setattr(chat_service, "analisar_foto", _analisar_foto)
 
     r = cliente.post("/v1/stock/foto", files={"foto": ("geladeira.jpg", b"conteudo-fake", "image/jpeg")})
 

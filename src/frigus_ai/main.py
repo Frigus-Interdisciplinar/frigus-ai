@@ -13,7 +13,7 @@ def main() -> None:
 
         from frigus_ai.settings import settings
 
-        uvicorn.run("frigus_ai.api.app:app", host="0.0.0.0", port=8000, reload=settings.API_RELOAD)
+        uvicorn.run("frigus_ai.api.app:app", host="0.0.0.0", port=8000, reload=settings.api.reload)
     else:
         print(f"Interface '{modo}' ainda não implementada.")
 

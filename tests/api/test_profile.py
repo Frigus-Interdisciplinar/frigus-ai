@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
-from frigus_ai.schemas.models import Fatos
+from frigus_ai.domain.models import Fatos
 from frigus_ai.services.user_service import user_service
 
 

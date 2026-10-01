@@ -45,4 +45,4 @@ if [ "$MODE" = "local" ]; then
     exit 0
 fi
 
-exec "$PYTHON" "$REPO_ROOT/main.py" "$MODE"
+exec "$PYTHON" -m frigus_ai.main "$MODE"

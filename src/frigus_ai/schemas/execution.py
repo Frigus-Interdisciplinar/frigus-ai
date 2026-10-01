@@ -1,6 +1,6 @@
 """
 Eventos da timeline de execução do agente, pra streaming via SSE
-(`POST /chats/{chat_id}/messages/stream`, ver `api/routes/chats.py`).
+(`POST /chats/{chat_id}/messages/stream`, ver `api/routes/v1/chats.py`).
 
 Nunca carregam prompt, estado interno do grafo, argumento de tool ou conteúdo cru de LLM — só
 identidade de node e a resposta final já revisada. Quem produz esses eventos é

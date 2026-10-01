@@ -1,48 +1,28 @@
-"""Configuração de segurança do fastapi-guard e middleware de métricas HTTP."""
+"""Métricas HTTP (Prometheus) por rota, com o template do path e não o path bruto."""
 
 import time
 from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, Request
+from fastapi import Request
 from fastapi.responses import Response
-from guard import SecurityConfig, SecurityDecorator, SecurityMiddleware
 
 from frigus_ai.observability.metrics import (
     ACTIVE_REQUESTS,
     HTTP_DURATION,
     HTTP_REQUESTS,
+    HTTP_UNMATCHED,
 )
-from frigus_ai.settings import settings
 
 type CallNext = Callable[[Request], Awaitable[Response]]
 
-
-def security_config() -> SecurityConfig:
-    return SecurityConfig(
-        redis_url=settings.REDIS_URL,
-        enable_rate_limiting=settings.API_KEY_AUTH_ENABLED,
-        redis_socket_connect_timeout=10.0,
-        redis_socket_timeout=10.0,
-        redis_retries=3,
-        redis_fail_open=True,
-        enable_cors=True,
-        cors_allow_origins=["*"],
-        cors_allow_methods=["GET", "POST", "PUT", "DELETE"],
-        cors_allow_headers=["*"],
-        cors_allow_credentials=False,
-        cors_expose_headers=["X-Custom-Header"],
-    )
-
-
-_config = security_config()
-guard = SecurityDecorator(_config)
+_ROTA_DESCONHECIDA = "unknown"
 
 
 def _route_template(request: Request) -> str:
     route = request.scope.get("route")
     path = getattr(route, "path", None)
 
-    return path if isinstance(path, str) else "unmatched"
+    return path if isinstance(path, str) else _ROTA_DESCONHECIDA
 
 
 async def observar_http(request: Request, call_next: CallNext) -> Response:
@@ -64,14 +44,10 @@ async def observar_http(request: Request, call_next: CallNext) -> Response:
         status_class = f"{status_code // 100}xx"
 
         ACTIVE_REQUESTS.dec()
+        if rota == _ROTA_DESCONHECIDA:
+            HTTP_UNMATCHED.labels(method=request.method).inc()
         HTTP_REQUESTS.labels(method=request.method, route=rota, status_class=status_class).inc()
         HTTP_DURATION.labels(method=request.method, route=rota).observe(duracao)
 
 
-def adicionar_middleware(app: FastAPI) -> None:
-    app.middleware("http")(observar_http)
-    if settings.API_KEY_AUTH_ENABLED:
-        app.add_middleware(SecurityMiddleware, config=_config)
-
-
-__all__ = ["adicionar_middleware", "guard", "observar_http", "security_config"]
+__all__ = ["observar_http"]

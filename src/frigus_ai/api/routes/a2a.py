@@ -109,9 +109,9 @@ AGENT_CARD = AgentCard(
         "Assistente conversacional multiagente de gestão de alimentos: estoque, "
         "compras, receitas, desperdício e FAQ do app Frigus."
     ),
-    url=f"{settings.A2A_BASE_URL}/a2a",
+    url=f"{settings.api.a2a_base_url}/a2a",
     version=_app_version,
-    provider=AgentProvider(organization="Frigus", url=settings.A2A_BASE_URL),
+    provider=AgentProvider(organization="Frigus", url=settings.api.a2a_base_url),
     capabilities=AgentCapabilities(streaming=False, push_notifications=False),
     default_input_modes=["text/plain"],
     default_output_modes=["text/plain"],
@@ -134,7 +134,7 @@ async def message_send(payload: JsonRpcRequest, user_id: CurrentUserDep) -> Json
     Erro de protocolo volta como objeto `error` do JSON-RPC (HTTP 200, como manda o
     JSON-RPC 2.0). Falha de transporte — auth, rate limit, erro interno — volta como
     status HTTP, onde um cliente A2A espera encontrá-la: `LimiteDeMensagensExcedido`
-    e qualquer exceção não tratada viram HTTP em `api/exception_handler.py`, mesma
+    e qualquer exceção não tratada viram HTTP em `api/errors/handlers.py`, mesma
     regra pra essa rota e pra `chats.py`.
 
     Exceção conhecida: body que nem chega a ser um envelope JSON-RPC válido é barrado
