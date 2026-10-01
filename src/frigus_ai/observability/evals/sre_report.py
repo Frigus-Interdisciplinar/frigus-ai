@@ -1,7 +1,7 @@
 """
 Relatório de SRE: custo estimado (100 e 1000 usuários/semana), índice de erros,
 custo por resolução e ROI — lendo os contadores Prometheus que a API já expõe
-(`evals/metrics.py`), sem tocar em código de runtime.
+(`observability/evals/metrics.py`), sem tocar em código de runtime.
 
 Definições assumidas (documentar aqui, não espalhar pelo código):
 
@@ -9,7 +9,7 @@ Definições assumidas (documentar aqui, não espalhar pelo código):
   (`frigus_graph_runs_total`) — passou pelo guardrail de saída e, quando aplicável,
   pelo juiz.
 - **Preço por token**: tabela `PRECOS_POR_1M_TOKENS` abaixo, em USD, por modelo (ver
-  `frigus_ai.models.Model`) — preços de lista publicados pelos providers no momento em
+  `frigus_ai.settings.llm.Model`) — preços de lista publicados pelos providers no momento em
   que este arquivo foi escrito. Conferir contra a página de pricing atual antes de usar
   em relatório oficial; providers mudam preço sem aviso.
 - **Volume dos cenários**: sem dado real de uso, a estimativa multiplica
@@ -17,7 +17,7 @@ Definições assumidas (documentar aqui, não espalhar pelo código):
 - **Valor por resolução** (ROI): `VALOR_POR_RESOLUCAO_USD` é placeholder — não há dado
   de negócio real (ex.: valor do desperdício evitado por resposta) ainda.
 
-Rodar: `python -m frigus_ai.evals.sre_report` (usa `settings.PROMETHEUS_URL`; só
+Rodar: `python -m frigus_ai.observability.evals.sre_report` (usa `settings.observability.prometheus_url`; só
 funciona com o Prometheus do `docker-compose.yml` no ar). `--demo` roda o self-check
 sem depender de Prometheus.
 """
@@ -27,8 +27,8 @@ from typing import NamedTuple, TypedDict
 
 import httpx
 
-from frigus_ai.models import Model
 from frigus_ai.settings import settings
+from frigus_ai.settings.llm import Model
 
 
 class PrecoPor1MTokens(NamedTuple):
@@ -79,7 +79,7 @@ class PromMetric(TypedDict):
 
 
 def _query(client: httpx.Client, promql: str) -> list[PromMetric]:
-    resp = client.get(f"{settings.PROMETHEUS_URL}/api/v1/query", params={"query": promql})
+    resp = client.get(f"{settings.observability.prometheus_url}/api/v1/query", params={"query": promql})
     resp.raise_for_status()
     return resp.json()["data"]["result"]
 

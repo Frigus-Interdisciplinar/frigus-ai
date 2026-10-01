@@ -1,11 +1,11 @@
 """
-Roda os cenários de `evals/scenarios.py` contra o grafo de verdade e agrega um relatório.
+Roda os cenários de `observability/evals/scenarios.py` contra o grafo de verdade e agrega um relatório.
 
 Precisa de infra viva: Postgres/Mongo/Redis/Qdrant no ar (`docker-compose.yml`) e pelo
 menos `GEMINI_API_KEY`/`GROQ_API_KEY` configuradas — é o mesmo caminho que uma
 mensagem via API percorre (`services/runner.py`), só que com usuário de teste dedicado.
 
-Rodar: `python -m frigus_ai.evals.run_scenarios`. `--demo` roda o self-check da lógica
+Rodar: `python -m frigus_ai.observability.evals.run_scenarios`. `--demo` roda o self-check da lógica
 de agregação/match de palavra-chave, sem tocar em infra nenhuma.
 """
 
@@ -15,7 +15,7 @@ import time
 from typing import TypedDict
 from uuid import uuid4
 
-from frigus_ai.evals.scenarios import CENARIOS, Cenario
+from frigus_ai.observability.evals.scenarios import CENARIOS, Cenario
 from frigus_ai.services import runner
 from frigus_ai.services.chat_service import service as chat_service
 from frigus_ai.services.user_service import user_service

@@ -22,6 +22,12 @@ HTTP_REQUESTS = Counter(
     labelnames=("method", "route", "status_class"),
 )
 
+HTTP_UNMATCHED = Counter(
+    "frigus_http_unmatched_total",
+    "Requests que não casaram com nenhuma rota (404 de path inexistente).",
+    labelnames=("method",),
+)
+
 HTTP_DURATION = Histogram(
     "frigus_http_request_duration_seconds",
     "Duração dos requests HTTP.",
@@ -146,6 +152,7 @@ __all__ = [
     "GUARDRAIL_DECISIONS",
     "HTTP_DURATION",
     "HTTP_REQUESTS",
+    "HTTP_UNMATCHED",
     "LLM_DURATION",
     "LLM_RUNS",
     "LLM_TOKENS",
