@@ -1,5 +1,3 @@
-from contextvars import ContextVar
-
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt
 
@@ -8,19 +6,13 @@ from frigus_ai.graph.llm import (
     llm_rapido,
 )
 from frigus_ai.graph.prompts import load_prompt
-from frigus_ai.graph.state import Roteamento
+from frigus_ai.graph.state import ContextoPrompt, Roteamento
 from frigus_ai.graph.tools import (
     COMPRAS_TOOLS,
     ESTOQUE_TOOLS,
     FAQ_TOOLS,
     FINANCEIRO_TOOLS,
     RECEITAS_TOOLS,
-)
-from frigus_ai.infra.postgres.context import current_user_id
-from frigus_ai.repositories import fatos_repository
-
-conversas_anteriores: ContextVar[tuple[str, ...]] = ContextVar(
-    "conversas_anteriores", default=()
 )
 
 
@@ -34,14 +26,17 @@ def _montar(nome: str, model, tools: list | None = None, response_format=None):
 
     @dynamic_prompt
     def _prompt(request) -> str:
-        try:
-            fatos = fatos_repository.buscar_fatos(current_user_id())
-        except Exception:
-            fatos = None
-        return load_prompt(nome, fatos=fatos, conversas=conversas_anteriores.get())
+        # Fatos e conversas chegam pré-carregados (runner) pelo `context=` do ainvoke; sem
+        # contexto (agente chamado solto), o prompt sai sem essas seções.
+        contexto = request.runtime.context or ContextoPrompt()
+        return load_prompt(nome, fatos=contexto.fatos, conversas=contexto.conversas)
 
     return create_agent(
-        model=model, tools=tools or [], middleware=[_prompt], response_format=response_format
+        model=model,
+        tools=tools or [],
+        middleware=[_prompt],
+        response_format=response_format,
+        context_schema=ContextoPrompt,
     )
 
 
@@ -56,7 +51,6 @@ orquestrador_app = _montar("orquestrador", llm_rapido)
 
 __all__ = [
     "compras_app",
-    "conversas_anteriores",
     "estoque_app",
     "faq_app",
     "financeiro_app",

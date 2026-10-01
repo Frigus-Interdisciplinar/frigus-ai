@@ -11,9 +11,14 @@ saída expõe só `messages`.
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from frigus_ai.exceptions import AssessorIndisponivel
+from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.graph import builder
-from frigus_ai.graph.guardrail.schemas import Categoria, Classificacao
+from frigus_ai.graph.guardrail.schemas import (
+    Categoria,
+    Classificacao,
+    RevisaoCompliance,
+)
+from frigus_ai.graph.nodes.juiz import VereditoJuiz
 from frigus_ai.graph.state import EntradaGrafo, Roteamento
 
 
@@ -24,7 +29,7 @@ class _FakeAgente:
         self._texto = texto
         self.chamadas = 0
 
-    async def ainvoke(self, entrada):
+    async def ainvoke(self, entrada, **_kwargs):
         self.chamadas += 1
         return {"messages": [*entrada["messages"], AIMessage(content=self._texto)]}
 
@@ -36,18 +41,19 @@ class _FakeRoteador:
         self._roteamento = roteamento
         self.chamadas = 0
 
-    async def ainvoke(self, entrada):
+    async def ainvoke(self, entrada, **_kwargs):
         self.chamadas += 1
         return {"messages": entrada["messages"], "structured_response": self._roteamento}
 
 
 class _FakeLLM:
+    """Devolve os objetos estruturados em sequência; o último se repete."""
+
     def __init__(self, respostas):
         self._respostas = list(respostas)
 
     async def ainvoke(self, _entrada):
-        texto = self._respostas.pop(0) if len(self._respostas) > 1 else self._respostas[0]
-        return AIMessage(content=texto)
+        return self._respostas.pop(0) if len(self._respostas) > 1 else self._respostas[0]
 
 
 class _FakeClassificador:
@@ -78,11 +84,13 @@ def grafo(monkeypatch):
     # Guardrail de entrada aprova, guardrail de saída devolve o texto revisado.
     monkeypatch.setattr(entrada_mod, "llm_classificador", _FakeClassificador())
     monkeypatch.setattr(
-        saida_mod, "llm_rapido", _FakeLLM(["RESPOSTA: Você tem leite na geladeira."])
+        saida_mod,
+        "llm_revisor",
+        _FakeLLM([RevisaoCompliance(revisada="Você tem leite na geladeira.", modificada=False)]),
     )
 
     def compilar(vereditos):
-        monkeypatch.setattr(no_juiz_mod, "llm_juiz", _FakeLLM(vereditos))
+        monkeypatch.setattr(no_juiz_mod, "llm_avaliador", _FakeLLM(vereditos))
         return builder._construir_grafo().compile()
 
     return compilar, agentes
@@ -90,7 +98,7 @@ def grafo(monkeypatch):
 
 async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
     compilar, agentes = grafo
-    app = compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])
+    app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
     saida = await app.ainvoke(
         EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")])
@@ -105,8 +113,8 @@ async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
 async def test_juiz_reprovado_volta_pro_especialista_de_origem(grafo):
     compilar, agentes = grafo
     app = compilar([
-        "VEREDITO: REPROVADO\nJUSTIFICATIVA: faltou citar a validade",
-        "VEREDITO: APROVADO\nJUSTIFICATIVA: ok",
+        VereditoJuiz(veredito="REPROVADO", justificativa="faltou citar a validade"),
+        VereditoJuiz(veredito="APROVADO", justificativa="ok"),
     ])
 
     await app.ainvoke(EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")]))
@@ -119,7 +127,7 @@ async def test_agentes_chamados_acumula_sem_ser_semeado_na_entrada(grafo):
     """`agentes_chamados` não está em EntradaGrafo: quem cria a lista é o reducer operator.add."""
 
     compilar, _ = grafo
-    app = compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])
+    app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
     estado = await app.ainvoke(
         EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")]),
@@ -171,7 +179,7 @@ async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypat
     monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
 
     compilar, agentes = grafo
-    app = compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])
+    app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
     await app.ainvoke(
         EntradaGrafo(
@@ -203,8 +211,8 @@ async def test_juiz_reprovado_em_turno_de_foto_volta_pra_visao(grafo, monkeypatc
 
     compilar, _ = grafo
     app = compilar([
-        "VEREDITO: REPROVADO\nJUSTIFICATIVA: não listou os itens",
-        "VEREDITO: APROVADO\nJUSTIFICATIVA: ok",
+        VereditoJuiz(veredito="REPROVADO", justificativa="não listou os itens"),
+        VereditoJuiz(veredito="APROVADO", justificativa="ok"),
     ])
 
     await app.ainvoke(
@@ -230,7 +238,7 @@ async def test_plano_de_economia_vai_pro_assessor_e_passa_pelo_juiz(grafo, monke
     monkeypatch.setattr(assessor_mod.assessor, "perguntar", _perguntar)
 
     compilar, _ = grafo
-    app = compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])
+    app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
     interno = await app.ainvoke(
         EntradaGrafo(messages=[HumanMessage(content="como economizo no mercado?")]),
@@ -257,7 +265,7 @@ async def test_assessor_fora_do_ar_responde_limpo_sem_passar_pelo_juiz(grafo, mo
     monkeypatch.setattr(assessor_mod.assessor, "perguntar", _fora_do_ar)
 
     compilar, _ = grafo
-    app = compilar(["VEREDITO: REPROVADO\nJUSTIFICATIVA: não deveria ser chamado"])
+    app = compilar([VereditoJuiz(veredito="REPROVADO", justificativa="não deveria ser chamado")])
 
     interno = await app.ainvoke(
         EntradaGrafo(messages=[HumanMessage(content="como economizo no mercado?")]),
@@ -296,7 +304,7 @@ async def test_stream_do_runner_transmite_o_caminho_do_assessor(grafo, monkeypat
     monkeypatch.setattr(chat_embeddings_repository, "buscar_resumos_relevantes", _sem_conversas)
 
     compilar, _ = grafo
-    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])))
+    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])))
 
     eventos = [e async for e in runner.executar_stream("como economizo?", "chat-9", 7, None)]
 
@@ -328,7 +336,7 @@ async def test_stream_do_runner_transmite_a_rota_da_visao(grafo, monkeypatch):
 
     monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
     compilar, _ = grafo
-    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar(["VEREDITO: APROVADO\nJUSTIFICATIVA: ok"])))
+    monkeypatch.setattr(runner, "fluxo_agentes", _Fluxo(compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])))
 
     eventos = [
         e async for e in runner.executar_stream("foto", "visao-7-x", 7, None, imagem_b64="ZmFrZQ==")

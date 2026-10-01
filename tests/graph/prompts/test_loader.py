@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from frigus_ai.graph import prompts
 from frigus_ai.graph.prompts import load_sections
 
@@ -92,3 +94,10 @@ def test_load_prompt_carrega_a_data_do_momento_da_chamada():
     prompt = prompts.load_prompt("estoque")
 
     assert datetime.now(UTC).astimezone().strftime("%d de") in prompt
+
+
+def test_load_prompt_sem_secao_papel_levanta(monkeypatch):
+    monkeypatch.setattr(prompts, "_ler", lambda _nome: ({}, {"shots": "x"}))
+
+    with pytest.raises(ValueError, match="PAPEL"):
+        prompts.load_prompt("sem_papel")

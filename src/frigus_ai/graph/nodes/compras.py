@@ -1,13 +1,17 @@
 from frigus_ai.graph.agents import compras_app
 from frigus_ai.graph.names import COMPRAS
-from frigus_ai.graph.nodes.contexto import mensagens_do_turno, responder
+from frigus_ai.graph.nodes.contexto import (
+    contexto_do_estado,
+    mensagens_do_turno,
+    responder,
+)
 from frigus_ai.graph.state import EspecialistaUpdate, Estado
-from frigus_ai.observability.metrics import medir_node
+from frigus_ai.observability import medir_node
 
 
 @medir_node(COMPRAS)
 async def no_compras(estado: Estado) -> EspecialistaUpdate:
-    resposta = await responder(compras_app, mensagens_do_turno(estado))
+    resposta = await responder(compras_app, mensagens_do_turno(estado), contexto_do_estado(estado))
 
     return EspecialistaUpdate(
         agentes_chamados=[COMPRAS],

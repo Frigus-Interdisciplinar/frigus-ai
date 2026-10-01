@@ -10,8 +10,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from frigus_ai.infra.qdrant.connection import get_embeddings, get_qdrant_client
-from frigus_ai.logging import Logging
+from frigus_ai.infra.logging import Logging
+from frigus_ai.infra.qdrant import get_embeddings, get_qdrant_client
 from frigus_ai.settings import settings
 
 logger = Logging.get_logger("qdrant_faq_ingest")
@@ -32,9 +32,9 @@ def _load_chunks() -> list:
 
 
 def _ensure_collection_exists(client: QdrantClient, vector_size: int) -> None:
-    if not client.collection_exists(settings.QDRANT_COLLECTION_NAME):
+    if not client.collection_exists(settings.database.qdrant_collection_name):
         client.create_collection(
-            collection_name=settings.QDRANT_COLLECTION_NAME,
+            collection_name=settings.database.qdrant_collection_name,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
 
@@ -65,9 +65,9 @@ def ingest() -> None:
         for texto, vetor, chunk in zip(textos, vetores, chunks, strict=True)
     ]
 
-    client.upsert(collection_name=settings.QDRANT_COLLECTION_NAME, points=pontos)
+    client.upsert(collection_name=settings.database.qdrant_collection_name, points=pontos)
 
-    logger.info("INGESTÃO OK | collection=%s chunks=%d", settings.QDRANT_COLLECTION_NAME, len(chunks))
+    logger.info("INGESTÃO OK | collection=%s chunks=%d", settings.database.qdrant_collection_name, len(chunks))
 
 
 if __name__ == "__main__":

@@ -18,9 +18,9 @@ import hashlib
 import re
 import time
 
+from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.redis.connection import get_client
 from frigus_ai.infra.redis.keys import GUARDRAIL_TTL_TIME, chave_guardrail
-from frigus_ai.logging import Logging
 
 logger = Logging.get_logger("redis_guardrail")
 

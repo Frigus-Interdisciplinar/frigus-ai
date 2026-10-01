@@ -27,6 +27,13 @@ class Classificacao(BaseModel):
     justificativa: str
 
 
+class RevisaoCompliance(BaseModel):
+    """Saída estruturada da revisão de compliance do guardrail de saída."""
+
+    revisada:  str
+    modificada: bool
+
+
 Motivo = Literal[
     "prompt_injection",
     "acesso_dados_internos",
@@ -91,4 +98,5 @@ __all__ = [
     "Motivo",
     "RespostaBloqueio",
     "ResultadoGuardrail",
+    "RevisaoCompliance",
 ]

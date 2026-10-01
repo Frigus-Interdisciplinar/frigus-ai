@@ -6,7 +6,7 @@ responsabilidade de repositories/estoque_repository.py.
 
 from datetime import date, timedelta
 
-from frigus_ai.exceptions import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
+from frigus_ai.domain.errors import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
 from frigus_ai.graph.tools.estoque.repo import EstoqueRepo
 from frigus_ai.infra.postgres.context import session_context
 from frigus_ai.repositories import estoque_repository

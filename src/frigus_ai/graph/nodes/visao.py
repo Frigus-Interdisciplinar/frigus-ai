@@ -12,12 +12,12 @@ valor fora da lista (não é só uma checagem depois, é uma restrição na pró
 
 from langchain_core.messages import HumanMessage
 
-from frigus_ai.exceptions import FalhaNoAgente
+from frigus_ai.domain.errors import FalhaNoAgente
 from frigus_ai.graph.llm import llm_visao
 from frigus_ai.graph.names import VISAO
 from frigus_ai.graph.prompts import load_prompt
 from frigus_ai.graph.state import Estado, Route, VisaoUpdate
-from frigus_ai.observability.metrics import medir_node
+from frigus_ai.observability import medir_node
 
 
 @medir_node(VISAO)

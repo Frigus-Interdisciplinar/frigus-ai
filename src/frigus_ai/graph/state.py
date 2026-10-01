@@ -1,14 +1,16 @@
 import operator
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Annotated, Literal, NotRequired, TypedDict, get_args
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
 from pydantic import BaseModel, Field
 
+from frigus_ai.domain.models import Fatos
+from frigus_ai.domain.privacy import MapaPII
 from frigus_ai.graph.names import NodeLiteral
 from frigus_ai.graph.tools.estoque.schemas import Category, StoragePlace
-from frigus_ai.privacy import MapaPII
 
 type AsyncNode[R] = Callable[[Estado], Awaitable[R]]
 
@@ -49,11 +51,24 @@ class Roteamento(BaseModel):
     )
 
 
+@dataclass(frozen=True)
+class ContextoPrompt:
+    """Contexto de runtime dos agentes (`context_schema` do `create_agent`): vira seção do
+    system prompt em `dynamic_prompt`. Nunca guarda nada de permissão — escopo é ContextVar."""
+
+    fatos:     Fatos | None = None
+    conversas: tuple[str, ...] = ()
+
+
 class EntradaGrafo(MessagesState):
     """Único formato aceito ao iniciar um turno — impede injetar campos internos do estado."""
 
-    stock_id:       NotRequired[int | None]
-    imagem_b64:     NotRequired[str]
+    stock_id:             NotRequired[int | None]
+    imagem_b64:           NotRequired[str]
+    # Pré-carregados fora do event loop pelo runner. `fatos` é o `model_dump` de `Fatos`
+    # (dict puro: o checkpointer msgpack não aceita modelo Pydantic sem allowlist).
+    fatos:                NotRequired[dict[str, list[str]]]
+    conversas_anteriores: NotRequired[list[str]]
 
 
 class Estado(MessagesState):
@@ -66,6 +81,8 @@ class Estado(MessagesState):
     mensagem_bloqueada:    NotRequired[str | None]
     stock_id:              NotRequired[int | None]
     imagem_b64:            NotRequired[str]
+    fatos:                 NotRequired[dict[str, list[str]]]
+    conversas_anteriores:  NotRequired[list[str]]
 
     # Juiz (LLM-as-judge)
     tentativas_juiz:    NotRequired[int]
