@@ -9,7 +9,11 @@ from fastapi.testclient import TestClient
 
 from frigus_ai.api.app import app
 from frigus_ai.api.routes import chats as rotas
-from frigus_ai.exceptions import ChatDeOutroUsuario, LimiteDeMensagensExcedido
+from frigus_ai.exceptions import (
+    ChatDeOutroUsuario,
+    FalhaNoAgente,
+    LimiteDeMensagensExcedido,
+)
 from frigus_ai.schemas.execution import AnswerReady, NodeStarted
 from frigus_ai.services.user_service import user_service
 
@@ -69,6 +73,17 @@ def test_erro_generico_vira_500_sem_vazar_mensagem_interna(cliente, monkeypatch)
     assert r.status_code == 500
     assert interno not in r.text
     assert r.json()["detail"] == "Erro interno inesperado."
+
+
+def test_erro_de_dominio_nao_vaza_mensagem_interna(cliente, monkeypatch):
+    interno = "Modelo X quebrou em http://interno:9000/segredo"
+    _stub_send_message(monkeypatch, FalhaNoAgente(interno))
+
+    r = cliente.post(f"/v1/chats/{CHAT_ID}/messages", json={"content": "oi"})
+
+    assert r.status_code == 502
+    assert interno not in r.text
+    assert r.json()["code"] == "falha_no_agente"
 
 
 def test_send_message_ok(cliente, monkeypatch):
