@@ -158,3 +158,12 @@ def test_revoke_devolve_204(cliente, monkeypatch):
 
     assert r.status_code == 204
     assert revogadas == ["u-7"]
+
+
+def test_openapi_separa_api_key_do_signup_secret(cliente):
+    client, _ = cliente
+
+    schemes = client.get("/openapi.json").json()["components"]["securitySchemes"]
+
+    assert schemes["ApiKey"]["name"] == "X-API-Key"
+    assert schemes["SignupSecret"]["name"] == "X-Signup-Secret"

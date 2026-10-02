@@ -14,8 +14,8 @@ from frigus_ai.services.auth_service import auth_service
 from frigus_ai.services.user_service import user_service
 from frigus_ai.settings import settings
 
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-_signup_secret_header = APIKeyHeader(name="X-Signup-Secret", auto_error=False)
+_api_key_header = APIKeyHeader(name="X-API-Key", scheme_name="ApiKey", auto_error=False)
+_signup_secret_header = APIKeyHeader(name="X-Signup-Secret", scheme_name="SignupSecret", auto_error=False)
 
 
 async def resolver_usuario(api_key: str | None) -> str | None:
