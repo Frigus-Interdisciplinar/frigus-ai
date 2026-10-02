@@ -31,6 +31,7 @@ async def list_items(
     status_code=status.HTTP_201_CREATED,
     summary="Adicionar item à lista",
     responses={
+        422: {"description": "Produto fora do catálogo sem `category` e `storage_place`."},
         429: {"description": "Limite de 10 por minuto."},
     },
 )
@@ -38,6 +39,11 @@ async def list_items(
 async def create_item(
     payload: ShoppingItemCreate, stock_id: StockIdDep, service: ShoppingServiceDep
 ) -> ShoppingItemCreateResponse:
+    """
+    Produto que já está no catálogo só precisa de `product_name` e `quantity`. Produto novo exige
+    também `category` e `storage_place`, que o cadastram no catálogo.
+    """
+
     return await service.adicionar(stock_id, payload)
 
 

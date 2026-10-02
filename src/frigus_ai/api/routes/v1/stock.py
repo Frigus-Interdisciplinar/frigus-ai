@@ -66,6 +66,13 @@ async def list_items(
 async def create_item(
     payload: StockItemCreate, stock_id: StockIdDep, service: StockServiceDep
 ) -> StockItemCreateResponse:
+    """
+    Produto novo entra no catálogo com a `category`, o `storage_place` e o `unit_price` enviados.
+    Produto que já existe no catálogo (mesmo nome, sem diferenciar maiúsculas) mantém o
+    `storage_place` e o `unit_price` do catálogo; os enviados são ignorados.
+    Mesmo produto com a mesma `expire_date` soma `quantity` ao item existente em vez de duplicar.
+    """
+
     return await service.criar(stock_id, payload)
 
 

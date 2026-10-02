@@ -25,6 +25,11 @@ def create_app() -> FastAPI:
                mensagem. Use `/messages/stream` para acompanhar a execução dos agentes via SSE.
 
             Rotas com limite de requisições devolvem `429` ao excedê-lo.
+
+            ## Erros
+
+            Erros de regra de negócio vêm como `{"detail": "...", "code": "...", "request_id": "..."}`.
+            Erros de validação (`422`) trazem `detail` como lista, com o campo e o motivo de cada falha.
         """),
         openapi_tags=[
             {"name": "keys", "description": "Emissão, rotação e revogação de API key."},
