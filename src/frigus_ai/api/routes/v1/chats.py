@@ -28,7 +28,7 @@ from frigus_ai.schemas.chat import (
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
-ChatIdPath = Annotated[str, Path(description="Id do chat, devolvido por `POST /v1/chats`.")]
+ChatIdPath = Annotated[str, Path(description="Id do chat, devolvido por `POST /v1/chats`. Um id novo é criado no primeiro envio.")]
 
 
 async def _dono_do_chat_dentro_do_limite(chat_id: ChatIdPath, user_id: CurrentUserDep, chat: ChatServiceDep) -> str:
@@ -123,7 +123,7 @@ async def get_messages(
     chat: ChatServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 5,
 ) -> list[MessageResponse]:
-    """Últimas `limit` mensagens (1–100, padrão 5)."""
+    """Últimas `limit` mensagens (1–100, padrão 5). Chat inexistente devolve lista vazia."""
 
     await chat.validar_ownership(chat_id, user_id)
     historico = await chat.get_history(chat_id, user_id, limit)
