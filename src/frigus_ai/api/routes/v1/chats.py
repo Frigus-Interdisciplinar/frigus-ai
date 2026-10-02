@@ -47,14 +47,23 @@ async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep, 
 DonoComLimiteDep = Annotated[str, Depends(_dono_do_chat_dentro_do_limite)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Criar chat")
 async def create_chat(user_id: CurrentUserDep, stock_id: OptionalStockIdDep, chat: ChatServiceDep) -> ChatCreateResponse:
+    """Abre um chat novo e devolve o `chat_id`."""
+
     chat_id = await chat.criar_chat(user_id)
 
     return ChatCreateResponse(chat_id=chat_id, stock_id=stock_id)
 
 
-@router.post("/{chat_id}/messages")
+@router.post(
+    "/{chat_id}/messages",
+    summary="Enviar mensagem",
+    responses={
+        403: {"description": "O chat não pertence ao usuário."},
+        429: {"description": "Limite de mensagens excedido; ver `Retry-After`."},
+    },
+)
 async def send_message(
     chat_id: str,
     payload: MessageCreate,
@@ -62,6 +71,11 @@ async def send_message(
     stock_id: OptionalStockIdDep,
     chat: ChatServiceDep,
 ) -> ChatMessageResponse:
+    """
+    Envia a mensagem ao assistente e devolve a resposta completa.
+    `stock_id` no corpo sobrescreve o estoque padrão.
+    """
+
     await chat.validar_ownership(chat_id, user_id)
     stock_id = payload.stock_id if payload.stock_id is not None else stock_id
     resposta = await chat.send_message(payload.content, chat_id, user_id, stock_id)
@@ -69,7 +83,15 @@ async def send_message(
     return ChatMessageResponse(chat_id=chat_id, content=resposta)
 
 
-@router.post("/{chat_id}/messages/stream", response_class=EventSourceResponse)
+@router.post(
+    "/{chat_id}/messages/stream",
+    response_class=EventSourceResponse,
+    summary="Enviar mensagem (streaming SSE)",
+    responses={
+        403: {"description": "O chat não pertence ao usuário."},
+        429: {"description": "Limite de mensagens excedido; ver `Retry-After`."},
+    },
+)
 async def stream_message(
     chat_id: str,
     payload: MessageCreate,
@@ -86,13 +108,21 @@ async def stream_message(
         yield ServerSentEvent(data=evento, event=evento.type)
 
 
-@router.get("/{chat_id}/messages")
+@router.get(
+    "/{chat_id}/messages",
+    summary="Histórico do chat",
+    responses={
+        403: {"description": "O chat não pertence ao usuário."},
+    },
+)
 async def get_messages(
     chat_id: str,
     user_id: CurrentUserDep,
     chat: ChatServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 5,
 ) -> list[MessageResponse]:
+    """Últimas `limit` mensagens (1–100, padrão 5)."""
+
     await chat.validar_ownership(chat_id, user_id)
     historico = await chat.get_history(chat_id, user_id, limit)
 
@@ -102,8 +132,10 @@ async def get_messages(
     ]
 
 
-@router.get("")
+@router.get("", summary="Listar chats")
 async def list_chats(user_id: CurrentUserDep, chat: ChatServiceDep) -> list[ChatSummaryResponse]:
+    """Chats do usuário, com resumo e datas."""
+
     chats = await chat.listar_chats(user_id)
     return [
         ChatSummaryResponse(
@@ -116,7 +148,14 @@ async def list_chats(user_id: CurrentUserDep, chat: ChatServiceDep) -> list[Chat
     ]
 
 
-@router.delete("/{chat_id}", status_code=status.HTTP_202_ACCEPTED)
+@router.delete(
+    "/{chat_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Encerrar chat",
+    responses={
+        403: {"description": "O chat não pertence ao usuário."},
+    },
+)
 async def close_chat(
     chat_id: str, user_id: CurrentUserDep, chat: ChatServiceDep, background_tasks: BackgroundTasks
 ) -> None:

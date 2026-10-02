@@ -15,8 +15,14 @@ router = APIRouter(prefix="/health", tags=["health"])
 logger = Logging.get_logger(__name__)
 
 
-@router.get("/live", status_code=status.HTTP_200_OK)
+@router.get(
+    "/live",
+    status_code=status.HTTP_200_OK,
+    summary="Liveness",
+)
 def liveness() -> HealthCheckResponse:
+    """O processo está de pé; não checa dependências."""
+
     return HealthCheckResponse(status="ok", message="service is running")
 
 
@@ -54,8 +60,18 @@ def _verificar_dependencias() -> dict[str, bool]:
     return checks
 
 
-@router.get("/ready", status_code=status.HTTP_200_OK, response_model=HealthCheckResponse)
+@router.get(
+    "/ready",
+    status_code=status.HTTP_200_OK,
+    response_model=HealthCheckResponse,
+    summary="Readiness",
+    responses={
+        503: {"model": HealthCheckResponse, "description": "Alguma dependência fora do ar."},
+    },
+)
 async def readiness():
+    """Pinga Postgres, Mongo, Redis e Qdrant. `503` se qualquer um estiver fora; `checks` diz qual."""
+
     checks = await asyncio.to_thread(_verificar_dependencias)
 
     if not all(checks.values()):

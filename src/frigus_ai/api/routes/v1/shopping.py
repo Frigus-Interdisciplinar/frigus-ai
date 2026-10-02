@@ -14,14 +14,26 @@ from frigus_ai.schemas.shopping import (
 router = APIRouter(prefix="/shopping-list", tags=["shopping-list"])
 
 
-@router.get("/items")
+@router.get(
+    "/items",
+    summary="Listar lista de compras",
+)
 async def list_items(
     stock_id: StockIdDep, service: ShoppingServiceDep, status_filtro: str | None = None
 ) -> list[ShoppingItemResponse]:
+    """`status_filtro` opcional filtra pelo status do item."""
+
     return await service.listar(stock_id, status_filtro)
 
 
-@router.post("/items", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/items",
+    status_code=status.HTTP_201_CREATED,
+    summary="Adicionar item à lista",
+    responses={
+        429: {"description": "Limite de 10 por minuto."},
+    },
+)
 @guard.rate_limit(requests=10, window=60)
 async def create_item(
     payload: ShoppingItemCreate, stock_id: StockIdDep, service: ShoppingServiceDep
@@ -29,7 +41,13 @@ async def create_item(
     return await service.adicionar(stock_id, payload)
 
 
-@router.put("/items/{item_id}/bought")
+@router.put(
+    "/items/{item_id}/bought",
+    summary="Marcar item como comprado",
+    responses={
+        429: {"description": "Limite de 30 por minuto."},
+    },
+)
 @guard.rate_limit(requests=30, window=60)
 async def mark_bought(
     item_id: int, stock_id: StockIdDep, service: ShoppingServiceDep
