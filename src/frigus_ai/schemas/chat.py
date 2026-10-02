@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from frigus_ai.domain.models import Role as DomainRole
 from frigus_ai.domain.types import ChatID
@@ -24,8 +24,13 @@ class ChatCreateResponse(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1, max_length=4000)
-    stock_id: int | None = None
+    model_config = ConfigDict(json_schema_extra={"examples": [{"content": "Quais receitas posso fazer hoje?"}]})
+
+    content: str = Field(min_length=1, max_length=4000, description="Mensagem para o assistente.")
+    stock_id: int | None = Field(
+        default=None,
+        description="Opcional. Sobrescreve o estoque padrão do usuário; se omitido, usa o padrão.",
+    )
 
 
 class MessageResponse(BaseModel):

@@ -13,7 +13,7 @@ aqui, mesma regra pra essa rota e pra `a2a.py`.
 from collections.abc import AsyncIterable
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from frigus_ai.api.deps import ChatServiceDep, CurrentUserDep, OptionalStockIdDep
@@ -28,8 +28,10 @@ from frigus_ai.schemas.chat import (
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
+ChatIdPath = Annotated[str, Path(description="Id do chat, devolvido por `POST /v1/chats`.")]
 
-async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep, chat: ChatServiceDep) -> str:
+
+async def _dono_do_chat_dentro_do_limite(chat_id: ChatIdPath, user_id: CurrentUserDep, chat: ChatServiceDep) -> str:
     """
     Dono do chat + rate limit do caminho SSE. Vai numa dependência, e não no corpo da
     rota, porque o corpo de um gerador só roda depois que o status HTTP saiu — 403/429
@@ -65,7 +67,7 @@ async def create_chat(user_id: CurrentUserDep, stock_id: OptionalStockIdDep, cha
     },
 )
 async def send_message(
-    chat_id: str,
+    chat_id: ChatIdPath,
     payload: MessageCreate,
     user_id: CurrentUserDep,
     stock_id: OptionalStockIdDep,
@@ -93,7 +95,7 @@ async def send_message(
     },
 )
 async def stream_message(
-    chat_id: str,
+    chat_id: ChatIdPath,
     payload: MessageCreate,
     user_id: DonoComLimiteDep,
     stock_id: OptionalStockIdDep,
@@ -116,7 +118,7 @@ async def stream_message(
     },
 )
 async def get_messages(
-    chat_id: str,
+    chat_id: ChatIdPath,
     user_id: CurrentUserDep,
     chat: ChatServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 5,
@@ -157,7 +159,7 @@ async def list_chats(user_id: CurrentUserDep, chat: ChatServiceDep) -> list[Chat
     },
 )
 async def close_chat(
-    chat_id: str, user_id: CurrentUserDep, chat: ChatServiceDep, background_tasks: BackgroundTasks
+    chat_id: ChatIdPath, user_id: CurrentUserDep, chat: ChatServiceDep, background_tasks: BackgroundTasks
 ) -> None:
     """
     202 porque `encerrar_sessao` pode disparar chamada de LLM (fatos/resumo do rabo
