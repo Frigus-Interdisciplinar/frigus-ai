@@ -29,3 +29,7 @@ fix:
 test:
     @echo "Running tests"
     {{python}} -m pytest
+
+deploy:
+    @echo "Deploy manual no FastAPI Cloud (precisa de fastapi cloud login)"
+    uvx "fastapi[standard]" deploy --app-id 1d76fa27-f906-4699-85cb-aa1a5e730341
