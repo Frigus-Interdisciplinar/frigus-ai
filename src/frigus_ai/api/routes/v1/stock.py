@@ -30,7 +30,10 @@ router = APIRouter(prefix="/stock", tags=["stock"])
 _MAX_FOTO_BYTES = 8 * 1024 * 1024
 
 
-@router.get("/items")
+@router.get(
+    "/items",
+    summary="Listar itens do estoque",
+)
 async def list_items(
     stock_id: StockIdDep,
     service: StockServiceDep,
@@ -39,6 +42,8 @@ async def list_items(
     product_status: str | None = None,
     product_name: str | None = None,
 ) -> list[StockItemResponse]:
+    """Filtros opcionais por local, categoria, status e nome."""
+
     filtros = FiltrosEstoque(
         storage_place=storage_place,
         category=category,
@@ -49,7 +54,14 @@ async def list_items(
     return await service.listar(stock_id, filtros)
 
 
-@router.post("/items", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/items",
+    status_code=status.HTTP_201_CREATED,
+    summary="Adicionar item ao estoque",
+    responses={
+        429: {"description": "Limite de 10 por minuto."},
+    },
+)
 @guard.rate_limit(requests=10, window=60)
 async def create_item(
     payload: StockItemCreate, stock_id: StockIdDep, service: StockServiceDep
@@ -57,7 +69,13 @@ async def create_item(
     return await service.criar(stock_id, payload)
 
 
-@router.put("/items/{item_id}")
+@router.put(
+    "/items/{item_id}",
+    summary="Atualizar quantidade do item",
+    responses={
+        429: {"description": "Limite de 30 por minuto."},
+    },
+)
 @guard.rate_limit(requests=30, window=60)
 async def update_item(
     item_id: int,
@@ -69,7 +87,13 @@ async def update_item(
     return await service.atualizar_quantidade(stock_id, user_id, item_id, payload)
 
 
-@router.delete("/items/{item_id}")
+@router.delete(
+    "/items/{item_id}",
+    summary="Descartar item",
+    responses={
+        429: {"description": "Limite de 10 por minuto."},
+    },
+)
 @guard.rate_limit(requests=10, window=60)
 async def delete_item(
     item_id: int,
@@ -78,10 +102,20 @@ async def delete_item(
     service: StockServiceDep,
     reason: str = Query(default="Removido"),
 ) -> StockItemDiscardResponse:
+    """Remove o item do estoque registrando o motivo (`reason`)."""
+
     return await service.descartar(stock_id, user_id, item_id, reason)
 
 
-@router.post("/foto")
+@router.post(
+    "/foto",
+    summary="Analisar foto",
+    responses={
+        413: {"description": "Foto maior que 8MB."},
+        415: {"description": "O arquivo não é uma imagem."},
+        429: {"description": "Limite de 5 por minuto."},
+    },
+)
 @guard.rate_limit(requests=5, window=60)
 async def analisar_foto(
     foto: UploadFile, user_id: CurrentUserDep, stock_id: StockIdDep, chat: ChatServiceDep

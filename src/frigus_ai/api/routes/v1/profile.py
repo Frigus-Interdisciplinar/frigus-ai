@@ -13,13 +13,18 @@ from frigus_ai.domain.models import Fatos
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 
-@router.get("")
+@router.get("", summary="Ver perfil alimentar")
 async def get_profile(user_id: CurrentUserDep, service: UserServiceDep) -> Fatos:
     return await service.buscar_fatos(user_id)
 
 
-@router.put("")
+@router.put(
+    "",
+    summary="Atualizar perfil alimentar",
+)
 async def update_profile(payload: Fatos, user_id: CurrentUserDep, service: UserServiceDep) -> Fatos:
+    """Substitui o perfil inteiro; é o único caminho que remove uma alergia."""
+
     await service.sobrescrever_fatos(user_id, payload)
     return payload
 
