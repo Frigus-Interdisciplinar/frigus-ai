@@ -1,9 +1,5 @@
-"""
-Persistência crua da coleção `agent_chats`: histórico de mensagens e resumo de sessão
-no Mongo. Sem decisão de negócio nem chamada de LLM — isso fica em
-`services/chat_service.py` (que atualiza o resumo periodicamente durante a conversa,
-ver `_talvez_atualizar_memoria`).
-"""
+"""Persistência crua da coleção `agent_chats` (histórico e resumo de sessão no Mongo).
+A regra de negócio e o LLM ficam em `services/chat_service.py`."""
 
 import asyncio
 from dataclasses import dataclass
@@ -289,8 +285,7 @@ def _buscar_documento_completo(session_id: str, user_id: str) -> ChatDocument | 
 
 
 # --- API pública ------------------------------------------------------------
-# Só `buscar_historico`/`salvar_mensagens` levam @traceable + redação: são as únicas
-# operações que carregam conteúdo de conversa (PII). As demais só manipulam IDs.
+# Só `buscar_historico`/`salvar_mensagens` levam @traceable + redação de PII (carregam conversa).
 
 async def criar_chat(session_id: str, user_id: str) -> None:
     await _chat_repository.criar_chat(session_id, user_id)

@@ -1,17 +1,7 @@
 """
-Cache da classificação do guardrail de entrada.
-
-O caminho determinístico (`padroes.py`) já evita a LLM nos casos óbvios, mas TODA mensagem
-legítima ainda pagava uma chamada de modelo só pra ouvir "APROVADO". Num assistente de
-geladeira as perguntas se repetem muito ("o que vence essa semana?"), então classificar o
-mesmo texto de novo é gasto puro.
-
-Cachear veredito é seguro — e até deixa a decisão mais estável, já que tira a variação do
-modelo entre execuções idênticas. Duas proteções contra veredito velho:
-
-- a chave carrega o fingerprint do prompt do classificador: editou `guardrail.md`, o cache
-  antigo deixa de ser consultado sozinho, sem precisar limpar nada;
-- TTL curto, pra qualquer ajuste de modelo/temperatura expirar em um dia.
+Cache da classificação do guardrail de entrada: mensagens legítimas se repetem muito e cada uma
+pagava uma chamada de LLM só pra ouvir "APROVADO". A chave inclui o fingerprint do prompt
+(editou `guardrail.md`, o cache velho deixa de valer) e o TTL é curto (1 dia).
 """
 
 import hashlib
@@ -24,11 +14,9 @@ from frigus_ai.infra.redis.keys import GUARDRAIL_TTL_TIME, chave_guardrail
 
 logger = Logging.get_logger("redis_guardrail")
 
-# Com o Redis fora do ar, cada ida ao cache paga o timeout de conexão. Duas por mensagem
-# (leitura + escrita) fariam o cache deixar o turno MAIS lento do que sem cache nenhum —
-# então, depois de uma falha, o cache se desliga sozinho por um tempo.
-# ponytail: pausa global simples; se um dia houver vários processos e valer a pena medir
-# taxa de erro, troca por um circuit breaker de verdade.
+# Com o Redis fora do ar cada ida ao cache paga o timeout de conexão; depois de uma falha o
+# cache se desliga por um tempo.
+# ponytail: pausa global simples; circuit breaker de verdade se houver vários processos.
 _PAUSA_APOS_FALHA = 30.0
 _silenciado_ate = 0.0
 
