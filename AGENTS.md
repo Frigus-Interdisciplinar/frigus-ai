@@ -236,9 +236,11 @@ reais com métricas Prometheus nem commitar segredos.
   `pydantic-settings`) e um único enum fechado de modelos/providers
   (`settings/llm.py:Model` e `infra/llm/registry.py:PROVIDER_MAP`). Não ler `os.environ` direto em outros módulos.
 - **Ciclo de retentativa do Juiz é explícito no grafo**, não escondido em loop Python — ver
-  `decidir_apos_juiz` em `graph/builder.py`. Qualquer novo especialista que produza resposta ao
-  usuário deve passar pelo Juiz antes do Guardrail de Saída, seguindo esse mesmo padrão de edge
-  condicional.
+  `decidir_apos_juiz` em `graph/builder.py`. A retentativa volta só ao orquestrador (repetir
+  especialistas regravaria estoque e lista de compras). Novo especialista: registre-o em
+  `NO_POR_DOMINIO`, crie o nó com `@especialista` (ou `especialista_com_agente`) e ele passa pelo
+  Orquestrador e pelo Juiz antes do Guardrail de Saída. Roteador e orquestrador estão descritos em
+  `graph/prompts/router.md` e `orquestrador.md`.
 
 ## Comandos
 

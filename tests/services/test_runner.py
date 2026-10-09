@@ -12,7 +12,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from frigus_ai.domain.models import Fatos
 from frigus_ai.graph.state import ContextoPrompt
 from frigus_ai.repositories import chat_embeddings_repository
-from frigus_ai.schemas.execution import AnswerReady, NodeStarted, RunFinished
+from frigus_ai.schemas.execution import (
+    AnswerReady,
+    NodeStarted,
+    RouteSelected,
+    RunFinished,
+)
 from frigus_ai.services import runner
 from frigus_ai.services.user_service import user_service
 
@@ -119,7 +124,7 @@ def test_estado_inicial_com_imagem_inclui_a_chave():
 async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):
     _usar_grafo(monkeypatch, [
         {"guardrail_entrada_node": {"messages": [HumanMessage(content="oi")]}},
-        {"roteador_node": {"rota": "estoque"}},
+        {"roteador_node": {"especialistas": ["estoque"]}},
         {"estoque_node": {"resposta_especialista": "cru"}},
         {"guardrail_saida_node": {"messages": [AIMessage(content="resposta final")]}},
     ])
@@ -132,6 +137,17 @@ async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):
     ]
     assert AnswerReady(content="resposta final") in eventos
     assert isinstance(eventos[-1], RunFinished)
+
+
+async def test_stream_emite_uma_rota_por_dominio_escolhido(monkeypatch):
+    _usar_grafo(monkeypatch, [
+        {"roteador_node": {"especialistas": ["estoque", "receitas"]}},
+        {"guardrail_saida_node": {"messages": [AIMessage(content="ok")]}},
+    ])
+
+    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
+
+    assert [e.route for e in eventos if isinstance(e, RouteSelected)] == ["estoque", "receitas"]
 
 
 async def test_stream_usa_a_ultima_resposta_quando_o_grafo_para_antes_do_fim(monkeypatch):
@@ -148,7 +164,7 @@ async def test_stream_usa_a_ultima_resposta_quando_o_grafo_para_antes_do_fim(mon
 
 
 async def test_stream_sem_nenhuma_resposta_nao_devolve_answer_ready(monkeypatch):
-    _usar_grafo(monkeypatch, [{"roteador_node": {"rota": "fim"}}])
+    _usar_grafo(monkeypatch, [{"roteador_node": {"especialistas": []}}])
 
     eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
 

@@ -3,9 +3,10 @@ Uma execução ponta a ponta do grafo com os agentes/LLMs stubados.
 
 Cobre o que os contratos tipados (`EntradaGrafo`/`SaidaGrafo` + os `*Update`) prometem e que
 nenhum teste de nó isolado pega: que as chaves dos TypedDicts batem com as do `Estado` (um typo
-viraria update silenciosamente descartado pelo LangGraph), que `agentes_chamados` acumula pelo
-reducer sem ser semeado na entrada, que o laço do Juiz volta pro especialista de origem, e que a
-saída expõe só `messages`.
+viraria update silenciosamente descartado pelo LangGraph), que `agentes_chamados` e
+`dados_especialistas` acumulam pelo reducer, que especialistas escolhidos juntos rodam em paralelo
+e o orquestrador espera todos, que o laço do Juiz volta só pro orquestrador, e que a saída expõe
+só `messages`.
 """
 
 import pytest
@@ -30,9 +31,11 @@ class _FakeAgente:
     def __init__(self, texto):
         self._texto = texto
         self.chamadas = 0
+        self.entradas = []
 
     async def ainvoke(self, entrada, **_kwargs):
         self.chamadas += 1
+        self.entradas.append(entrada["messages"])
         return {"messages": [*entrada["messages"], AIMessage(content=self._texto)]}
 
 
@@ -74,7 +77,7 @@ def grafo(monkeypatch):
     from frigus_ai.graph.nodes import router as router_mod
 
     agentes = {
-        "router":       _FakeRoteador(Roteamento(rota="estoque")),
+        "router":       _FakeRoteador(Roteamento(especialistas=["estoque"])),
         "estoque":      _FakeAgente('{"itens": ["leite"]}'),
         "orquestrador": _FakeAgente("Você tem leite na geladeira."),
     }
@@ -116,7 +119,10 @@ async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
     assert [type(m) for m in saida["messages"]] == [HumanMessage, AIMessage]
 
 
-async def test_juiz_reprovado_volta_pro_especialista_de_origem(grafo):
+async def test_juiz_reprovado_reescreve_no_orquestrador_sem_repetir_o_especialista(grafo):
+    """Repetir o especialista regravaria estoque/lista de compras; a reprovação costuma ser da
+    redação, que o orquestrador refaz com o feedback."""
+
     compilar, agentes = grafo
     app = compilar([
         VereditoJuiz(veredito="REPROVADO", justificativa="faltou citar a validade"),
@@ -125,8 +131,11 @@ async def test_juiz_reprovado_volta_pro_especialista_de_origem(grafo):
 
     await app.ainvoke(EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")]))
 
-    # Reprovado uma vez -> estoque roda de novo com o feedback, depois o Juiz aprova.
-    assert agentes["estoque"].chamadas == 2
+    assert agentes["estoque"].chamadas == 1
+    assert agentes["orquestrador"].chamadas == 2
+    primeira, segunda = (entrada[0].content for entrada in agentes["orquestrador"].entradas)
+    assert "[REVISÃO SOLICITADA PELO JUIZ]" not in primeira
+    assert "[REVISÃO SOLICITADA PELO JUIZ] faltou citar a validade" in segunda
 
 
 async def test_agentes_chamados_acumula_sem_ser_semeado_na_entrada(grafo):
@@ -198,9 +207,8 @@ async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypat
     assert agentes["orquestrador"].chamadas == 1
 
 
-async def test_juiz_reprovado_em_turno_de_foto_volta_pra_visao(grafo, monkeypatch):
-    """Visão seta `rota=visao` — sem isso o Juiz não tinha pra onde devolver e a resposta
-    reprovada ia direto pro guardrail de saída. O retry leva o feedback junto."""
+async def test_juiz_reprovado_em_turno_de_foto_reescreve_no_orquestrador(grafo, monkeypatch):
+    """A foto não precisa ser reanalisada: o retry leva o feedback pro orquestrador."""
 
     from frigus_ai.graph import state as state_mod
     from frigus_ai.graph.nodes import visao as visao_mod
@@ -215,7 +223,7 @@ async def test_juiz_reprovado_em_turno_de_foto_volta_pra_visao(grafo, monkeypatc
 
     monkeypatch.setattr(visao_mod, "llm_visao", _FakeLLMVisao())
 
-    compilar, _ = grafo
+    compilar, agentes = grafo
     app = compilar([
         VereditoJuiz(veredito="REPROVADO", justificativa="não listou os itens"),
         VereditoJuiz(veredito="APROVADO", justificativa="ok"),
@@ -225,9 +233,9 @@ async def test_juiz_reprovado_em_turno_de_foto_volta_pra_visao(grafo, monkeypatc
         EntradaGrafo(messages=[HumanMessage(content="analise esta foto")], imagem_b64="ZmFrZQ==")
     )
 
-    assert len(prompts) == 2
-    assert "[REVISÃO SOLICITADA PELO JUIZ]" not in prompts[0]
-    assert "[REVISÃO SOLICITADA PELO JUIZ]" in prompts[1]
+    assert len(prompts) == 1
+    assert agentes["orquestrador"].chamadas == 2
+    assert "[REVISÃO SOLICITADA PELO JUIZ] não listou os itens" in agentes["orquestrador"].entradas[1][0].content
 
 
 async def test_plano_de_economia_vai_pro_assessor_e_passa_pelo_juiz(grafo, monkeypatch):
@@ -240,7 +248,7 @@ async def test_plano_de_economia_vai_pro_assessor_e_passa_pelo_juiz(grafo, monke
         perguntas.append((pergunta, session_id))
         return "Seu saldo é R$ 1.200,00."
 
-    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(rota="assessor")))
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(especialistas=["assessor"])))
     monkeypatch.setattr(assessor_mod.assessor, "perguntar", _perguntar)
 
     compilar, _ = grafo
@@ -255,7 +263,7 @@ async def test_plano_de_economia_vai_pro_assessor_e_passa_pelo_juiz(grafo, monke
     assert perguntas[0][1] == "chat-9"  # session_id vem do thread_id
     assert interno["agentes_chamados"] == [
         "guardrail_entrada_node", "roteador_node", "a2a_assessor_node",
-        "juiz_node", "guardrail_saida_node",
+        "orquestrador_node", "juiz_node", "guardrail_saida_node",
     ]
     assert interno["messages"][-1].content == "Seu saldo é R$ 1.200,00."
 
@@ -267,7 +275,7 @@ async def test_assessor_fora_do_ar_responde_limpo_sem_passar_pelo_juiz(grafo, mo
     async def _fora_do_ar(pergunta, session_id):
         raise AssessorIndisponivel("connection refused")
 
-    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(rota="assessor")))
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(especialistas=["assessor"])))
     monkeypatch.setattr(assessor_mod.assessor, "perguntar", _fora_do_ar)
 
     compilar, _ = grafo
@@ -305,7 +313,7 @@ async def test_stream_do_runner_transmite_o_caminho_do_assessor(grafo, monkeypat
         async def get(self):
             return self._compilado
 
-    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(rota="assessor")))
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(especialistas=["assessor"])))
     monkeypatch.setattr(assessor_mod.assessor, "perguntar", _perguntar)
     monkeypatch.setattr(chat_embeddings_repository, "buscar_resumos_relevantes", _sem_conversas)
 
@@ -317,7 +325,7 @@ async def test_stream_do_runner_transmite_o_caminho_do_assessor(grafo, monkeypat
     iniciados = [e.node for e in eventos if e.type == "node_started"]
     assert iniciados == [
         "guardrail_entrada_node", "roteador_node", "a2a_assessor_node",
-        "juiz_node", "guardrail_saida_node",
+        "orquestrador_node", "juiz_node", "guardrail_saida_node",
     ]
     assert [e.route for e in eventos if e.type == "route_selected"] == ["assessor"]
     assert [e.content for e in eventos if e.type == "answer_ready"] == ["Reserve R$ 600,00 por mês."]
@@ -350,3 +358,89 @@ async def test_stream_do_runner_transmite_a_rota_da_visao(grafo, monkeypatch):
 
     assert [e.route for e in eventos if e.type == "route_selected"] == ["visao"]
     assert "visao_node" in [e.node for e in eventos if e.type == "node_started"]
+
+
+def _com_receitas(monkeypatch, texto="Omelete de queijo."):
+    from frigus_ai.graph.names import RECEITAS
+
+    receitas = _FakeAgente(texto)
+    monkeypatch.setattr(builder, "no_receitas", especialista_com_agente(RECEITAS, receitas))
+    return receitas
+
+
+def _roteia_para(monkeypatch, *dominios):
+    from frigus_ai.graph.nodes import router as router_mod
+
+    monkeypatch.setattr(router_mod, "router_app", _FakeRoteador(Roteamento(especialistas=list(dominios))))
+
+
+async def test_dois_especialistas_rodam_e_o_orquestrador_junta_os_resultados(grafo, monkeypatch):
+    compilar, agentes = grafo
+    receitas = _com_receitas(monkeypatch)
+    _roteia_para(monkeypatch, "estoque", "receitas")
+    app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
+
+    interno = await app.ainvoke(
+        EntradaGrafo(messages=[HumanMessage(content="o que vence e que receitas tenho?")]),
+        config={"configurable": {"thread_id": "t-paralelo"}},
+        output_keys=["agentes_chamados", "messages"],
+    )
+
+    assert agentes["estoque"].chamadas == 1 and receitas.chamadas == 1
+    assert agentes["orquestrador"].chamadas == 1  # espera os dois, uma vez só
+    [pedido] = agentes["orquestrador"].entradas[0]
+    assert "o que vence e que receitas tenho?" in pedido.content
+    assert 'estoque:\n{"itens": ["leite"]}' in pedido.content
+    assert "receitas:\nOmelete de queijo." in pedido.content
+    chamados = interno["agentes_chamados"]
+    assert chamados.count("orquestrador_node") == 1
+    assert set(chamados[2:4]) == {"estoque_node", "receitas_node"}
+    assert [type(m) for m in interno["messages"]] == [HumanMessage, AIMessage]
+
+
+async def test_especialista_de_texto_sozinho_nao_gasta_chamada_do_orquestrador(grafo, monkeypatch):
+    compilar, agentes = grafo
+    _com_receitas(monkeypatch, "Omelete de queijo.")
+    _roteia_para(monkeypatch, "receitas")
+    app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
+
+    saida = await app.ainvoke(EntradaGrafo(messages=[HumanMessage(content="sugira uma receita")]))
+
+    assert agentes["orquestrador"].chamadas == 0
+    assert saida["messages"][-1].content == "Omelete de queijo."  # passa pelo guardrail de saída
+
+
+async def test_retentativa_de_especialista_de_texto_sozinho_chama_o_orquestrador(grafo, monkeypatch):
+    compilar, agentes = grafo
+    receitas = _com_receitas(monkeypatch)
+    _roteia_para(monkeypatch, "receitas")
+    app = compilar([
+        VereditoJuiz(veredito="REPROVADO", justificativa="faltou o modo de preparo"),
+        VereditoJuiz(veredito="APROVADO", justificativa="ok"),
+    ])
+
+    await app.ainvoke(EntradaGrafo(messages=[HumanMessage(content="sugira uma receita")]))
+
+    assert receitas.chamadas == 1
+    assert agentes["orquestrador"].chamadas == 1  # só na retentativa, com o pedido de revisão
+    assert "faltou o modo de preparo" in agentes["orquestrador"].entradas[0][0].content
+
+
+async def test_dados_dos_especialistas_nao_vazam_pro_proximo_turno(grafo, monkeypatch):
+    """O checkpoint é por thread e `dados_especialistas` soma com `operator.add`: sem o
+    `Overwrite([])` do guardrail de entrada, o 2º turno veria o resultado do 1º."""
+
+    from langgraph.checkpoint.memory import MemorySaver
+
+    compilar, _ = grafo
+    _com_receitas(monkeypatch)
+    compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
+    app = builder._construir_grafo().compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "t-reset"}}
+
+    await app.ainvoke(EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")]), config=config)
+    _roteia_para(monkeypatch, "receitas")
+    await app.ainvoke(EntradaGrafo(messages=[HumanMessage(content="e uma receita?")]), config=config)
+
+    estado = (await app.aget_state(config)).values
+    assert [r["agente"] for r in estado["dados_especialistas"]] == ["receitas_node"]

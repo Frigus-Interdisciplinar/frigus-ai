@@ -1,8 +1,9 @@
 """
 Roteador com saída estruturada (`Roteamento`), agente stubado — sem LLM.
 
-O que se protege: rota de especialista não responde ao usuário, `fim` responde com o texto do
-roteador, e falha do LLM (chamada ou schema) nunca derruba o turno.
+O que se protege: especialista não faz o roteador responder ao usuário, lista vazia responde com o
+texto do roteador, domínios repetidos viram um só, e falha do LLM (chamada ou schema) nunca derruba
+o turno.
 """
 
 from types import SimpleNamespace
@@ -29,40 +30,47 @@ def _estado(*textos):
     return {"messages": [HumanMessage(content=t) for t in textos]}
 
 
-async def test_rota_de_especialista_nao_responde_e_guarda_a_pergunta(monkeypatch):
-    monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento(rota="estoque")))
+async def test_especialista_nao_responde_ao_usuario(monkeypatch):
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento(especialistas=["estoque"])))
 
     update = await mod.no_roteador(_estado("oi", "o que vence essa semana?"), _RUNTIME)
 
-    assert update["rota"] == "estoque"
-    assert update["pergunta_original"] == "o que vence essa semana?"
-    assert update["tentativas_juiz"] == 0
+    assert update["especialistas"] == ["estoque"]
     assert "messages" not in update
 
 
-async def test_fim_responde_com_o_texto_do_roteador(monkeypatch):
+async def test_varios_especialistas_sem_repeticao_e_na_ordem(monkeypatch):
+    escolha = Roteamento(especialistas=["receitas", "estoque", "receitas"])
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(escolha))
+
+    update = await mod.no_roteador(_estado("vence algo? e receitas?"), _RUNTIME)
+
+    assert update["especialistas"] == ["receitas", "estoque"]
+
+
+async def test_lista_vazia_responde_com_o_texto_do_roteador(monkeypatch):
     monkeypatch.setattr(
-        mod, "router_app", _FakeRoteador(Roteamento(rota="fim", resposta="Olá! Por onde começamos?"))
+        mod, "router_app", _FakeRoteador(Roteamento(resposta="Olá! Por onde começamos?"))
     )
 
     update = await mod.no_roteador(_estado("oi"), _RUNTIME)
 
-    assert update["rota"] == "fim"
+    assert update["especialistas"] == []
     assert update["messages"] == [AIMessage(content="Olá! Por onde começamos?")]
 
 
-async def test_fim_sem_resposta_usa_a_generica(monkeypatch):
-    monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento(rota="fim")))
+async def test_lista_vazia_sem_resposta_usa_a_generica(monkeypatch):
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento()))
 
     update = await mod.no_roteador(_estado("hm"), _RUNTIME)
 
     assert update["messages"][0].content == mod._NAO_ENTENDI
 
 
-async def test_falha_do_llm_vira_fim_sem_derrubar_o_turno(monkeypatch):
+async def test_falha_do_llm_responde_generico_sem_derrubar_o_turno(monkeypatch):
     monkeypatch.setattr(mod, "router_app", _FakeRoteador(ValueError("saída fora do schema")))
 
     update = await mod.no_roteador(_estado("qual o sentido da vida?"), _RUNTIME)
 
-    assert update["rota"] == "fim"
+    assert update["especialistas"] == []
     assert update["messages"][0].content == mod._NAO_ENTENDI

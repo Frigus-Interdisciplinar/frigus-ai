@@ -65,14 +65,13 @@ flowchart TB
 
     subgraph GRAFO["Grafo LangGraph"]
         GE["Guardrail de entrada"] --> RT["Roteador"]
-        RT --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro"]
-        RT --> ASS["Assessor (agente remoto)"]
+        RT -- "1 ou mais, em paralelo" --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro, assessor"]
+        RT -. "resposta direta" .-> FIM(["fim"])
         GE -. "foto" .-> VIS["Visão"]
-        ESP --> ORQ["Orquestrador"]
-        ORQ --> JZ["Juiz (até 2 retentativas)"]
-        ESP --> JZ
+        ESP --> ORQ["Orquestrador<br/>(junta os resultados)"]
         VIS --> ORQ
-        ASS --> JZ
+        ORQ --> JZ["Juiz"]
+        JZ -- "reprovou: até 2 retentativas" --> ORQ
         JZ --> GS["Guardrail de saída"]
     end
 
@@ -115,10 +114,15 @@ flowchart TB
   <img src="assets/diagrama-agentes.png" alt="Diagrama do fluxo de agentes do Frigus.AI" width="720" />
 </div>
 
+O **Roteador** pode escolher mais de um especialista para o mesmo pedido (só quando as consultas são
+independentes); eles rodam em paralelo e o **Orquestrador** espera todos para montar uma única resposta.
+Um especialista de texto (receitas, faq, assessor) que responde sozinho passa direto, sem chamada extra de LLM.
+
 O **Juiz** é um agente LLM-as-judge: audita a resposta quanto a grounding (só usa dados que vieram das
-tools), relevância e completude, ANTES do guardrail de saída. Se reprovar, a resposta volta para o mesmo
-especialista que a gerou (com o motivo da reprovação), até 2 tentativas — depois disso, segue mesmo
-reprovado (loga um aviso), para nunca travar o usuário.
+tools), relevância e completude, ANTES do guardrail de saída. Se reprovar, a resposta volta para o
+**orquestrador** (com o motivo da reprovação), até 2 tentativas — os especialistas não rodam de novo, para
+não regravar estoque nem lista de compras. Depois disso, segue mesmo reprovado (loga um aviso), para nunca
+travar o usuário.
 
 ---
 
