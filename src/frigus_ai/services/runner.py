@@ -6,10 +6,9 @@ from typing import Any, cast, get_args
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from frigus_ai.domain.models import Fatos
 from frigus_ai.graph.builder import fluxo_agentes
 from frigus_ai.graph.names import NodeLiteral
-from frigus_ai.graph.state import EntradaGrafo, RouteLiteral
+from frigus_ai.graph.state import ContextoPrompt, EntradaGrafo, RouteLiteral
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import session_context
 from frigus_ai.repositories import chat_embeddings_repository
@@ -51,8 +50,6 @@ def _estado_inicial(
     conteudo: str,
     stock_id: int | None,
     imagem_b64: str | None = None,
-    fatos: Fatos | None = None,
-    conversas: Sequence[str] = (),
 ) -> EntradaGrafo:
     """Só os campos de `EntradaGrafo`; o resto do `Estado` é interno do grafo."""
 
@@ -64,20 +61,17 @@ def _estado_inicial(
     )
     if imagem_b64:
         entrada["imagem_b64"] = imagem_b64
-    if fatos is not None:
-        entrada["fatos"] = fatos.model_dump()
-    if conversas:
-        entrada["conversas_anteriores"] = list(conversas)
 
     return entrada
 
 
 async def _carregar_contexto(
     conteudo: str, session_id: str, user_id: str, imagem_b64: str | None
-) -> tuple[Fatos | None, list[str]]:
-    """Fatos e conversas anteriores, opcionais: banco fora do ar não derruba o turno."""
+) -> ContextoPrompt:
+    """Fatos e conversas anteriores, opcionais: banco fora do ar não derruba o turno. Vai por
+    `context=`, fora do checkpoint — falha aqui deixa o turno sem perfil, nunca com o antigo."""
 
-    fatos: Fatos | None = None
+    fatos = None
     try:
         fatos = await user_service.buscar_fatos(user_id)
     except Exception as e:
@@ -92,7 +86,7 @@ async def _carregar_contexto(
         except Exception as e:
             logger.warning("Busca de conversas anteriores falhou, seguindo sem: %s", e)
 
-    return fatos, resumos
+    return ContextoPrompt(fatos=fatos, conversas=tuple(resumos))
 
 
 def _outcome(estado: Mapping[str, Any]) -> str:
@@ -137,7 +131,7 @@ async def executar(
     inicio = time.perf_counter()
     outcome = "error"
 
-    fatos, conversas = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
+    contexto = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
 
     GRAPH_IN_PROGRESS.inc()
     try:
@@ -146,7 +140,8 @@ async def executar(
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
             estado_final = await grafo.ainvoke(
-                _estado_inicial(conteudo, stock_id, imagem_b64, fatos, conversas),
+                _estado_inicial(conteudo, stock_id, imagem_b64),
+                context=contexto,
                 config=_config(session_id, user_id),
             )
 
@@ -173,7 +168,7 @@ async def executar_stream(
 
     yield RunStarted()
 
-    fatos, conversas = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
+    contexto = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
 
     inicio = time.perf_counter()
     outcome = "error"
@@ -186,7 +181,8 @@ async def executar_stream(
             grafo = await fluxo_agentes.get()
 
             async for event in grafo.astream_events(
-                _estado_inicial(conteudo, stock_id, imagem_b64, fatos, conversas),
+                _estado_inicial(conteudo, stock_id, imagem_b64),
+                context=contexto,
                 config=_config(session_id, user_id),
                 version="v2",
             ):

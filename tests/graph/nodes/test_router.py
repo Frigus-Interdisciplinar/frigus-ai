@@ -5,10 +5,14 @@ O que se protege: rota de especialista não responde ao usuário, `fim` responde
 roteador, e falha do LLM (chamada ou schema) nunca derruba o turno.
 """
 
+from types import SimpleNamespace
+
 from langchain_core.messages import AIMessage, HumanMessage
 
 from frigus_ai.graph.nodes import router as mod
-from frigus_ai.graph.state import Roteamento
+from frigus_ai.graph.state import ContextoPrompt, Roteamento
+
+_RUNTIME = SimpleNamespace(context=ContextoPrompt())
 
 
 class _FakeRoteador:
@@ -28,7 +32,7 @@ def _estado(*textos):
 async def test_rota_de_especialista_nao_responde_e_guarda_a_pergunta(monkeypatch):
     monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento(rota="estoque")))
 
-    update = await mod.no_roteador(_estado("oi", "o que vence essa semana?"))
+    update = await mod.no_roteador(_estado("oi", "o que vence essa semana?"), _RUNTIME)
 
     assert update["rota"] == "estoque"
     assert update["pergunta_original"] == "o que vence essa semana?"
@@ -41,7 +45,7 @@ async def test_fim_responde_com_o_texto_do_roteador(monkeypatch):
         mod, "router_app", _FakeRoteador(Roteamento(rota="fim", resposta="Olá! Por onde começamos?"))
     )
 
-    update = await mod.no_roteador(_estado("oi"))
+    update = await mod.no_roteador(_estado("oi"), _RUNTIME)
 
     assert update["rota"] == "fim"
     assert update["messages"] == [AIMessage(content="Olá! Por onde começamos?")]
@@ -50,7 +54,7 @@ async def test_fim_responde_com_o_texto_do_roteador(monkeypatch):
 async def test_fim_sem_resposta_usa_a_generica(monkeypatch):
     monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento(rota="fim")))
 
-    update = await mod.no_roteador(_estado("hm"))
+    update = await mod.no_roteador(_estado("hm"), _RUNTIME)
 
     assert update["messages"][0].content == mod._NAO_ENTENDI
 
@@ -58,7 +62,7 @@ async def test_fim_sem_resposta_usa_a_generica(monkeypatch):
 async def test_falha_do_llm_vira_fim_sem_derrubar_o_turno(monkeypatch):
     monkeypatch.setattr(mod, "router_app", _FakeRoteador(ValueError("saída fora do schema")))
 
-    update = await mod.no_roteador(_estado("qual o sentido da vida?"))
+    update = await mod.no_roteador(_estado("qual o sentido da vida?"), _RUNTIME)
 
     assert update["rota"] == "fim"
     assert update["messages"][0].content == mod._NAO_ENTENDI

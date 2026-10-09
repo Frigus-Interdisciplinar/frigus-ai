@@ -52,20 +52,21 @@ Estes são fatos sobre o usuário extraídos da conversa (alergias, preferência
 - Restrições: {restricoes}
 - Hábitos: {habitos}
 
-Se algum campo estiver vazio, ignore-o e não inclua na resposta. Não invente ou alucine fatos que não estejam nesta lista.
+"não informado" quer dizer que o usuário não cadastrou nada ali — não é o mesmo que confirmar que ele não tem alergia ou restrição. Não invente ou alucine fatos que não estejam nesta lista.
 """
+
+def _juntar(valores: Sequence[str]) -> str:
+    # Lista vazia é ausência de cadastro: "nenhuma" fazia o LLM afirmar que não há alergia.
+    return ", ".join(valores) or "não informado"
+
 
 def _formatar_fatos(fatos: Fatos) -> str:
     """Formata objeto Fatos em texto para inclusão no prompt."""
-    alergias = ", ".join(fatos.alergias) if fatos.alergias else "nenhuma"
-    preferencias = ", ".join(fatos.preferencias) if fatos.preferencias else "nenhuma"
-    restricoes = ", ".join(fatos.restricoes) if fatos.restricoes else "nenhuma"
-    habitos = ", ".join(fatos.habitos) if fatos.habitos else "nenhuma"
     return CONTEXTO_FACTOS.format(
-        alergias=alergias,
-        preferencias=preferencias,
-        restricoes=restricoes,
-        habitos=habitos,
+        alergias=_juntar(fatos.alergias),
+        preferencias=_juntar(fatos.preferencias),
+        restricoes=_juntar(fatos.restricoes),
+        habitos=_juntar(fatos.habitos),
     )
 
 

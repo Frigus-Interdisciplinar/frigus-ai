@@ -1,17 +1,18 @@
+from langgraph.runtime import Runtime
+
 from frigus_ai.graph.agents import financeiro_app
 from frigus_ai.graph.names import FINANCEIRO
 from frigus_ai.graph.nodes.contexto import (
-    contexto_do_estado,
     mensagens_do_turno,
     responder,
 )
-from frigus_ai.graph.state import EspecialistaUpdate, Estado
+from frigus_ai.graph.state import ContextoPrompt, EspecialistaUpdate, Estado
 from frigus_ai.telemetry import medir_node
 
 
 @medir_node(FINANCEIRO)
-async def no_financeiro(estado: Estado) -> EspecialistaUpdate:
-    resposta = await responder(financeiro_app, mensagens_do_turno(estado), contexto_do_estado(estado))
+async def no_financeiro(estado: Estado, runtime: Runtime[ContextoPrompt]) -> EspecialistaUpdate:
+    resposta = await responder(financeiro_app, mensagens_do_turno(estado), runtime.context)
 
     return EspecialistaUpdate(
         agentes_chamados=[FINANCEIRO],

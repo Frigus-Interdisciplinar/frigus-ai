@@ -10,6 +10,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from frigus_ai.domain.models import Fatos
+from frigus_ai.graph.state import ContextoPrompt
 from frigus_ai.repositories import chat_embeddings_repository
 from frigus_ai.schemas.execution import AnswerReady, NodeStarted, RunFinished
 from frigus_ai.services import runner
@@ -32,13 +33,12 @@ async def test_contexto_traz_fatos_e_conversas_anteriores(monkeypatch):
 
     monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
 
-    fatos, conversas = await runner._carregar_contexto("e o leite?", "chat-1", "u1", imagem_b64=None)
-    assert fatos == Fatos(alergias=["lactose"])
-    assert conversas == ["comprou leite semana passada"]
+    contexto = await runner._carregar_contexto("e o leite?", "chat-1", "u1", imagem_b64=None)
+    assert contexto == ContextoPrompt(fatos=Fatos(alergias=["lactose"]), conversas=("comprou leite semana passada",))
 
     # Turno com foto não busca conversas.
-    _, conversas = await runner._carregar_contexto("foto", "chat-1", "u1", imagem_b64="abc")
-    assert conversas == []
+    contexto = await runner._carregar_contexto("foto", "chat-1", "u1", imagem_b64="abc")
+    assert contexto.conversas == ()
 
 
 async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
@@ -47,17 +47,16 @@ async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
 
     monkeypatch.setattr(user_service, "buscar_fatos", _quebra)
 
-    fatos, conversas = await runner._carregar_contexto("oi", "chat-1", "u1", imagem_b64=None)
+    contexto = await runner._carregar_contexto("oi", "chat-1", "u1", imagem_b64=None)
 
-    assert fatos is None
-    assert conversas == ["comprou leite semana passada"]
+    assert contexto.fatos is None
+    assert contexto.conversas == ("comprou leite semana passada",)
 
 
-def test_estado_inicial_leva_fatos_como_dict_e_conversas_como_lista():
-    estado = runner._estado_inicial("oi", 1, fatos=Fatos(alergias=["lactose"]), conversas=("a",))
+def test_perfil_nao_vai_pro_estado_checkpointado():
+    """Perfil no estado sobrevivia no checkpoint: turno com a busca falhando reaproveitava o antigo."""
 
-    assert estado["fatos"]["alergias"] == ["lactose"]
-    assert estado["conversas_anteriores"] == ["a"]
+    assert set(runner._estado_inicial("oi", 1)) == {"messages", "stock_id"}
 
 
 class _FakeGrafo:
@@ -70,7 +69,7 @@ class _FakeGrafo:
     def __init__(self, updates):
         self._updates = updates
 
-    async def astream_events(self, estado, config, version):
+    async def astream_events(self, estado, config, version, context=None):
         for update in self._updates:
             for nome, output in update.items():
                 yield {"event": "on_chain_start", "name": nome, "data": {}}
