@@ -18,6 +18,10 @@ web:
     Start-Process powershell -WorkingDirectory '{{justfile_directory()}}' -ArgumentList '-NoExit', '-Command', 'just run api'
     Start-Process powershell -WorkingDirectory '{{justfile_directory()}}/web' -ArgumentList '-NoExit', '-Command', 'npm run dev'
 
+obs:
+    @echo "Subindo Prometheus (9090) e Grafana (3000)"
+    docker compose --profile observability up -d prometheus grafana
+
 check:
     @echo "Running pre-commit checks"
     {{python}} -m ruff check
