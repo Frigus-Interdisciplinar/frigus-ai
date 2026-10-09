@@ -9,18 +9,18 @@ from frigus_ai.domain.privacy import (
     redigir_pii,
 )
 from frigus_ai.graph.guardrail.schemas import ResultadoGuardrail, RevisaoCompliance
-from frigus_ai.graph.llm import llm_rapido
+from frigus_ai.graph.llm import estruturado, llm_guardrail, llm_luna, llm_rapido
 from frigus_ai.graph.names import GUARDRAIL_SAIDA
 from frigus_ai.graph.prompts import load_sections
 from frigus_ai.graph.state import Estado, GuardrailSaidaUpdate
 from frigus_ai.infra.logging import Logging
-from frigus_ai.observability import medir_node
+from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 
 _COMPLIANCE = load_sections("guardrail.md")["compliance"]
 
-llm_revisor = llm_rapido.with_structured_output(RevisaoCompliance) if llm_rapido else None
+llm_revisor = estruturado(RevisaoCompliance, llm_rapido, llm_guardrail, llm_luna)
 
 _SINAIS_DE_RISCO = re.compile(
     r"segur[oa]\s+(para|pra)\s+(o\s+)?(consumo|comer)|sem\s+(nenhum\s+)?risco"

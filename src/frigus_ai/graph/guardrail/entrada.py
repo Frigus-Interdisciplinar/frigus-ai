@@ -14,13 +14,13 @@ from frigus_ai.graph.guardrail.schemas import (
     Motivo,
     ResultadoGuardrail,
 )
-from frigus_ai.graph.llm import llm_guardrail
+from frigus_ai.graph.llm import estruturado, llm_guardrail, llm_luna, llm_rapido
 from frigus_ai.graph.names import GUARDRAIL_ENTRADA
 from frigus_ai.graph.nodes.contexto import podar_historico
 from frigus_ai.graph.prompts import load_sections
 from frigus_ai.graph.state import Estado, GuardrailEntradaUpdate
 from frigus_ai.infra.logging import Logging
-from frigus_ai.observability.metrics import GUARDRAIL_DECISIONS, medir_node
+from frigus_ai.telemetry.metrics import GUARDRAIL_DECISIONS, medir_node
 
 logger = Logging.get_logger(__name__)
 
@@ -37,9 +37,7 @@ def _aprovado() -> ResultadoGuardrail:
 
 
 
-llm_classificador = (
-    llm_guardrail.with_structured_output(Classificacao) if llm_guardrail else None
-)
+llm_classificador = estruturado(Classificacao, llm_guardrail, llm_rapido, llm_luna)
 
 
 async def _classificar(mensagem_anonimizada: str) -> str:

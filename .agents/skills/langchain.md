@@ -123,3 +123,32 @@ offload automático pra thread quando a tool é sync e o agente roda via `.ainvo
 `contextvars` corretamente (`tools/postgres/context.py:session_context`) sem precisar de
 `asyncio.to_thread` explícito nesse nível. Só vale reescrever uma tool pra `async def` se ela mesma
 ganhar um client async de verdade (ex. Redis/Qdrant, ver TODO.md) — nada obrigatório aqui.
+
+## Timeout e retries dos LLMs: o default é "esperar pra sempre"
+
+Nenhuma classe (`ChatGoogleGenerativeAI`, `ChatGroq`, `ChatOpenAI`) vem com timeout, e o
+`max_retries` do Gemini tem default **6**. Medido contra um 503 lento: sem timeout a chamada dura
+o tempo que o servidor quiser (o 503 "high demand" real leva 9-17s), 3 tentativas = 12s, e um
+`timeout` de 1s derruba a tentativa em 1,0s. Hoje isso vem da política por provider em
+`settings/llm.py` (`LLM__GEMINI_TIMEOUT_S`, `LLM__GEMINI_RETRIES`, ...), aplicada em
+`infra/llm/builder.py`. Armadilhas:
+
+- `max_retries` NÃO significa a mesma coisa em todo provider: no Gemini são tentativas **totais**
+  (1 = sem retry); em Groq/OpenAI/Anthropic são as **extras**. A política usa sempre "extras" e o
+  builder converte.
+- `timeout` é por tentativa, em segundos (o wrapper do Gemini converte pra ms). Pior caso de um
+  provider caído = `(retries + 1) * timeout`.
+- Sobrescrever uma chave de `dict` por env (`LLM__X__GEMINI=...`) SUBSTITUI o dict inteiro e os
+  outros itens somem (`KeyError`). Por isso a política são campos planos, não um dict.
+- Groq no plano gratuito tem TPM de 8000 tokens/min pro gpt-oss-120b: uma rajada de turnos dá 429
+  e, no roteador (sem fallback, `llm_rapido`), vira "Não consegui entender o pedido".
+- Cota **diária** do Gemini (429 `PerDayPerProjectPerModel`) falha em ~0,4s e só volta no dia
+  seguinte; já o 503 de capacidade é que demora.
+
+## `with_fallbacks` esconde o `with_structured_output`
+
+`model.with_fallbacks([...])` devolve um `RunnableWithFallbacks`, que NÃO tem `with_structured_output`:
+chame `with_structured_output` em cada modelo e só depois monte a cadeia (`graph/llm.py:estruturado`).
+Isso importa porque um papel com um provider só (guardrail, juiz) falha aberta e aprova tudo quando
+ele cai. `create_agent` aceita a cadeia direto (`com_reserva`). Groq usa `method="json_schema"`;
+`gpt-5*` descarta `temperature` ≠ 1 sozinho (a lib remove).

@@ -9,10 +9,13 @@ def build_llm(
     temperature: float,
     llm_settings: LLMSettings,
     top_p: float | None = None,
+    timeout_s: float | None = None,
 ) -> BaseChatModel | None:
     """
     Cria uma LLM com base no modelo informado.
     top_p só é aplicado para modelos Gemini.
+    `timeout_s` sobrepõe o timeout da política do provider (`LLMSettings.policy`) — usado
+    pelos papéis de saída curta, que não devem esperar tanto quanto um especialista.
     Devolve None se o provider não tiver API key configurada (providers opcionais).
     """
 
@@ -24,10 +27,16 @@ def build_llm(
     if not api_key:
         return None
 
+    politica = llm_settings.policy(provider)
+
     kwargs = {
         "model": model.value,
         "temperature": temperature,
         "api_key": api_key.get_secret_value(),
+        "timeout": timeout_s if timeout_s is not None else politica.timeout_s,
+        # No Gemini `max_retries` conta tentativas TOTAIS (1 = sem retry); nos SDKs da
+        # Groq/OpenAI/Anthropic conta as EXTRAS. A política usa sempre "extras".
+        "max_retries": politica.retries + 1 if provider == "gemini" else politica.retries,
     }
 
     if top_p is not None and provider == "gemini":
