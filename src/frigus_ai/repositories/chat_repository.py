@@ -23,6 +23,11 @@ logger = Logging.get_logger(__name__)
 collection = None
 
 
+class PendenteDeMemoria(TypedDict):
+    session_id: str
+    user_id: str
+
+
 class ChatDocument(TypedDict):
     """Formato do documento em `agent_chats` (leitura completa, sem projeção parcial)."""
 
@@ -31,6 +36,8 @@ class ChatDocument(TypedDict):
     messages: list[dict]
     resume: str
     resumido_ate: int  # nº de mensagens já cobertas pelo `resume`; ausente em doc antigo = 0
+    resume_relevante: bool  # decide se o `resume` vai pro Qdrant; ausente em doc antigo
+    indexado_ate: int  # `resumido_ate` que já está no Qdrant; < resumido_ate = embedding pendente
     created_at: datetime
     updated_at: datetime
 
@@ -109,14 +116,52 @@ class ChatRepository:
         )
 
     def _inserir_resumo(
-        self, resumo: str, session_id: str, user_id: str, resumido_ate: int
+        self, resumo: str, session_id: str, user_id: str, resumido_ate: int, relevante: bool
     ) -> None:
         logger.info("Salvando resumo da sessão para session_id: %s", session_id)
 
         self._collection().update_one(
             {"session_id": session_id, "user_id": user_id},
-            {"$set": {"resume": resumo, "resumido_ate": resumido_ate}},
+            {"$set": {"resume": resumo, "resumido_ate": resumido_ate, "resume_relevante": relevante}},
         )
+
+    def _marcar_indexado(self, session_id: str, user_id: str, indexado_ate: int) -> None:
+        self._collection().update_one(
+            {"session_id": session_id, "user_id": user_id},
+            {"$set": {"indexado_ate": indexado_ate}},
+        )
+
+    def _listar_pendentes_globais(
+        self, minimo_mensagens: int, inativo_ha: timedelta, limite: int
+    ) -> tuple[list[PendenteDeMemoria], int]:
+        """Chats de qualquer usuário com resumo ou embedding atrasado e parados há `inativo_ha`.
+        Devolve os mais antigos primeiro e o total (métrica de backlog). Doc antigo sem
+        `resume_relevante` não entra pelo lado do embedding."""
+
+        total = {"$size": "$messages"}
+        resumido = {"$ifNull": ["$resumido_ate", 0]}
+        resultado = list(self._collection().aggregate([
+            {"$match": {"updated_at": {"$lt": datetime.now(UTC) - inativo_ha}}},
+            {"$match": {"$expr": {"$or": [
+                {"$and": [{"$gte": [total, minimo_mensagens]}, {"$gt": [total, resumido]}]},
+                {"$and": [
+                    {"$ne": [{"$type": "$resume_relevante"}, "missing"]},
+                    {"$gt": [resumido, {"$ifNull": ["$indexado_ate", 0]}]},
+                ]},
+            ]}}},
+            {"$facet": {
+                "itens": [
+                    {"$sort": {"updated_at": 1}},
+                    {"$limit": limite},
+                    {"$project": {"_id": 0, "session_id": 1, "user_id": 1}},
+                ],
+                "total": [{"$count": "n"}],
+            }},
+        ]))
+        if not resultado:
+            return [], 0
+        faceta = resultado[0]
+        return faceta["itens"], faceta["total"][0]["n"] if faceta["total"] else 0
 
     def _listar_pendentes_de_resumo(
         self, user_id: str, minimo_mensagens: int, limite: int
@@ -180,9 +225,21 @@ class ChatRepository:
         return await asyncio.to_thread(self._buscar_documento_completo, session_id, user_id)
 
     async def salvar_resumo(
-        self, resumo: str, session_id: str, user_id: str, resumido_ate: int
+        self, resumo: str, session_id: str, user_id: str, resumido_ate: int, relevante: bool
     ) -> None:
-        await asyncio.to_thread(self._inserir_resumo, resumo, session_id, user_id, resumido_ate)
+        await asyncio.to_thread(
+            self._inserir_resumo, resumo, session_id, user_id, resumido_ate, relevante
+        )
+
+    async def marcar_indexado(self, session_id: str, user_id: str, indexado_ate: int) -> None:
+        await asyncio.to_thread(self._marcar_indexado, session_id, user_id, indexado_ate)
+
+    async def listar_pendentes_globais(
+        self, minimo_mensagens: int, inativo_ha: timedelta, limite: int
+    ) -> tuple[list[PendenteDeMemoria], int]:
+        return await asyncio.to_thread(
+            self._listar_pendentes_globais, minimo_mensagens, inativo_ha, limite
+        )
 
     async def listar_pendentes_de_resumo(
         self, user_id: str, minimo_mensagens: int, limite: int
@@ -223,8 +280,10 @@ def _adicionar_mensagens(session_id: str, user_id: str, mensagens: list[Mensagem
     _chat_repository._adicionar_mensagens(session_id, user_id, mensagens)
 
 
-def _inserir_resumo(resumo: str, session_id: str, user_id: str, resumido_ate: int) -> None:
-    _chat_repository._inserir_resumo(resumo, session_id, user_id, resumido_ate)
+def _inserir_resumo(
+    resumo: str, session_id: str, user_id: str, resumido_ate: int, relevante: bool
+) -> None:
+    _chat_repository._inserir_resumo(resumo, session_id, user_id, resumido_ate, relevante)
 
 
 def _buscar_documento_completo(session_id: str, user_id: str) -> ChatDocument | None:
@@ -281,8 +340,20 @@ async def buscar_documento_completo(session_id: str, user_id: str) -> ChatDocume
     return await _chat_repository.buscar_documento_completo(session_id, user_id)
 
 
-async def salvar_resumo(resumo: str, session_id: str, user_id: str, resumido_ate: int) -> None:
-    await _chat_repository.salvar_resumo(resumo, session_id, user_id, resumido_ate)
+async def salvar_resumo(
+    resumo: str, session_id: str, user_id: str, resumido_ate: int, relevante: bool
+) -> None:
+    await _chat_repository.salvar_resumo(resumo, session_id, user_id, resumido_ate, relevante)
+
+
+async def marcar_indexado(session_id: str, user_id: str, indexado_ate: int) -> None:
+    await _chat_repository.marcar_indexado(session_id, user_id, indexado_ate)
+
+
+async def listar_pendentes_globais(
+    minimo_mensagens: int, inativo_ha: timedelta, limite: int
+) -> tuple[list[PendenteDeMemoria], int]:
+    return await _chat_repository.listar_pendentes_globais(minimo_mensagens, inativo_ha, limite)
 
 
 async def listar_pendentes_de_resumo(

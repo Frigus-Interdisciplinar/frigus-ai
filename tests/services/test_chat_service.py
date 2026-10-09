@@ -7,10 +7,13 @@ curto demais não gasta LLM, e só resumo `relevante` vira embedding. Tudo mocka
 (repositories/user_service); a query em si tem teste em tests/repositories/.
 """
 
+import asyncio
+
 import pytest
 
 from frigus_ai.domain.models import Fatos, Resumo
 from frigus_ai.repositories import chat_embeddings_repository, chat_repository
+from frigus_ai.schemas.execution import AnswerReady, RunStarted
 from frigus_ai.services import chat_service as chat_service_module
 from frigus_ai.services import runner
 from frigus_ai.services.chat_service import service as chat_service
@@ -27,7 +30,7 @@ def memoria(monkeypatch):
 
     registro = {"doc": None, "resumo": Resumo(resumo="resumo novo", relevante=True),
                 "fatos": None, "chamadas_resumo": [], "salvou": [], "indexou": [],
-                "removeu": [], "fatos_salvos": []}
+                "removeu": [], "fatos_salvos": [], "indexado_ate": []}
 
     async def _doc(session_id, user_id):
         return registro["doc"]
@@ -39,8 +42,11 @@ def memoria(monkeypatch):
         registro["chamadas_resumo"].append((atual, msgs))
         return registro["resumo"]
 
-    async def _salvar_resumo(resumo, session_id, user_id, resumido_ate):
+    async def _salvar_resumo(resumo, session_id, user_id, resumido_ate, relevante):
         registro["salvou"].append((resumo, session_id, user_id, resumido_ate))
+
+    async def _marcar_indexado(session_id, user_id, indexado_ate):
+        registro["indexado_ate"].append(indexado_ate)
 
     async def _indexar(session_id, user_id, resumo):
         registro["indexou"].append((session_id, user_id, resumo))
@@ -53,6 +59,7 @@ def memoria(monkeypatch):
 
     monkeypatch.setattr(chat_repository, "buscar_documento_completo", _doc)
     monkeypatch.setattr(chat_repository, "salvar_resumo", _salvar_resumo)
+    monkeypatch.setattr(chat_repository, "marcar_indexado", _marcar_indexado)
     monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
     monkeypatch.setattr(user_service, "atualizar_fatos_por_extracao", _atualizar_fatos)
     monkeypatch.setattr(chat_service_module, "_extrair_fatos", lambda m, a: registro["fatos"])
@@ -156,6 +163,128 @@ async def test_qdrant_fora_do_ar_nao_desfaz_o_resumo(memoria, monkeypatch):
     await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
 
     assert memoria["salvou"] == [("resumo novo", "sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", 6)]
+    # embedding não confirmado: fica pendente pro reconciliador
+    assert memoria["indexado_ate"] == []
+
+
+async def test_embedding_atrasado_e_refeito_sem_chamar_llm(memoria):
+    """Resumo já salvo, Qdrant tinha falhado: a próxima passada só reindexa."""
+
+    memoria["doc"] = {"messages": _msgs(6), "resume": "r salvo", "resumido_ate": 6,
+                      "resume_relevante": True, "indexado_ate": 0}
+
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
+
+    assert memoria["chamadas_resumo"] == []
+    assert memoria["indexou"] == [("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "r salvo")]
+    assert memoria["indexado_ate"] == [6]
+
+
+async def test_resumo_indexado_marca_indexado_ate(memoria):
+    memoria["doc"] = {"messages": _msgs(6), "resume": ""}
+
+    await chat_service._atualizar_memoria("sessao-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c")
+
+    assert memoria["indexado_ate"] == [6]
+
+
+async def test_reconciliador_processa_pendentes_globais(monkeypatch):
+    async def _pendentes(minimo_mensagens, inativo_ha, limite):
+        return [{"session_id": "s1", "user_id": "u1"}, {"session_id": "s2", "user_id": "u2"}], 7
+
+    monkeypatch.setattr(chat_repository, "listar_pendentes_globais", _pendentes)
+
+    feitos = []
+
+    async def _atualizar_memoria(session_id, user_id):
+        feitos.append((session_id, user_id))
+
+    monkeypatch.setattr(chat_service, "_atualizar_memoria", _atualizar_memoria)
+
+    await chat_service.reconciliar_memoria()
+
+    assert feitos == [("s1", "u1"), ("s2", "u2")]
+    assert chat_service_module.MEMORY_PENDING._value.get() == 7
+
+
+async def test_reconciliador_espera_antes_de_repetir_chat_que_falhou(monkeypatch):
+    """Chat que sempre falha (extração rejeitada, Qdrant fora) não pode gastar LLM a cada ciclo."""
+
+    async def _pendentes(minimo_mensagens, inativo_ha, limite):
+        return [{"session_id": "ruim", "user_id": "u1"}, {"session_id": "bom", "user_id": "u1"}], 2
+
+    monkeypatch.setattr(chat_repository, "listar_pendentes_globais", _pendentes)
+    monkeypatch.setattr(chat_service_module, "_falhou_em", {})
+
+    tentativas = []
+
+    async def _atualizar_memoria(session_id, user_id):
+        tentativas.append(session_id)
+        return session_id != "ruim"
+
+    monkeypatch.setattr(chat_service, "_atualizar_memoria", _atualizar_memoria)
+
+    await chat_service.reconciliar_memoria()
+    await chat_service.reconciliar_memoria()
+
+    assert tentativas == ["ruim", "bom", "bom"]  # "ruim" não volta no 2º ciclo
+
+    chat_service_module._falhou_em["ruim"] -= chat_service_module._MEM.espera_apos_falha_s + 1
+    await chat_service.reconciliar_memoria()
+
+    assert tentativas[-2:] == ["ruim", "bom"]
+
+
+async def test_stream_interrompido_ainda_grava_o_turno(monkeypatch):
+    """Cliente fecha o SSE no meio: o gerador é fechado, mas o turno vai pro Mongo."""
+
+    async def _executar_stream(*_):
+        yield RunStarted()
+        yield AnswerReady(content="resposta parcial")
+        yield RunStarted()  # nunca consumido
+
+    salvos = []
+
+    async def _salvar(user_id, session_id, novas):
+        salvos.append([m.content for m in novas])
+
+    async def _talvez(*_):
+        pass
+
+    monkeypatch.setattr(runner, "executar_stream", _executar_stream)
+    monkeypatch.setattr(chat_repository, "salvar_mensagens", _salvar)
+    monkeypatch.setattr(chat_service, "_talvez_atualizar_memoria", _talvez)
+
+    gerador = chat_service.stream_message("pergunta", "sessao-1", "u1", None)
+    await anext(gerador)
+    await anext(gerador)
+    await gerador.aclose()
+    await chat_service_module.drenar_tarefas(timeout=1)
+
+    assert salvos == [["pergunta", "resposta parcial"]]
+
+
+async def test_persistir_turno_tenta_de_novo_quando_mongo_falha(monkeypatch):
+    tentativas = []
+
+    async def _salvar(*_):
+        tentativas.append(1)
+        if len(tentativas) < 2:
+            raise ConnectionError("mongo reiniciando")
+
+    async def _talvez(*_):
+        pass
+
+    async def _sem_espera(_):
+        pass
+
+    monkeypatch.setattr(chat_repository, "salvar_mensagens", _salvar)
+    monkeypatch.setattr(chat_service, "_talvez_atualizar_memoria", _talvez)
+    monkeypatch.setattr(asyncio, "sleep", _sem_espera)
+
+    await chat_service._persistir_turno("p", "r", "sessao-1", "u1", via="send")
+
+    assert len(tentativas) == 2
 
 
 async def test_atualizar_memoria_salva_fatos_quando_extracao_funciona(memoria):

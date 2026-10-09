@@ -84,3 +84,24 @@ async def test_pii_nao_vai_pro_indice(client):
 
     [ponto] = (await client.scroll(settings.database.qdrant_chats_collection))[0]
     assert "123.456.789-01" not in ponto.payload["resumo"]
+
+
+async def test_cria_indice_de_session_id_mesmo_em_collection_ja_existente(client, monkeypatch):
+    """Qdrant Cloud recusa filtro em campo sem índice (400). Collection criada antes de existir o
+    índice de `session_id` precisa receber os dois índices na busca, e só uma vez por processo."""
+
+    await repo.salvar_resumo("chat-1", "u1", "comprou leite")  # cria a collection
+    criados = []
+    original = client.create_payload_index
+
+    async def _espiao(colecao, campo, *args, **kwargs):
+        criados.append(campo)
+        return await original(colecao, campo, *args, **kwargs)
+
+    monkeypatch.setattr(client, "create_payload_index", _espiao)
+    repo._chat_embeddings_repository._indices_ok = False  # processo novo apontando pra collection velha
+
+    await repo.buscar_resumos_relevantes("u1", "leite", "chat-2")
+    await repo.buscar_resumos_relevantes("u1", "leite", "chat-2")
+
+    assert criados == ["user_id", "session_id"]
