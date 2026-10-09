@@ -42,6 +42,73 @@ diretamente ao usuário.
 
 ---
 
+## Arquitetura
+
+Visão de alto nível: quem chama, o que a API expõe, o grafo de agentes e onde cada dado mora.
+
+```mermaid
+flowchart TB
+    subgraph CLI["Clientes"]
+        WEB["Web (React)"]
+        TUI["TUI (Textual)"]
+        EXT["Clientes MCP / A2A"]
+    end
+
+    subgraph API["API FastAPI"]
+        AUTH["Auth: Firebase (Bearer) ou X-API-Key<br/>rate limit (fastapi-guard)"]
+        V1["/v1: chats, stock, shopping,<br/>recipes, profile"]
+        PROT["/a2a e /mcp (20 tools)"]
+        OPS["/health e /metrics"]
+    end
+
+    SVC["services: chat_service, runner<br/>(ponto único de todas as interfaces)"]
+
+    subgraph GRAFO["Grafo LangGraph"]
+        GE["Guardrail de entrada"] --> RT["Roteador"]
+        RT --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro"]
+        RT --> ASS["Assessor (agente remoto)"]
+        GE -. "foto" .-> VIS["Visão"]
+        ESP --> ORQ["Orquestrador"]
+        ORQ --> JZ["Juiz (até 2 retentativas)"]
+        ESP --> JZ
+        VIS --> ORQ
+        ASS --> JZ
+        JZ --> GS["Guardrail de saída"]
+    end
+
+    subgraph DADOS["Persistência"]
+        PG[("Postgres / Supabase<br/>estoque, compras, finanças, identidade")]
+        MG[("MongoDB<br/>histórico, fatos, checkpoints")]
+        RD[("Redis<br/>rate limit, cache do guardrail,<br/>ranking de desperdício, API keys")]
+        QD[("Qdrant<br/>RAG do FAQ, resumos de chats")]
+        N4[("Neo4j<br/>grafo de receitas")]
+    end
+
+    subgraph EXTERNO["Serviços externos"]
+        LLM["LLMs: Gemini, Groq, OpenRouter"]
+        SPOON["Spoonacular"]
+        ASSR["Assessor financeiro (A2A)"]
+        FB["Firebase Auth"]
+    end
+
+    subgraph OBS["Observabilidade"]
+        PROM["Prometheus (SLO e alertas)"] --> GRAF["Grafana"]
+        LS["LangSmith (traces)"]
+    end
+
+    CLI --> AUTH --> V1 & PROT
+    V1 & PROT --> SVC --> GRAFO
+    AUTH -.-> FB
+    AUTH -.-> RD
+    GRAFO --> LLM
+    ESP --> PG & RD & QD & N4 & SPOON
+    ASS --> ASSR
+    SVC --> MG
+    GRAFO -. "checkpoints" .-> MG
+    OPS -. "scrape" .-> PROM
+    GRAFO -. "traces" .-> LS
+```
+
 ## Grafo de agentes
 
 <div align="center">
@@ -223,6 +290,7 @@ uv sync
 
 ```bash
 docker compose up -d
+docker compose --profile observability up -d   # opcional: Prometheus (9090) + Grafana (3000) — ou `just obs`
 ```
 
 (O `main.py` também tenta subir os serviços sozinho via `config/docker.py`, assumindo Docker Desktop no Windows.)
