@@ -104,8 +104,9 @@ async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
         EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")])
     )
 
-    # SaidaGrafo não expõe rota/mapa_pii — só o histórico de mensagens.
-    assert set(saida) == {"messages"}
+    # SaidaGrafo não expõe rota/mapa_pii — só o histórico e se o guardrail bloqueou o turno.
+    assert set(saida) == {"messages", "mensagem_bloqueada"}
+    assert saida["mensagem_bloqueada"] is None
     assert saida["messages"][-1].content == "Você tem leite na geladeira."
     assert agentes["estoque"].chamadas == 1
 
