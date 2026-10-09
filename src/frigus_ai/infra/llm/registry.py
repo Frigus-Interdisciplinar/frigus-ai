@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 
 from frigus_ai.settings.llm import Model
 
-type Provider = Literal["gemini", "groq", "claude", "openrouter"]
+type Provider = Literal["gemini", "groq", "claude", "openrouter", "openai"]
 
 PROVIDER_MAP: Final[Mapping[Model, Provider]] = {
     Model.GEMINI_FLASH:        "gemini",
@@ -20,6 +20,7 @@ PROVIDER_MAP: Final[Mapping[Model, Provider]] = {
     Model.CLAUDE_HAIKU:        "claude",
     Model.CLAUDE_SONNET:       "claude",
     Model.QWEN_3_8_FREE:       "openrouter",
+    Model.GPT_5_6_LUNA:        "openai",
 }
 
 BUILDERS: Final[Mapping[Provider, Callable[..., BaseChatModel]]] = {
@@ -27,6 +28,7 @@ BUILDERS: Final[Mapping[Provider, Callable[..., BaseChatModel]]] = {
     "groq":   ChatGroq,
     "claude": ChatAnthropic,
     "openrouter": partial(ChatOpenAI, base_url="https://openrouter.ai/api/v1"),
+    "openai": ChatOpenAI,
 }
 
 __all__ = ["BUILDERS", "PROVIDER_MAP", "Provider"]

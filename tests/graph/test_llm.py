@@ -56,3 +56,109 @@ def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
         for mod in (frigus_ai.settings.base, frigus_ai.settings):
             importlib.reload(mod)
         importlib.reload(llm_mod)
+
+
+def _kwargs_passados(monkeypatch, modelo, llm_settings, **extra):
+    """Chama `build_llm` com um builder falso e devolve o que ele recebeu do provider."""
+
+    recebido = {}
+    provider = PROVIDER_MAP[modelo]
+    monkeypatch.setitem(BUILDERS, provider, lambda **kw: recebido.update(kw))
+    build_llm(modelo, 0.0, llm_settings, **extra)
+    return recebido
+
+
+def test_politica_do_provider_vira_timeout_e_retries(monkeypatch):
+    """Gemini conta tentativas TOTAIS (retries=0 -> max_retries=1); Groq conta as EXTRAS."""
+
+    cfg = settings.llm.model_copy(update={"gemini_timeout_s": 12.0, "gemini_retries": 0, "groq_timeout_s": 20.0, "groq_retries": 1})
+
+    gemini = _kwargs_passados(monkeypatch, Model.GEMINI_FLASH, cfg)
+    groq = _kwargs_passados(monkeypatch, Model.GPT_OSS_120B, cfg)
+
+    assert (gemini["timeout"], gemini["max_retries"]) == (12.0, 1)
+    assert (groq["timeout"], groq["max_retries"]) == (20.0, 1)
+
+
+def test_timeout_explicito_sobrepoe_a_politica(monkeypatch):
+    recebido = _kwargs_passados(monkeypatch, Model.GEMINI_FLASH, settings.llm, timeout_s=5.0)
+
+    assert recebido["timeout"] == 5.0
+
+
+def test_papeis_de_saida_curta_usam_timeout_menor():
+    """Guardrail, juiz e roteador não esperam o que um especialista espera."""
+
+    assert llm_mod.llm_guardrail.timeout == settings.llm.timeout_curto_s
+    assert llm_mod.llm_juiz.timeout == settings.llm.timeout_curto_s
+    assert llm_mod.llm_rapido.request_timeout == settings.llm.timeout_curto_s
+    assert llm_mod.llm_gemini.timeout == settings.llm.gemini_timeout_s
+    assert settings.llm.timeout_curto_s < settings.llm.gemini_timeout_s
+
+
+class _Elo:
+    """Modelo falso: registra com que argumentos `with_structured_output`/`with_fallbacks` foram chamados."""
+
+    def __init__(self, nome):
+        self.nome = nome
+
+    def with_structured_output(self, schema, **kw):
+        return _Elo(f"{self.nome}:{schema.__name__}:{kw.get('method', 'padrao')}")
+
+    def with_fallbacks(self, reservas):
+        return ("cadeia", self.nome, [r.nome for r in reservas])
+
+
+def test_com_reserva_ignora_provider_sem_chave():
+    a, b = _Elo("a"), _Elo("b")
+
+    assert llm_mod.com_reserva(None) is None
+    assert llm_mod.com_reserva(None, a) is a
+    assert llm_mod.com_reserva(None, a, None, b) == ("cadeia", "a", ["b"])
+
+
+def test_estruturado_usa_json_schema_so_no_elo_da_groq(monkeypatch):
+    from langchain_groq import ChatGroq
+
+    from frigus_ai.domain.models import Fatos
+
+    chamadas = []
+
+    def _espiao(self, schema, **kw):
+        chamadas.append(kw)
+        return _Elo(f"groq:{kw.get('method')}")
+
+    monkeypatch.setattr(ChatGroq, "with_structured_output", _espiao)
+    groq = ChatGroq(model="openai/gpt-oss-120b", api_key="fake")
+
+    cadeia = llm_mod.estruturado(Fatos, groq, _Elo("gemini"))
+
+    assert chamadas == [{"method": "json_schema"}]
+    assert cadeia == ("cadeia", "groq:json_schema", ["gemini:Fatos:padrao"])
+    assert llm_mod.estruturado(Fatos, None, None) is None
+
+
+def test_luna_so_entra_com_chave_e_usa_a_politica_openai():
+    from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
+
+    assert build_llm(Model.GPT_5_6_LUNA, 0.7, settings.llm) is None
+
+    cfg = settings.llm.model_copy(update={"openai_api_key": SecretStr("fake"), "openai_timeout_s": 40.0})
+    luna = build_llm(Model.GPT_5_6_LUNA, 0.7, cfg)
+
+    assert isinstance(luna, ChatOpenAI)
+    assert luna.model_name == "gpt-5.6-luna"
+    assert luna.request_timeout == 40.0
+    assert luna.max_retries == cfg.openai_retries
+    assert "openrouter" not in str(luna.openai_api_base)
+
+
+def test_guardrail_e_juiz_nao_dependem_so_do_gemini():
+    """Antes só tinham o Gemini: sem cota ele falhava aberto e aprovava tudo em silêncio."""
+
+    from frigus_ai.graph.guardrail import entrada, saida
+    from frigus_ai.graph.nodes import juiz
+
+    for cadeia in (entrada.llm_classificador, juiz.llm_avaliador, saida.llm_revisor):
+        assert len(cadeia.fallbacks) >= 1

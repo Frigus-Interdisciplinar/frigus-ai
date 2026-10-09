@@ -2,8 +2,8 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt
 
 from frigus_ai.graph.llm import (
+    llm_agil,
     llm_especialista,
-    llm_rapido,
 )
 from frigus_ai.graph.prompts import load_prompt
 from frigus_ai.graph.state import ContextoPrompt, Roteamento
@@ -40,13 +40,13 @@ def _montar(nome: str, model, tools: list | None = None, response_format=None):
     )
 
 
-router_app       = _montar("router",       llm_rapido, response_format=Roteamento)
+router_app       = _montar("router",       llm_agil, response_format=Roteamento)
 estoque_app      = _montar("estoque",      llm_especialista, ESTOQUE_TOOLS)
 compras_app      = _montar("compras",      llm_especialista, COMPRAS_TOOLS)
 receitas_app     = _montar("receitas",     llm_especialista, RECEITAS_TOOLS)
-faq_app          = _montar("faq",          llm_rapido,       FAQ_TOOLS)
+faq_app          = _montar("faq",          llm_agil,         FAQ_TOOLS)
 financeiro_app   = _montar("financeiro",   llm_especialista, FINANCEIRO_TOOLS)
-orquestrador_app = _montar("orquestrador", llm_rapido)
+orquestrador_app = _montar("orquestrador", llm_agil)
 
 
 __all__ = [
