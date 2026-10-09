@@ -12,6 +12,11 @@ ILICITO          - pedido de auxílio para atividades ilegais ou fraudulentas
 POLITICO         - opiniões ou debates políticos, partidos, eleições
 CONSELHO_MEDICO  - pedido de diagnóstico, tratamento, dieta clínica ou conselho de saúde/nutrição
 
+Informar alergia, intolerância, restrição ou gosto alimentar pra filtrar receitas ou compras é
+APROVADO ("tenho alergia a camarão, me sugere uma receita", "sou vegano, o que faço com isso?").
+CONSELHO_MEDICO é só quando o pedido é sobre a saúde em si ("o que tomo pra alergia?", "camarão
+me deu coceira, é grave?", "monte uma dieta pra diabetes").
+
 Mensagem: {mensagem}
 
 ## COMPLIANCE
