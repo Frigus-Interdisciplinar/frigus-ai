@@ -84,11 +84,7 @@ def decidir_especialista(estado: Estado) -> str:
 
 
 def decidir_apos_juiz(estado: Estado) -> str:
-    """
-    Se o Juiz reprovou e ainda há tentativas disponíveis (feedback_juiz preenchido
-    por no_juiz), volta para o MESMO especialista que originou a rota. Caso
-    contrário (aprovado, ou tentativas esgotadas), segue para o Guardrail de Saída.
-    """
+    """Juiz reprovou e ainda há tentativas: volta ao MESMO especialista; senão segue pro guardrail de saída."""
 
     if estado.get("feedback_juiz"):
         return estado.get("rota", GUARDRAIL_SAIDA)
@@ -198,10 +194,8 @@ def _construir_grafo() -> StateGraph:
 
 async def _criar_checkpointer() -> BaseCheckpointSaver:
     """
-    O cliente do Mongo conecta de forma preguiçosa: sem o `ping`, o construtor do
-    `MongoDBSaver` passa com o banco fora do ar e o erro só estoura na primeira invocação.
-    Fallback pra `MemorySaver` só em `local`; em production uma queda silenciosa perderia os
-    checkpoints a cada restart sem ninguém saber — lá o boot falha alto.
+    Faz `ping` porque o cliente do Mongo conecta de forma preguiçosa. `MemorySaver` só em `local`;
+    em production o boot falha alto (cair em silêncio perderia os checkpoints a cada restart).
     """
 
     try:
@@ -220,13 +214,7 @@ async def _criar_checkpointer() -> BaseCheckpointSaver:
 
 
 class FluxoAgentes:
-    """
-    Compila o grafo + prepara o checkpointer uma vez por processo e reusa nas requests.
-
-    O `lock` cobre os pontos de entrada que chamam `get()` concorrentemente no primeiro uso
-    (lifespan, e qualquer chamada direta antes dele) — sem ele, duas chamadas concorrentes
-    abririam dois checkpointers MongoDB e compilariam o grafo duas vezes.
-    """
+    """Compila o grafo e prepara o checkpointer uma vez por processo; o `lock` evita duplicar no 1º uso concorrente."""
 
     def __init__(self) -> None:
         self._compilado: GrafoFrigus | None = None
