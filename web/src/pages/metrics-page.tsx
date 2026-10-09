@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Card } from "../components/ui/card";
+import { cn } from "../lib/cn";
 import {
   groupByLabel,
+  histogramQuantile,
   histogramStatsByLabel,
   parseMetrics,
   sumByName,
@@ -128,6 +130,20 @@ export function MetricsPage() {
   const graphDurCount = samples ? sumByName(samples, "frigus_graph_duration_seconds_count") : 0;
   const graphDurAvg = graphDurCount > 0 ? graphDurSum / graphDurCount : 0;
 
+  // SLO do turno: limites vêm da própria API (`frigus_slo_target`), não ficam repetidos aqui.
+  const sloTarget = (sli: string) =>
+    samples?.find((s) => s.name === "frigus_slo_target" && s.labels.sli === sli)?.value ?? null;
+  const sloLatencia = sloTarget("latency_p95_seconds");
+  const sloErro = sloTarget("error_ratio");
+  const graphErros = samples ? sumByName(samples.filter((s) => s.labels.outcome === "error"), "frigus_graph_runs_total") : 0;
+  const graphBloqueios = samples ? sumByName(samples.filter((s) => s.labels.outcome === "blocked"), "frigus_graph_runs_total") : 0;
+  const taxaErro = graphRuns > 0 ? graphErros / graphRuns : 0;
+  const p95 = samples ? histogramQuantile(samples, "frigus_graph_duration_seconds", 0.95) : null;
+  const sloOk = p95 !== null && sloLatencia !== null && sloErro !== null && p95 <= sloLatencia && taxaErro <= sloErro;
+  const custoUsd = samples ? sumByName(samples, "frigus_llm_cost_usd_total") : 0;
+  const fallbacks = samples ? sumByName(samples, "frigus_llm_fallbacks_total") : 0;
+  const emAndamento = samples ? sumByName(samples, "frigus_graph_in_progress") : 0;
+
   const nodeStats = samples ? histogramStatsByLabel(samples, "frigus_node_duration_seconds", "node") : {};
   const nodeTotalTime = Object.values(nodeStats).reduce((acc, s) => acc + s.totalSeconds, 0);
   const nodeMaisLento = Object.entries(nodeStats).sort((a, b) => b[1].totalSeconds - a[1].totalSeconds)[0];
@@ -144,6 +160,27 @@ export function MetricsPage() {
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}
 
+        {samples && sloLatencia !== null && sloErro !== null && (
+          <div
+            className={cn(
+              "rounded-lg border px-4 py-3 text-sm",
+              graphRuns === 0
+                ? "border-border text-muted-foreground"
+                : sloOk
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
+                  : "border-destructive/50 bg-destructive/10 text-foreground",
+            )}
+          >
+            <strong className="font-semibold">
+              {graphRuns === 0 ? "sem turnos ainda" : sloOk ? "dentro do SLO" : "SLO estourado"}
+            </strong>
+            <span className="ml-2 text-muted-foreground">
+              p95 até {fmtSeconds(sloLatencia)} e erro até {(sloErro * 100).toFixed(0)}% — acumulado
+              desde que a API subiu (janela de 5m e alertas no Grafana/Prometheus).
+            </span>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Kpi label="requests HTTP" value={httpTotal} />
           <Kpi label="requests ativos" value={httpAtivos} />
@@ -156,6 +193,12 @@ export function MetricsPage() {
           />
           <Kpi label="tokens entrada" value={tokensIn} />
           <Kpi label="tokens saída" value={tokensOut} />
+          <Kpi label="p95 do turno" value={p95 === null ? "-" : fmtSeconds(p95)} />
+          <Kpi label="taxa de erro" value={`${(taxaErro * 100).toFixed(1)}%`} />
+          <Kpi label="bloqueios (guardrail)" value={graphBloqueios} />
+          <Kpi label="turnos em andamento" value={emAndamento} />
+          <Kpi label="custo LLM (tabela fixa)" value={`US$ ${custoUsd.toFixed(4)}`} />
+          <Kpi label="fallbacks de modelo" value={fallbacks} />
         </div>
 
         {samples && (

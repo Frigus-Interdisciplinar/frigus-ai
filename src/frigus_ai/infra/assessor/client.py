@@ -25,6 +25,7 @@ from frigus_ai.infra.assessor.schemas import (
     SendMessageResponse,
 )
 from frigus_ai.settings import settings
+from frigus_ai.telemetry.metrics import medir_externo
 
 _TIMEOUT = 15.0
 _VERSAO_A2A = "1.0"
@@ -57,13 +58,14 @@ async def perguntar(pergunta: str, session_id: str) -> str:
     headers = {"A2A-Version": _VERSAO_A2A, **({"X-API-Key": chave} if chave else {})}
 
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resposta = await client.post(
-                f"{settings.api.assessor_a2a_url.rstrip('/')}/a2a",
-                json=_requisicao(pergunta, session_id).model_dump(mode="json", exclude_none=True),
-                headers=headers,
-            )
-            resposta.raise_for_status()
+        with medir_externo("assessor"):
+            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+                resposta = await client.post(
+                    f"{settings.api.assessor_a2a_url.rstrip('/')}/a2a",
+                    json=_requisicao(pergunta, session_id).model_dump(mode="json", exclude_none=True),
+                    headers=headers,
+                )
+                resposta.raise_for_status()
         corpo = SendMessageResponse.model_validate_json(resposta.content)
         
     except httpx.HTTPError as e:

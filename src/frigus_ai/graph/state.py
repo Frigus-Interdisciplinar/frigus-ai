@@ -94,6 +94,9 @@ class Estado(MessagesState):
 class SaidaGrafo(MessagesState):
     """Único formato devolvido ao chamador — não expõe mapa_pii, rota etc."""
 
+    # O runner distingue turno bloqueado pelo guardrail (não é erro) de turno resolvido.
+    mensagem_bloqueada: NotRequired[str | None]
+
 
 class RouterUpdate(TypedDict):
     agentes_chamados:  list[NodeLiteral]

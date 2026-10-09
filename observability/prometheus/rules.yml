@@ -1,0 +1,83 @@
+# SLIs gravados e alertas do SLO do turno de chat. Os limites NÃO são repetidos aqui: vêm da
+# própria API (`frigus_slo_target`, definido em src/frigus_ai/telemetry/metrics.py), então
+# mudar o SLO é mudar uma constante no código.
+#
+# Sem Alertmanager: os alertas aparecem em http://localhost:9090/alerts (e no Grafana). Pra
+# avisar alguém de verdade (e-mail, Slack, PagerDuty) basta subir um Alertmanager e apontar
+# `alerting:` no prometheus.yml — as regras não mudam.
+groups:
+  - name: frigus-sli
+    rules:
+      - record: frigus:turn_latency_p95_seconds:5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(frigus_graph_duration_seconds_bucket[5m])))
+
+      # Bloqueio do guardrail (outcome="blocked") fica no denominador, não no numerador.
+      - record: frigus:turn_error_ratio:5m
+        expr: |
+          sum(rate(frigus_graph_runs_total{outcome="error"}[5m]))
+            / clamp_min(sum(rate(frigus_graph_runs_total[5m])), 1e-9)
+      - record: frigus:turn_error_ratio:1h
+        expr: |
+          sum(rate(frigus_graph_runs_total{outcome="error"}[1h]))
+            / clamp_min(sum(rate(frigus_graph_runs_total[1h])), 1e-9)
+      - record: frigus:turn_error_ratio:30d
+        expr: |
+          sum(increase(frigus_graph_runs_total{outcome="error"}[30d]))
+            / clamp_min(sum(increase(frigus_graph_runs_total[30d])), 1e-9)
+
+  - name: frigus-slo
+    rules:
+      - alert: FrigusSLOLatencia
+        expr: frigus:turn_latency_p95_seconds:5m > scalar(frigus_slo_target{sli="latency_p95_seconds"})
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 do turno acima do SLO há 10 min ({{ $value | humanizeDuration }})"
+
+      - alert: FrigusSLOErro
+        expr: frigus:turn_error_ratio:5m > scalar(frigus_slo_target{sli="error_ratio"})
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Taxa de erro dos turnos acima do SLO ({{ $value | humanizePercentage }})"
+
+      # Burn rate (Google SRE workbook): 14.4× o permitido gasta 2% do orçamento de 30 dias
+      # em 1h. Duas janelas: a de 1h confirma que é sério, a de 5m que ainda está acontecendo.
+      - alert: FrigusOrcamentoDeErroQueimandoRapido
+        expr: |
+          frigus:turn_error_ratio:1h > 14.4 * scalar(frigus_slo_target{sli="error_ratio"})
+          and
+          frigus:turn_error_ratio:5m > 14.4 * scalar(frigus_slo_target{sli="error_ratio"})
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Orçamento de erro queimando 14× mais rápido que o SLO permite"
+
+  - name: frigus-operacao
+    rules:
+      - alert: FrigusApiForaDoAr
+        expr: up{job="frigus-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Prometheus não consegue raspar a API"
+
+      - alert: FrigusDependenciaFora
+        expr: frigus_dependency_up == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.dep }} falhou no /health/ready"
+
+      - alert: FrigusTurnoNaoGravado
+        expr: increase(frigus_chat_persist_failures_total[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Turno de chat não foi gravado no Mongo (via {{ $labels.via }})"
+
+      - alert: FrigusMemoriaAtrasada
+        expr: frigus_memory_pending > 50
+        for: 30m
+        labels: {severity: info}
+        annotations:
+          summary: "{{ $value }} chats com resumo/embedding atrasado — Qdrant ou LLM fora?"

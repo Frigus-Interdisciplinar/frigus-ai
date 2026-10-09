@@ -155,3 +155,9 @@ async def test_stream_sem_nenhuma_resposta_nao_devolve_answer_ready(monkeypatch)
 
     assert not any(isinstance(e, AnswerReady) for e in eventos)
     assert isinstance(eventos[-1], RunFinished)
+
+
+def test_outcome_bloqueio_do_guardrail_nao_e_resolucao_nem_erro():
+    assert runner._outcome({"mensagem_bloqueada": "Não consigo processar essa solicitação."}) == "blocked"
+    assert runner._outcome({"mensagem_bloqueada": None}) == "success"
+    assert runner._outcome({}) == "success"
