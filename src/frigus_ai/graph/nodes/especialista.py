@@ -12,13 +12,13 @@ from frigus_ai.graph.state import (
     ContextoPrompt,
     EspecialistaUpdate,
     Estado,
-    RouteLiteral,
+    ResultadoEspecialista,
 )
 from frigus_ai.telemetry import medir_node
 
 
 def especialista(
-    nome: NodeLiteral, rota: RouteLiteral | None = None
+    nome: NodeLiteral,
 ) -> Callable[
     [AsyncNodeComContexto[str | ConteudoEspecialista]], AsyncNodeComContexto[EspecialistaUpdate]
 ]:
@@ -40,15 +40,14 @@ def especialista(
             if isinstance(conteudo, str):
                 conteudo = ConteudoEspecialista(resposta=conteudo, dados=conteudo)
 
-            update = EspecialistaUpdate(
+            return EspecialistaUpdate(
                 agentes_chamados=[nome],
-                resposta_especialista=conteudo["resposta"],
-                dados_especialista=conteudo["dados"],
+                dados_especialistas=[
+                    ResultadoEspecialista(
+                        agente=nome, resposta=conteudo["resposta"], dados=conteudo["dados"]
+                    )
+                ],
             )
-            if rota is not None:
-                update["rota"] = rota
-
-            return update
 
         return medir_node(nome)(executar)
 

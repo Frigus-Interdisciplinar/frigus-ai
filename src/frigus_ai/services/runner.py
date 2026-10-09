@@ -7,8 +7,8 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from frigus_ai.graph.builder import fluxo_agentes
-from frigus_ai.graph.names import NodeLiteral
-from frigus_ai.graph.state import ContextoPrompt, EntradaGrafo, RouteLiteral
+from frigus_ai.graph.names import VISAO, NodeLiteral
+from frigus_ai.graph.state import ContextoPrompt, EntradaGrafo, Route, RouteLiteral
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import session_context
 from frigus_ai.repositories import chat_embeddings_repository
@@ -194,6 +194,8 @@ async def executar_stream(
 
                 if tipo == "on_chain_start":
                     yield NodeStarted(node=cast(NodeLiteral, nome))
+                    if nome == VISAO:  # turno com foto não passa pelo roteador
+                        yield RouteSelected(route=Route.VISAO)
                     continue
 
                 if tipo != "on_chain_end":
@@ -203,8 +205,10 @@ async def executar_stream(
 
                 if isinstance(output, dict):
                     bloqueado = bloqueado or _outcome(output) == "blocked"
-                    if (rota := output.get("rota")) is not None:
-                        yield RouteSelected(route=cast(RouteLiteral, rota))
+                    # Um RouteSelected por domínio escolhido; lista vazia = o roteador respondeu direto.
+                    if (escolhidos := output.get("especialistas")) is not None:
+                        for dominio in escolhidos or [Route.FIM]:
+                            yield RouteSelected(route=cast(RouteLiteral, dominio))
 
                     resposta_final = _extrair_resposta(output) or resposta_final
 

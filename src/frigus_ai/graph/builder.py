@@ -1,5 +1,6 @@
 import asyncio
-from typing import get_args
+from collections.abc import Mapping
+from typing import Final
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
@@ -22,6 +23,7 @@ from frigus_ai.graph.names import (
     RECEITAS,
     ROTEADOR,
     VISAO,
+    NodeLiteral,
 )
 from frigus_ai.graph.nodes import (
     no_assessor,
@@ -72,29 +74,37 @@ def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     return ROTEADOR
 
 
-_ESPECIALISTAS = frozenset(get_args(RotaEspecialista))
+# Domínio que o roteador escolhe -> nó registrado no grafo.
+NO_POR_DOMINIO: Final[Mapping[RotaEspecialista, NodeLiteral]] = {
+    "estoque":    ESTOQUE,
+    "compras":    COMPRAS,
+    "receitas":   RECEITAS,
+    "faq":        FAQ,
+    "financeiro": FINANCEIRO,
+    "assessor":   A2A_ASSESSOR,
+}
 
 
-def decidir_especialista(estado: Estado) -> str:
-    rota = estado.get("rota", Route.FIM)
-    if rota not in _ESPECIALISTAS:
-        return Route.FIM
-    return rota
+def decidir_especialistas(estado: Estado) -> list[str] | str:
+    """Os nós dos domínios escolhidos, que rodam em paralelo; nenhum = o roteador já respondeu."""
+
+    nos = [NO_POR_DOMINIO[dominio] for dominio in estado.get("especialistas", [])]
+    return nos or END
+
+
+def decidir_apos_orquestrador(estado: Estado) -> str:
+    """Sem nenhum especialista com dado (ex.: Assessor fora do ar) não há o que o Juiz conferir:
+    ele só reprovaria o aviso de erro, e cada retry pagaria de novo o timeout de rede."""
+
+    tem_dados = any(r["dados"] for r in estado["dados_especialistas"])
+    return JUIZ if tem_dados else GUARDRAIL_SAIDA
 
 
 def decidir_apos_juiz(estado: Estado) -> str:
-    """Juiz reprovou e ainda há tentativas: volta ao MESMO especialista; senão segue pro guardrail de saída."""
+    """Juiz reprovou e ainda há tentativas: o orquestrador reescreve com o feedback (repetir os
+    especialistas regravaria estoque e lista de compras); senão segue pro guardrail de saída."""
 
-    if estado.get("feedback_juiz"):
-        return estado.get("rota", GUARDRAIL_SAIDA)
-    return GUARDRAIL_SAIDA
-
-
-def decidir_apos_assessor(estado: Estado) -> str:
-    """Assessor fora do ar devolve `dados_especialista` vazio: sem dado pra checar, o Juiz só
-    reprovaria a mensagem de erro e cada retry pagaria de novo o timeout de rede."""
-
-    return JUIZ if estado.get("dados_especialista") else GUARDRAIL_SAIDA
+    return ORQUESTRADOR if estado.get("feedback_juiz") else GUARDRAIL_SAIDA
 
 
 def _construir_grafo() -> StateGraph:
@@ -140,52 +150,26 @@ def _construir_grafo() -> StateGraph:
         },
     )
 
+    # Vários domínios -> vários nós na mesma etapa; o orquestrador roda uma vez, depois de todos.
     grafo.add_conditional_edges(
         source   = ROTEADOR,
-        path     = decidir_especialista,
-        path_map = {
-            Route.ESTOQUE:    ESTOQUE,
-            Route.COMPRAS:    COMPRAS,
-            Route.RECEITAS:   RECEITAS,
-            Route.FAQ:        FAQ,
-            Route.FINANCEIRO: FINANCEIRO,
-            Route.ASSESSOR:   A2A_ASSESSOR,
-            Route.FIM:        END,
-        },
+        path     = decidir_especialistas,
+        path_map = {**{no: no for no in NO_POR_DOMINIO.values()}, END: END},
     )
 
-    # Estoque/Compras/Financeiro/Visão produzem JSON estruturado -> Orquestrador formata em linguagem natural
-    grafo.add_edge(ESTOQUE,      ORQUESTRADOR)
-    grafo.add_edge(COMPRAS,      ORQUESTRADOR)
-    grafo.add_edge(FINANCEIRO,   ORQUESTRADOR)
-    grafo.add_edge(VISAO,        ORQUESTRADOR)
-    grafo.add_edge(ORQUESTRADOR, JUIZ)
+    for especialista in (*NO_POR_DOMINIO.values(), VISAO):
+        grafo.add_edge(especialista, ORQUESTRADOR)
 
-    # Receitas/FAQ já respondem em linguagem natural -> vão direto para o Juiz
-    grafo.add_edge(RECEITAS, JUIZ)
-    grafo.add_edge(FAQ,      JUIZ)
-
-    # Assessor (A2A) também responde em linguagem natural; fora do ar, pula o Juiz
     grafo.add_conditional_edges(
-        source   = A2A_ASSESSOR,
-        path     = decidir_apos_assessor,
+        source   = ORQUESTRADOR,
+        path     = decidir_apos_orquestrador,
         path_map = {JUIZ: JUIZ, GUARDRAIL_SAIDA: GUARDRAIL_SAIDA},
     )
 
-    # Juiz: reprovado + tentativas disponíveis -> volta pro especialista de origem; caso contrário -> Guardrail de Saída
     grafo.add_conditional_edges(
         source   = JUIZ,
         path     = decidir_apos_juiz,
-        path_map = {
-            Route.ESTOQUE:    ESTOQUE,
-            Route.COMPRAS:    COMPRAS,
-            Route.RECEITAS:   RECEITAS,
-            Route.FAQ:        FAQ,
-            Route.FINANCEIRO: FINANCEIRO,
-            Route.ASSESSOR:   A2A_ASSESSOR,
-            Route.VISAO:      VISAO,
-            GUARDRAIL_SAIDA:  GUARDRAIL_SAIDA,
-        },
+        path_map = {ORQUESTRADOR: ORQUESTRADOR, GUARDRAIL_SAIDA: GUARDRAIL_SAIDA},
     )
 
     grafo.add_edge(GUARDRAIL_SAIDA, END)

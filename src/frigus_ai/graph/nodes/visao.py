@@ -19,10 +19,10 @@ from frigus_ai.graph.names import VISAO
 from frigus_ai.graph.nodes.contexto import revisao_do_juiz
 from frigus_ai.graph.nodes.especialista import especialista
 from frigus_ai.graph.prompts import load_prompt
-from frigus_ai.graph.state import ContextoPrompt, Estado, Route
+from frigus_ai.graph.state import ContextoPrompt, Estado
 
 
-@especialista(VISAO, rota=Route.VISAO)
+@especialista(VISAO)
 async def no_visao(estado: Estado, runtime: Runtime[ContextoPrompt]) -> str:
     if llm_visao is None:
         raise FalhaNoAgente("Modelo de visão não configurado (GEMINI_API_KEY ausente).")

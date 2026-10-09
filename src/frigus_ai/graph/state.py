@@ -6,6 +6,7 @@ from typing import Annotated, Literal, NotRequired, TypedDict, get_args
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
 from langgraph.runtime import Runtime
+from langgraph.types import Overwrite
 from pydantic import BaseModel, Field
 
 from frigus_ai.domain.models import Fatos
@@ -44,12 +45,15 @@ class Route:
 class Roteamento(BaseModel):
     """Saída estruturada do roteador (`response_format` do `router_app`)."""
 
-    rota: RotaRoteador
+    especialistas: list[RotaEspecialista] = Field(
+        default_factory=list,
+        description="Os domínios que precisam atender o pedido; vazia quando você mesmo responde.",
+    )
     resposta: str = Field(
         default="",
         description=(
-            "Só quando rota=fim: o texto para o usuário (saudação, fora de escopo ou "
-            "pedido de clarificação). Vazio quando encaminha pra um especialista."
+            "Só com `especialistas` vazia: o texto para o usuário (saudação, fora de escopo ou "
+            "pedido de clarificação). Vazio quando encaminha pra algum especialista."
         ),
     )
 
@@ -72,11 +76,24 @@ class EntradaGrafo(MessagesState):
     imagem_b64:           NotRequired[str]
 
 
+class ResultadoEspecialista(TypedDict):
+    """O que um especialista devolveu no turno. `dados` é o que o Juiz confere (vazio = o
+    especialista estava indisponível e `resposta` é só o aviso)."""
+
+    agente:   NodeLiteral
+    resposta: str
+    dados:    str
+
+
 class Estado(MessagesState):
     resposta_especialista: NotRequired[str]
     dados_especialista:    NotRequired[str]  # saída crua do especialista (JSON/RAG), preservada mesmo após o Orquestrador reformatar resposta_especialista — usada pelo Juiz para checar grounding
     agentes_chamados:      NotRequired[Annotated[list[NodeLiteral], operator.add]]
-    rota:                  NotRequired[RouteLiteral]
+    # Domínios escolhidos pelo roteador no turno; vazia = o roteador respondeu direto.
+    especialistas:         NotRequired[list[RotaEspecialista]]
+    # Um item por especialista que rodou; o reducer soma os que rodam em paralelo e o
+    # guardrail de entrada zera a cada turno (`Overwrite`).
+    dados_especialistas:   NotRequired[Annotated[list[ResultadoEspecialista], operator.add]]
     pergunta_original:     NotRequired[str]
     mapa_pii:              NotRequired[MapaPII]
     mensagem_bloqueada:    NotRequired[str | None]
@@ -95,18 +112,16 @@ class Estado(MessagesState):
 
 
 class SaidaGrafo(MessagesState):
-    """Único formato devolvido ao chamador — não expõe mapa_pii, rota etc."""
+    """Único formato devolvido ao chamador — não expõe mapa_pii, especialistas etc."""
 
     # O runner distingue turno bloqueado pelo guardrail (não é erro) de turno resolvido.
     mensagem_bloqueada: NotRequired[str | None]
 
 
 class RouterUpdate(TypedDict):
-    agentes_chamados:  list[NodeLiteral]
-    rota:              RouteLiteral
-    pergunta_original: str
-    tentativas_juiz:   NotRequired[int]
-    messages:          NotRequired[list[AnyMessage]]
+    agentes_chamados: list[NodeLiteral]
+    especialistas:    list[RotaEspecialista]
+    messages:         NotRequired[list[AnyMessage]]
 
 
 class ConteudoEspecialista(TypedDict):
@@ -117,19 +132,17 @@ class ConteudoEspecialista(TypedDict):
 
 
 class EspecialistaUpdate(TypedDict):
-    """Montado só pelo decorator `@especialista` (`graph/nodes/especialista.py`). `rota` é só da
-    Visão: o roteador não roda em turno com foto, e sem ela o Juiz não teria pra onde devolver
-    uma resposta reprovada."""
+    """Montado só pelo decorator `@especialista` (`graph/nodes/especialista.py`). A lista de um
+    item é somada às dos outros especialistas do turno pelo reducer."""
 
-    agentes_chamados:      list[NodeLiteral]
-    resposta_especialista: str
-    dados_especialista:    str
-    rota:                  NotRequired[RouteLiteral]
+    agentes_chamados:    list[NodeLiteral]
+    dados_especialistas: list[ResultadoEspecialista]
 
 
 class OrquestradorUpdate(TypedDict):
     agentes_chamados:      list[NodeLiteral]
     resposta_especialista: str
+    dados_especialista:    str
 
 
 class JuizUpdate(TypedDict):
@@ -145,6 +158,12 @@ class GuardrailEntradaUpdate(TypedDict):
     messages:           list[AnyMessage]
     mensagem_bloqueada: str | None
     mapa_pii:           NotRequired[MapaPII]
+    # Estado do turno anterior que não pode vazar pro novo (o checkpoint é por thread). Vai aqui
+    # e não no roteador porque o turno com foto pula o roteador.
+    dados_especialistas: NotRequired[Overwrite]
+    tentativas_juiz:     NotRequired[int]
+    feedback_juiz:       NotRequired[str]
+    pergunta_original:   NotRequired[str]
 
 
 class GuardrailSaidaUpdate(TypedDict):
@@ -190,6 +209,7 @@ __all__ = [
     "ItemIdentificado",
     "JuizUpdate",
     "OrquestradorUpdate",
+    "ResultadoEspecialista",
     "RotaEspecialista",
     "RotaRoteador",
     "Roteamento",
