@@ -55,8 +55,6 @@ consistente do que prosa gerada por LLM a cada encerramento de sessão.
   `GET/PUT /profile`. Decidir QUAL node injeta fatos no prompt (candidato natural: o
   Orquestrador, que já monta a resposta final) é trabalho futuro, depois da
   normalização — não faz sentido embutir `restricoes` sujo no contexto do LLM.
-- Mapeamento fatos → `Ingredient.id` do Neo4j pras relações
-  `ALLERGIC_TO`/`PREFERS`/`DISLIKES` (depende da normalização acima e da Fase 3).
 - **Qdrant/embedding** (abordagem alternativa ao pedido original da disciplina): depois
   de normalizado, `restricoes`/`preferencias` são candidatos a busca semântica; hoje
   não há nenhum embedding de `fatos`/perfil, só o FAQ (`graph/tools/faq/`) usa Qdrant.

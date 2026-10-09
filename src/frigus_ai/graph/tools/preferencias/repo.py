@@ -1,99 +1,41 @@
 import asyncio
+import re
 
 from langchain_core.tools import BaseTool, StructuredTool
 
 from frigus_ai.graph.tools.base import ToolSet
-from frigus_ai.graph.tools.preferencias.schemas import (
-    DefinirPreferenciaArgs,
-    ListarPreferenciasArgs,
-    RemoverPreferenciaArgs,
-    SugerirReceitasCompativeisArgs,
-)
+from frigus_ai.graph.tools.preferencias.schemas import SugerirReceitasCompativeisArgs
 from frigus_ai.graph.tools.response import Response
 from frigus_ai.infra.postgres.context import current_user_id
 from frigus_ai.repositories import preferencias_repository
-from frigus_ai.repositories.preferencias_repository import TipoPreferencia
+from frigus_ai.services.user_service import user_service
 
 
-def _uid_do_grafo() -> str:
-    """Converte o user_id da sessão (Postgres, int) pro uid do node User no Neo4j."""
-    return f"user-{current_user_id()}"
+def _sem_anotacao(alergia: str) -> str:
+    """"Amendoim (filho)" → "Amendoim": o grafo só conhece o nome do ingrediente."""
+    return re.sub(r"\s*\(.*?\)", "", alergia)
 
 
 class PreferenciasRepo(ToolSet):
-    async def listar_preferencias(self) -> dict:
+    async def sugerir_receitas_compativeis(self, evitar: list[str] | None = None, limit: int = 10) -> dict:
         """
-        Retorna os ingredientes que o usuário prefere, não gosta ou é alérgico,
-        de acordo com o grafo de preferências.
-        """
-
-        preferencias = await preferencias_repository.listar_preferencias(_uid_do_grafo())
-        return Response.ok(**preferencias)
-
-    async def definir_preferencia(self, ingrediente_nome: str, tipo: TipoPreferencia) -> dict:
-        """
-        Marca um ingrediente como preferido, não gostado ou alérgico para o usuário.
+        Sugere receitas do grafo de receitas que não usam nenhum ingrediente ao qual o
+        usuário (ou alguém da casa) é alérgico — as alergias do perfil já são aplicadas
+        automaticamente. Use `evitar` para excluir também ingredientes que ele não gosta.
         """
 
-        await preferencias_repository.definir_preferencia(_uid_do_grafo(), ingrediente_nome, tipo)
-        return Response.ok(ingrediente_nome=ingrediente_nome, tipo=tipo)
+        fatos = await user_service.buscar_fatos(current_user_id())
+        evitar_total = [*map(_sem_anotacao, fatos.alergias), *(evitar or [])]
 
-    async def remover_preferencia(self, ingrediente_nome: str, tipo: TipoPreferencia) -> dict:
-        """
-        Remove a marcação de um ingrediente como preferido, não gostado ou alérgico.
-        """
-
-        await preferencias_repository.remover_preferencia(_uid_do_grafo(), ingrediente_nome, tipo)
-        return Response.ok(ingrediente_nome=ingrediente_nome, tipo=tipo)
-
-    async def sugerir_receitas_compativeis(self, limit: int = 10) -> dict:
-        """
-        Sugere receitas que não usam nenhum ingrediente que o usuário não gosta ou é
-        alérgico, cruzando o grafo de preferências com o grafo de receitas.
-        """
-
-        receitas = await preferencias_repository.receitas_sem_restricoes(_uid_do_grafo(), limit)
+        receitas = await preferencias_repository.receitas_sem_ingredientes(evitar_total, limit)
         return Response.ok(total_records=len(receitas), receitas=receitas)
 
     def as_tools(self) -> list[BaseTool]:
-        def listar_sync(**kwargs):
-            """Executa a consulta de preferências para callers síncronos legados."""
-            return asyncio.run(self.listar_preferencias(**kwargs))
-
-        def definir_sync(**kwargs):
-            """Executa a marcação de preferência para callers síncronos legados."""
-            return asyncio.run(self.definir_preferencia(**kwargs))
-
-        def remover_sync(**kwargs):
-            """Executa a remoção de preferência para callers síncronos legados."""
-            return asyncio.run(self.remover_preferencia(**kwargs))
-
         def sugerir_sync(**kwargs):
             """Executa a sugestão de receitas compatíveis para callers síncronos legados."""
             return asyncio.run(self.sugerir_receitas_compativeis(**kwargs))
 
         return [
-            StructuredTool.from_function(
-                listar_sync,
-                coroutine=self.listar_preferencias,
-                name="listar_preferencias",
-                description=self.listar_preferencias.__doc__,
-                args_schema=ListarPreferenciasArgs,
-            ),
-            StructuredTool.from_function(
-                definir_sync,
-                coroutine=self.definir_preferencia,
-                name="definir_preferencia",
-                description=self.definir_preferencia.__doc__,
-                args_schema=DefinirPreferenciaArgs,
-            ),
-            StructuredTool.from_function(
-                remover_sync,
-                coroutine=self.remover_preferencia,
-                name="remover_preferencia",
-                description=self.remover_preferencia.__doc__,
-                args_schema=RemoverPreferenciaArgs,
-            ),
             StructuredTool.from_function(
                 sugerir_sync,
                 coroutine=self.sugerir_receitas_compativeis,
