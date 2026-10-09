@@ -1,32 +1,33 @@
 # Requisitos da disciplina — o que falta
 
-Conferido contra o código em `fix/broken-tests` (suíte: 232 passed) em 2026-09-23.
+Conferido contra o código em `docs/campos-mensagem` (suíte: 311 passed; a única falha, `test_metrics_aberto_sem_token`, vem de `API_KEYS__METRICS_TOKEN` preenchido no `.env` local) em 2026-10-08.
 Antes de reportar item como pendente, confira o código: este checklist envelhece.
 
 ## Placar
 
 | Requisito | Status | Onde / o que falta |
 | --- | --- | --- |
-| API FastAPI/Flask | ⚠️ | `api/` com health, chats, keys, MCP e A2A. `GET /chats` tipado (`ChatSummaryResponse`), `DELETE /chats/{id}` com ownership (403). Falta: versionamento |
-| Multiagente (mín. 5 agentes) | ✅ | 10 nós (`graph/names.py`) |
+| API FastAPI/Flask | ✅ | `api/` com rotas de negócio em `/v1`, health, keys, MCP e A2A. `GET /chats` tipado (`ChatSummaryResponse`), `DELETE /chats/{id}` com ownership (403). Rate limit por rota do fastapi-guard funcionando (`app.state.guard_decorator`) |
+| Multiagente (mín. 5 agentes) | ✅ | 12 nós (`graph/names.py`) |
 | LangChain pra criar agentes | ✅ | `graph/agents.py` |
 | LangGraph pra orquestrar | ✅ | `graph/builder.py`, com `input_schema`/`output_schema` e contrato `AsyncNode[R]` |
 | Sessões por usuário | ⚠️ | `thread_id=session_id` no `MongoDBSaver` + histórico no Mongo. Ownership fechado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono) |
-| Memória de longo prazo | ⚠️ | Fatos estruturados (`alergias`/`preferencias`/`restricoes`/`habitos`) em Mongo (`user_fatos`), extraídos automaticamente a cada 10 mensagens; `restricoes` normalizado pra vocabulário canônico. Perfil comportamental em texto livre (`user_profiles`) foi removido — nunca era lido pelo grafo. `fatos` ainda não é injetado de volta no prompt do chat |
-| MCP | ⚠️ | `mcp.py` expõe as tools com `X-API-Key`. Falta validação externa ponta a ponta |
+| Memória de longo prazo | ✅ | Fatos estruturados em Mongo (`user_fatos`, a cada 10 mensagens) + resumo por chat com embedding no Qdrant; os dois entram no prompt dos especialistas (`runner._carregar_contexto` → `load_prompt`). Reconciliador no lifespan refaz resumo/embedding que falhou (`indexado_ate`/`resumido_ate`) |
+| MCP | ✅ | `api/mcp.py` em `/mcp`, 20 tools. Validado ao vivo com o cliente oficial do SDK `mcp` (`list_tools` + `call_tool(query_stock)`) |
 | A2A | ✅ | Superfície única em `api/routes/a2a.py` (contrato manual, `a2a-sdk` removido — decisão em `AGENTS.md`) |
 | RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding/relevância, até 2 retentativas |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
-| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 8 painéis |
+| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 16 painéis (inclui memória, chamadas externas, bloqueios do guard) |
 | SRE: custo 100 e 1000 usuários/semana | ⚠️ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
-| SRE: índice de erros | ⚠️ | `evals/sre_report.py` define fórmula (`error`/total de `frigus_graph_runs_total`); falta validar contra scrape real |
+| SRE: SLO/SLI e alertas | ✅ | SLO p95 ≤ 8s e erro ≤ 5% (`telemetry/metrics.py`, exportado em `frigus_slo_target`), `outcome="blocked"` separado de erro, regras/alertas em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na web. Sem SLA nem Alertmanager (decisão: não há contrato nem plantão) |
+| SRE: índice de erros | ⚠️ | SLI de erro gravado/alertado no Prometheus e no `sre_report.py` (com orçamento de erro); falta validar contra scrape real |
 | SRE: custo/ROI | ⚠️ | `evals/sre_report.py` calcula; `VALOR_POR_RESOLUCAO_USD` é placeholder até ter dado de negócio real |
-| SRE: custo por resolução | ⚠️ | `evals/sre_report.py`: resolução = `frigus_graph_runs_total{outcome="success"}`, custo pela tabela `PRECOS_POR_1M_TOKENS` |
-| Desenho de arquitetura | ✅ | README — Mermaid + `assets/diagrama-agentes.png` |
+| SRE: custo por resolução | ⚠️ | `evals/sre_report.py`: resolução = `outcome="success"` (bloqueio não conta), custo pela tabela `PRECOS_POR_1M_TOKENS` de `telemetry/metrics_callback.py` (também em runtime: `frigus_llm_cost_usd_total`). Preço do `gemini-3.6-flash` herdado do 2.5 — conferir |
+| Desenho de arquitetura | ✅ | README, seção "Arquitetura" (Mermaid); o PNG é só o fluxo de agentes |
 | Extra: Redis fila/ranking | ✅ | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados (`ZINCRBY`/`ZREVRANGE`) |
-| Extra: Neo4j | ⚠️ | `neomodel` no `pyproject.toml`, conexão lazy, models (`User`/`Ingredient`/`Recipe`), tools de preferências e traversal (`sugerir_receitas_compativeis`) já expostas ao LLM. Falta sync automático Postgres→Neo4j (produtos/receitas) e mapear `fatos`→relações do grafo |
-| Avaliação da disciplina | ⚠️ | Métricas de runtime movidas pra `observability/`; `evals/` agora só avaliação offline (`sre_report.py` + `scenarios.py`/`run_scenarios.py`). Harness nunca rodou de ponta a ponta (sem Docker no ar) |
+| Extra: Neo4j | ❌ | `neomodel` no `pyproject.toml`, conexão lazy, models (`Ingredient`/`Recipe`), traversal (`sugerir_receitas_compativeis`) filtrando pelas alergias do `user_fatos` (Mongo é a única fonte de preferência). Falta sync automático Postgres→Neo4j e **a instância Aura do `.env` não existe mais** (NXDOMAIN): criar outra ou usar o Neo4j do compose |
+| Avaliação da disciplina | ⚠️ | Métricas de runtime movidas pra `telemetry/`; `evals/` agora só avaliação offline (`sre_report.py` + `scenarios.py`/`run_scenarios.py`). Harness rodou contra infra viva: 6/7 (o `faq` caiu por 429 da Groq, não por roteamento) |
 
 ## P0 — o que mais pesa na nota
 
@@ -63,22 +64,21 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
    do repository (`tests/tools/compras/test_repo.py`), igual todo o resto do projeto — sem
    Docker no ar não deu pra validar contra Postgres real; considerar isso antes de fechar
    o requisito como 100%.
-3. **MCP ponta a ponta** com cliente externo.
-4. **Rodar `evals/run_scenarios.py` de ponta a ponta** contra infra viva (Docker + API keys) e
-   guardar o relatório — hoje só o `--demo` (lógica pura de match/agregação) foi validado.
+3. ~~**MCP ponta a ponta** com cliente externo.~~ — feito, ver placar.
+4. ~~**Rodar `evals/run_scenarios.py`**~~ — rodou (6/7). Falta repetir com provedores estáveis e
+   guardar o relatório final.
 
 ## P2 — extras
 
 1. ~~**Neo4j: tool de traversal.**~~ — feito: `sugerir_receitas_compativeis` exposta dentro de
-   `RECEITAS_TOOLS`. Falta real: sync automático Postgres→Neo4j (nunca existiu, só seed manual
-   em `cql/`) e mapear `fatos` (`user_fatos`) pras relações `ALLERGIC_TO`/`PREFERS`/`DISLIKES` —
-   ver `.agents/notes/pending/neo4j/arquivos.md`.
+   `RECEITAS_TOOLS`. Falta real: sync automático Postgres→Neo4j (nunca existiu; o seed manual
+   `cql/*.cypher` foi removido). Preferência no grafo foi removida (duplicava `user_fatos`) — ver `.agents/notes/pending/neo4j/arquivos.md`.
 2. ~~**Perfil estruturado (Mongo + Qdrant).**~~ — decisão revisada: em vez de mesclar o perfil
    texto-livre com Mongo+Qdrant, o perfil foi **removido** (nunca era lido pelo grafo) e a
    memória ficou só em `fatos` (`user_fatos`), já estruturado. `restricoes` normalizado pra
-   vocabulário canônico (`schemas/models.py:RESTRICOES_CANONICAS`). Falta real: injetar `fatos`
-   de volta no prompt do chat (candidato: Orquestrador) e, só depois, avaliar Qdrant/embedding
-   pra busca semântica — ver `.agents/notes/pending/memoria-fatos/arquivos.md`.
+   vocabulário canônico (`schemas/models.py:RESTRICOES_CANONICAS`). ~~Injetar `fatos` no prompt
+   e busca semântica no Qdrant~~ — feito (`runner._carregar_contexto`, resumos por chat no Qdrant
+   com reconciliador garantindo a entrega).
 3. **IDs seguros contra concorrência.** Domínios Postgres ainda resolvem próximo ID por
    `MAX(id) + 1` em vez de sequence/identity ou outro mecanismo transacional seguro — race
    condition sob concorrência real (dois inserts simultâneos podem calcular o mesmo próximo ID).
@@ -87,7 +87,7 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 
 ## Dívida registrada: `evals/` mente o nome
 
-~~Resolvida~~ — `metrics.py`/`metrics_callback.py` movidos pra `src/frigus_ai/observability/`
+~~Resolvida~~ — `metrics.py`/`metrics_callback.py` movidos pra `src/frigus_ai/telemetry/`
 (13 imports de runtime atualizados, `git mv` preservando histórico). `evals/` agora só tem
 avaliação offline: `sre_report.py` (custo/erro/ROI, já existia) e o harness novo
 (`scenarios.py` + `run_scenarios.py`, 7 cenários cobrindo os 5 domínios + guardrail). Decisão

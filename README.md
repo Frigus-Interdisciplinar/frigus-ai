@@ -42,7 +42,6 @@ diretamente ao usuário.
 
 ---
 
-<<<<<<< HEAD
 =======
 ## Arquitetura
 
@@ -67,13 +66,14 @@ flowchart TB
 
     subgraph GRAFO["Grafo LangGraph"]
         GE["Guardrail de entrada"] --> RT["Roteador"]
-        RT -- "1 ou mais, em paralelo" --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro, assessor"]
-        RT -. "resposta direta" .-> FIM(["fim"])
+        RT --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro"]
+        RT --> ASS["Assessor (agente remoto)"]
         GE -. "foto" .-> VIS["Visão"]
-        ESP --> ORQ["Orquestrador<br/>(junta os resultados)"]
+        ESP --> ORQ["Orquestrador"]
+        ORQ --> JZ["Juiz (até 2 retentativas)"]
+        ESP --> JZ
         VIS --> ORQ
-        ORQ --> JZ["Juiz"]
-        JZ -- "reprovou: até 2 retentativas" --> ORQ
+        ASS --> JZ
         JZ --> GS["Guardrail de saída"]
     end
 
@@ -110,7 +110,7 @@ flowchart TB
     GRAFO -. "traces" .-> LS
 ```
 
->>>>>>> e6080f9 (feat(grafo): roteador escolhe vários especialistas, que rodam em paralelo e o orquestrador junta)
+
 ## Grafo de agentes
 
 <div align="center">
@@ -297,6 +297,7 @@ uv sync
 
 ```bash
 docker compose up -d
+docker compose --profile observability up -d   # opcional: Prometheus (9090) + Grafana (3000) — ou `just obs`
 ```
 
 (O `main.py` também tenta subir os serviços sozinho via `config/docker.py`, assumindo Docker Desktop no Windows.)
