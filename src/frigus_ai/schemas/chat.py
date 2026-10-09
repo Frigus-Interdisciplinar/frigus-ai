@@ -24,13 +24,12 @@ class ChatCreateResponse(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    model_config = ConfigDict(json_schema_extra={"examples": [{"content": "Quais receitas posso fazer hoje?"}]})
+    # extra="forbid": `stock_id` saiu do corpo (vinha sem checagem de dono); cliente antigo leva 422 em vez de ser ignorado.
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"examples": [{"content": "Quais receitas posso fazer hoje?"}]}
+    )
 
     content: str = Field(min_length=1, max_length=4000, description="Mensagem para o assistente.")
-    stock_id: int | None = Field(
-        default=None,
-        description="Opcional. Sobrescreve o estoque padrão do usuário; se omitido, usa o padrão.",
-    )
 
 
 class MessageResponse(BaseModel):

@@ -77,13 +77,11 @@ class ChatRepository:
             colecao.create_index("session_id", unique=True)
             self._indice_collection = colecao
 
-    def _buscar_documento(self, session_id: str, user_id: str, limit: int = 5) -> ChatDocument | None:
+    def _buscar_documento(self, session_id: str, user_id: str, limit: int | None = None) -> ChatDocument | None:
         logger.info("Buscando histórico de mensagens para session_id: %s (limit=%s)", session_id, limit)
 
-        return self._collection().find_one(
-            {"session_id": session_id, "user_id": user_id},
-            {"messages": {"$slice": -limit}},
-        )
+        projecao = {"messages": {"$slice": -limit}} if limit is not None else {"messages": 1}
+        return self._collection().find_one({"session_id": session_id, "user_id": user_id}, projecao)
 
     def _criar_documento(self, session_id: str, user_id: str) -> None:
         agora = datetime.now(UTC)
@@ -212,7 +210,7 @@ class ChatRepository:
         await asyncio.to_thread(self._adicionar_mensagens, session_id, user_id, mensagens_mongo)
 
     async def buscar_historico(
-        self, session_id: str, user_id: str, limit: int = 5
+        self, session_id: str, user_id: str, limit: int | None = None
     ) -> list[ChatMessage]:
         doc = await asyncio.to_thread(self._buscar_documento, session_id, user_id, limit)
         if not doc:
@@ -260,7 +258,7 @@ def _garantir_indice() -> None:
     _chat_repository._garantir_indice()
 
 
-def _buscar_documento(session_id: str, user_id: str, limit: int = 5) -> ChatDocument | None:
+def _buscar_documento(session_id: str, user_id: str, limit: int | None = None) -> ChatDocument | None:
     return _chat_repository._buscar_documento(session_id, user_id, limit)
 
 
@@ -332,7 +330,7 @@ def _redigir_saida_historico(historico: list[ChatMessage] | None) -> dict:
 
 
 @traceable(run_type="tool", name="buscar_historico", process_outputs=_redigir_saida_historico)
-async def buscar_historico(session_id: str, user_id: str, limit: int = 5) -> list[ChatMessage]:
+async def buscar_historico(session_id: str, user_id: str, limit: int | None = None) -> list[ChatMessage]:
     return await _chat_repository.buscar_historico(session_id, user_id, limit)
 
 

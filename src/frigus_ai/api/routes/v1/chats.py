@@ -73,13 +73,9 @@ async def send_message(
     stock_id: OptionalStockIdDep,
     chat: ChatServiceDep,
 ) -> ChatMessageResponse:
-    """
-    Envia a mensagem ao assistente e devolve a resposta completa.
-    `stock_id` no corpo sobrescreve o estoque padrão.
-    """
+    """Envia a mensagem ao assistente e devolve a resposta completa. O estoque é o do usuário autenticado."""
 
     await chat.validar_ownership(chat_id, user_id)
-    stock_id = payload.stock_id if payload.stock_id is not None else stock_id
     resposta = await chat.send_message(payload.content, chat_id, user_id, stock_id)
 
     return ChatMessageResponse(chat_id=chat_id, content=resposta)
@@ -104,8 +100,6 @@ async def stream_message(
     """Timeline de execução do agente (`schemas/execution.py`) — um evento por
     node iniciado/concluído, rota escolhida e resposta final."""
 
-    stock_id = payload.stock_id if payload.stock_id is not None else stock_id
-
     async for evento in chat.stream_message(payload.content, chat_id, user_id, stock_id):
         yield ServerSentEvent(data=evento, event=evento.type)
 
@@ -121,9 +115,9 @@ async def get_messages(
     chat_id: ChatIdPath,
     user_id: CurrentUserDep,
     chat: ChatServiceDep,
-    limit: Annotated[int, Query(ge=1, le=100)] = 5,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
 ) -> list[MessageResponse]:
-    """Últimas `limit` mensagens (1–100, padrão 5). Chat inexistente devolve lista vazia."""
+    """Conversa completa; com `limit` (1–100), só as últimas mensagens. Chat inexistente devolve lista vazia."""
 
     await chat.validar_ownership(chat_id, user_id)
     historico = await chat.get_history(chat_id, user_id, limit)

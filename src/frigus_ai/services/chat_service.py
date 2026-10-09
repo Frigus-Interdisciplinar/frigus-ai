@@ -360,7 +360,7 @@ class ChatService:
         return resposta or "Não consegui analisar a foto."
 
     async def get_history(
-        self, session_id: str, user_id: str, limit: int = 5
+        self, session_id: str, user_id: str, limit: int | None = None
     ) -> list[ChatMessage]:
         return await chat_repository.buscar_historico(session_id, user_id, limit)
 
