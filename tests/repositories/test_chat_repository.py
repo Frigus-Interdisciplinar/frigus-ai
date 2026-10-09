@@ -72,11 +72,11 @@ def test_indice_unico_criado_uma_vez_so(collection):
 
 
 def test_inserir_resumo_filtra_por_dono(collection):
-    chat_repo._inserir_resumo("resumo", "sessao-1", user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", resumido_ate=12)
+    chat_repo._inserir_resumo("resumo", "sessao-1", user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", resumido_ate=12, relevante=True)
 
     filtro, update, _ = collection.updates[0]
     assert filtro == {"session_id": "sessao-1", "user_id": "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c"}
-    assert update == {"$set": {"resume": "resumo", "resumido_ate": 12}}
+    assert update == {"$set": {"resume": "resumo", "resumido_ate": 12, "resume_relevante": True}}
 
 
 def test_buscar_documento_completo_filtra_por_dono(collection):
