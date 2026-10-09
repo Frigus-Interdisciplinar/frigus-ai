@@ -1,7 +1,7 @@
 """
 Nó de visão: identifica itens numa foto de geladeira/freezer/despensa. Diferente dos
 outros nós, não usa `responder()` (agente + tools) — é uma chamada de visão direta,
-sem tool nenhuma, mas devolve o mesmo `EspecialistaUpdate` que Estoque/Compras/
+sem tool nenhuma, mas devolve o mesmo contrato (`@especialista`) que Estoque/Compras/
 Financeiro, pro Orquestrador reescrever em linguagem natural.
 
 `category`/`storage_place` reaproveitam os `Literal` de `graph/tools/estoque/schemas.py`
@@ -11,17 +11,18 @@ valor fora da lista (não é só uma checagem depois, é uma restrição na pró
 """
 
 from langchain_core.messages import HumanMessage
+from langgraph.runtime import Runtime
 
 from frigus_ai.domain.errors import FalhaNoAgente
 from frigus_ai.graph.llm import llm_visao
 from frigus_ai.graph.names import VISAO
+from frigus_ai.graph.nodes.especialista import especialista
 from frigus_ai.graph.prompts import load_prompt
-from frigus_ai.graph.state import Estado, Route, VisaoUpdate
-from frigus_ai.telemetry import medir_node
+from frigus_ai.graph.state import ContextoPrompt, Estado, Route
 
 
-@medir_node(VISAO)
-async def no_visao(estado: Estado) -> VisaoUpdate:
+@especialista(VISAO, rota=Route.VISAO)
+async def no_visao(estado: Estado, runtime: Runtime[ContextoPrompt]) -> str:
     if llm_visao is None:
         raise FalhaNoAgente("Modelo de visão não configurado (GEMINI_API_KEY ausente).")
 
@@ -39,12 +40,7 @@ async def no_visao(estado: Estado) -> VisaoUpdate:
 
     inventario = await llm_visao.ainvoke([msg])
 
-    return VisaoUpdate(
-        agentes_chamados=[VISAO],
-        rota=Route.VISAO,
-        resposta_especialista=inventario.model_dump_json(),
-        dados_especialista=inventario.model_dump_json(),
-    )
+    return inventario.model_dump_json()
 
 
 __all__ = ["no_visao"]

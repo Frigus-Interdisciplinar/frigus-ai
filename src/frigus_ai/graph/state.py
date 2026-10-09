@@ -109,33 +109,22 @@ class RouterUpdate(TypedDict):
     messages:          NotRequired[list[AnyMessage]]
 
 
+class ConteudoEspecialista(TypedDict):
+    """Retorno de especialista cuja resposta ao usuário difere dos dados que o Juiz confere."""
+
+    resposta: str
+    dados:    str
+
+
 class EspecialistaUpdate(TypedDict):
-    """Estoque/Compras/Financeiro: devolvem JSON cru, o Orquestrador é que escreve pro usuário."""
+    """Montado só pelo decorator `@especialista` (`graph/nodes/especialista.py`). `rota` é só da
+    Visão: o roteador não roda em turno com foto, e sem ela o Juiz não teria pra onde devolver
+    uma resposta reprovada."""
 
     agentes_chamados:      list[NodeLiteral]
     resposta_especialista: str
     dados_especialista:    str
-
-
-class VisaoUpdate(EspecialistaUpdate):
-    """Visão seta a própria rota: o roteador não roda em turno com foto, e sem `rota` o
-    Juiz não teria pra onde devolver uma resposta reprovada."""
-
-    rota: RouteLiteral
-
-
-class FaqUpdate(TypedDict):
-    """FAQ/Receitas: já respondem em linguagem natural, então também publicam em `messages`."""
-
-    agentes_chamados:      list[NodeLiteral]
-    messages:              list[AnyMessage]
-    resposta_especialista: str
-    dados_especialista:    str
-
-
-class AssessorUpdate(FaqUpdate):
-    """Assessor (A2A): texto pronto vindo de outro agente, publicado direto como FAQ/Receitas.
-    `dados_especialista` vazio = Assessor indisponível (ver `decidir_apos_assessor`)."""
+    rota:                  NotRequired[RouteLiteral]
 
 
 class OrquestradorUpdate(TypedDict):
@@ -189,14 +178,13 @@ class InventarioGeladeira(BaseModel):
 
 __all__ = [
     "ROTAS_VALIDAS",
-    "AssessorUpdate",
     "AsyncNode",
     "AsyncNodeComContexto",
+    "ConteudoEspecialista",
     "ContextoPrompt",
     "EntradaGrafo",
     "EspecialistaUpdate",
     "Estado",
-    "FaqUpdate",
     "GuardrailEntradaUpdate",
     "GuardrailSaidaUpdate",
     "InventarioGeladeira",
@@ -210,5 +198,4 @@ __all__ = [
     "RouteLiteral",
     "RouterUpdate",
     "SaidaGrafo",
-    "VisaoUpdate",
 ]

@@ -14,18 +14,18 @@ do roteador (`router.md`). Não é agente local: sem LLM nem tool aqui.
 import asyncio
 from datetime import date, timedelta
 
-from langchain_core.messages import AIMessage
 from langgraph.config import get_config
+from langgraph.runtime import Runtime
 
 from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.graph.names import A2A_ASSESSOR
-from frigus_ai.graph.state import AssessorUpdate, Estado
+from frigus_ai.graph.nodes.especialista import especialista
+from frigus_ai.graph.state import ConteudoEspecialista, ContextoPrompt, Estado
 from frigus_ai.infra.assessor import client as assessor
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import current_stock_id
 from frigus_ai.infra.redis import ranking
 from frigus_ai.repositories import financeiro_repository
-from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 
@@ -85,8 +85,11 @@ def _mensagem(pergunta: str, contexto: str) -> str:
     )
 
 
-@medir_node(A2A_ASSESSOR)
-async def no_assessor(estado: Estado) -> AssessorUpdate:
+@especialista(A2A_ASSESSOR)
+async def no_assessor(
+    estado: Estado,
+    runtime: Runtime[ContextoPrompt],  # não usado; o contrato do decorator exige
+) -> ConteudoEspecialista:
     pergunta = estado.get("pergunta_original", "")
     if feedback := estado.get("feedback_juiz"):
         pergunta += f"\n\n[REVISÃO SOLICITADA] {feedback}"
@@ -102,18 +105,11 @@ async def no_assessor(estado: Estado) -> AssessorUpdate:
     except AssessorIndisponivel as e:
         logger.warning("Assessor indisponível: %s", e)
 
-        return AssessorUpdate(
-            agentes_chamados=[A2A_ASSESSOR],
-            messages=[AIMessage(content=INDISPONIVEL)],
-            resposta_especialista=INDISPONIVEL,
-            dados_especialista="",
-        )
+        return ConteudoEspecialista(resposta=INDISPONIVEL, dados="")
 
-    return AssessorUpdate(
-        agentes_chamados=[A2A_ASSESSOR],
-        messages=[AIMessage(content=resposta)],
-        resposta_especialista=resposta,
-        dados_especialista=f"{contexto}\n\n{resposta}" if contexto else resposta,
+    return ConteudoEspecialista(
+        resposta=resposta,
+        dados=f"{contexto}\n\n{resposta}" if contexto else resposta,
     )
 
 
