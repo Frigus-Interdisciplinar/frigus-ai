@@ -1,5 +1,3 @@
-from typing import Final
-
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt
 
@@ -17,9 +15,7 @@ from frigus_ai.graph.tools import (
     RECEITAS_TOOLS,
 )
 
-# Só quem personaliza a resposta recebe o perfil (alergias, preferências...). Nos outros ele
-# só gastava token e puxava a resposta pra assunto que não foi perguntado.
-_AGENTES_COM_PERFIL: Final[frozenset[str]] = frozenset({"compras", "receitas"})
+_AGENTES_COM_PERFIL = frozenset({"compras", "receitas"})
 
 
 def _montar(nome: str, model, tools: list | None = None, response_format=None):
