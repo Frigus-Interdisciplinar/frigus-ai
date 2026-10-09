@@ -129,7 +129,6 @@ class EspecialistaUpdate(TypedDict):
 
 class OrquestradorUpdate(TypedDict):
     agentes_chamados:      list[NodeLiteral]
-    messages:              list[AnyMessage]
     resposta_especialista: str
 
 

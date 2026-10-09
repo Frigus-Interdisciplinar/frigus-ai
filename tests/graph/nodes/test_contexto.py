@@ -7,7 +7,12 @@ o checkpoint no Mongo incha e todo turno relê o histórico inteiro pro contexto
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.graph.message import add_messages
 
-from frigus_ai.graph.nodes.contexto import MAX_MENSAGENS, podar_historico
+from frigus_ai.graph.nodes.contexto import (
+    MAX_MENSAGENS,
+    mensagens_do_turno,
+    podar_historico,
+    revisao_do_juiz,
+)
 
 
 def _historico(n: int) -> list:
@@ -56,3 +61,32 @@ def test_toolmessage_no_estado_desativa_a_poda():
     historico = [*_historico(MAX_MENSAGENS + 4), ToolMessage(content="x", tool_call_id="t1")]
 
     assert podar_historico(historico) == []
+
+
+def test_corte_no_meio_de_uma_interacao_avanca_ate_a_proxima_pergunta():
+    """Excedente ímpar cairia numa resposta: o histórico não pode começar sem a pergunta dela."""
+
+    historico = _historico(MAX_MENSAGENS + 3)  # corte em m3, que é uma resposta (AI)
+    resultado = add_messages(historico, podar_historico(historico))
+
+    assert isinstance(resultado[0], HumanMessage)
+    assert resultado[0].id == "m4"
+
+
+def test_sem_pergunta_depois_do_corte_preserva_o_historico():
+    historico = [HumanMessage(id="m0", content="oi")] + [
+        AIMessage(id=f"m{i}", content="resposta") for i in range(1, MAX_MENSAGENS + 4)
+    ]
+
+    assert podar_historico(historico) == []
+
+
+def test_mensagens_do_turno_junta_historico_e_pedido_de_revisao_do_juiz():
+    estado = {"messages": _historico(2), "feedback_juiz": "faltou a validade"}
+
+    mensagens = mensagens_do_turno(estado)
+
+    assert [m.content for m in mensagens[:2]] == ["msg 0", "msg 1"]
+    assert mensagens[-1].content == "[REVISÃO SOLICITADA PELO JUIZ] faltou a validade"
+    assert revisao_do_juiz({"messages": []}) is None
+    assert len(mensagens_do_turno({"messages": _historico(2)})) == 2

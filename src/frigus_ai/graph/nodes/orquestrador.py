@@ -1,4 +1,4 @@
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
 from frigus_ai.graph.agents import orquestrador_app
@@ -19,7 +19,6 @@ async def no_orquestrador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> O
 
     return OrquestradorUpdate(
         agentes_chamados=[ORQUESTRADOR],
-        messages=[AIMessage(content=resposta)],
         resposta_especialista=resposta,
     )
 
