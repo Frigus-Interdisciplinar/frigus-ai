@@ -5,6 +5,7 @@ from typing import Annotated, Literal, NotRequired, TypedDict, get_args
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
+from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 
 from frigus_ai.domain.models import Fatos
@@ -13,6 +14,8 @@ from frigus_ai.graph.names import NodeLiteral
 from frigus_ai.graph.tools.estoque.schemas import Category, StoragePlace
 
 type AsyncNode[R] = Callable[[Estado], Awaitable[R]]
+# O LangGraph injeta o `Runtime` pelo NOME do parâmetro (`runtime`), não pela posição.
+type AsyncNodeComContexto[R] = Callable[[Estado, Runtime[ContextoPrompt]], Awaitable[R]]
 
 RotaEspecialista = Literal["estoque", "compras", "receitas", "faq", "financeiro", "assessor"]
 RotaRoteador     = Literal[RotaEspecialista, "fim"]
@@ -53,8 +56,10 @@ class Roteamento(BaseModel):
 
 @dataclass(frozen=True)
 class ContextoPrompt:
-    """Contexto de runtime dos agentes (`context_schema` do `create_agent`): vira seção do
-    system prompt em `dynamic_prompt`. Nunca guarda nada de permissão — escopo é ContextVar."""
+    """Contexto de runtime do grafo e dos agentes (`context_schema`), carregado pelo runner uma
+    vez por turno e passado por `context=` — fica fora do checkpoint, então perfil que falhou ao
+    carregar não reaproveita o do turno anterior. Vira seção do system prompt em `dynamic_prompt`.
+    Nunca guarda nada de permissão — escopo é ContextVar."""
 
     fatos:     Fatos | None = None
     conversas: tuple[str, ...] = ()
@@ -65,10 +70,6 @@ class EntradaGrafo(MessagesState):
 
     stock_id:             NotRequired[int | None]
     imagem_b64:           NotRequired[str]
-    # Pré-carregados fora do event loop pelo runner. `fatos` é o `model_dump` de `Fatos`
-    # (dict puro: o checkpointer msgpack não aceita modelo Pydantic sem allowlist).
-    fatos:                NotRequired[dict[str, list[str]]]
-    conversas_anteriores: NotRequired[list[str]]
 
 
 class Estado(MessagesState):
@@ -81,6 +82,8 @@ class Estado(MessagesState):
     mensagem_bloqueada:    NotRequired[str | None]
     stock_id:              NotRequired[int | None]
     imagem_b64:            NotRequired[str]
+    # Legado: o perfil saiu do estado (vai por `ContextoPrompt`). Ficam declarados só até
+    # confirmar que checkpoints antigos, que ainda têm essas chaves, carregam sem erro.
     fatos:                 NotRequired[dict[str, list[str]]]
     conversas_anteriores:  NotRequired[list[str]]
 
@@ -188,6 +191,8 @@ __all__ = [
     "ROTAS_VALIDAS",
     "AssessorUpdate",
     "AsyncNode",
+    "AsyncNodeComContexto",
+    "ContextoPrompt",
     "EntradaGrafo",
     "EspecialistaUpdate",
     "Estado",

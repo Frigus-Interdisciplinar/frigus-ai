@@ -13,7 +13,6 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
-from frigus_ai.domain.models import Fatos
 from frigus_ai.graph.state import ContextoPrompt, Estado
 from frigus_ai.infra.logging import Logging
 from frigus_ai.settings import settings
@@ -82,17 +81,6 @@ def mensagens_do_turno(estado: Estado, apenas_pergunta: bool = False) -> list[An
     return mensagens
 
 
-def contexto_do_estado(estado: Estado) -> ContextoPrompt:
-    """Fatos e conversas anteriores que o runner pré-carregou, no formato que o agente lê."""
-
-    fatos = estado.get("fatos")
-
-    return ContextoPrompt(
-        fatos=Fatos(**fatos) if fatos is not None else None,
-        conversas=tuple(estado.get("conversas_anteriores", ())),
-    )
-
-
 async def responder(
     app: Runnable[Any, Any], mensagens: Sequence[AnyMessage], contexto: ContextoPrompt | None = None
 ) -> str:
@@ -114,7 +102,6 @@ async def perguntar(llm: BaseChatModel, entrada: str | Sequence[AnyMessage]) -> 
 __all__ = [
     "MAX_MENSAGENS",
     "RespostaAgenteInvalida",
-    "contexto_do_estado",
     "mensagens_do_turno",
     "perguntar",
     "podar_historico",

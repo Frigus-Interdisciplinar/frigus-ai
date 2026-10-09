@@ -38,6 +38,8 @@ from frigus_ai.graph.nodes import (
 from frigus_ai.graph.state import (
     AssessorUpdate,
     AsyncNode,
+    AsyncNodeComContexto,
+    ContextoPrompt,
     EntradaGrafo,
     EspecialistaUpdate,
     Estado,
@@ -60,7 +62,7 @@ logger = Logging.get_logger(__name__)
 
 _PING_TIMEOUT_S = 5
 
-type GrafoFrigus = CompiledStateGraph[Estado, None, EntradaGrafo, SaidaGrafo]
+type GrafoFrigus = CompiledStateGraph[Estado, ContextoPrompt, EntradaGrafo, SaidaGrafo]
 
 
 def decidir_apos_guardrail_entrada(estado: Estado) -> str:
@@ -99,20 +101,22 @@ def decidir_apos_assessor(estado: Estado) -> str:
 
 
 def _construir_grafo() -> StateGraph:
-    guardrail_entrada: AsyncNode[GuardrailEntradaUpdate] = no_guardrail_entrada
-    roteador:          AsyncNode[RouterUpdate]           = no_roteador
-    estoque:           AsyncNode[EspecialistaUpdate]     = no_estoque
-    compras:           AsyncNode[EspecialistaUpdate]     = no_compras
-    financeiro:        AsyncNode[EspecialistaUpdate]     = no_financeiro
-    receitas:          AsyncNode[FaqUpdate]              = no_receitas
-    faq:               AsyncNode[FaqUpdate]              = no_faq
-    assessor:          AsyncNode[AssessorUpdate]         = no_assessor
-    visao:             AsyncNode[VisaoUpdate]            = no_visao
-    orquestrador:      AsyncNode[OrquestradorUpdate]     = no_orquestrador
-    juiz:              AsyncNode[JuizUpdate]             = no_juiz
-    guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]   = no_guardrail_saida
+    guardrail_entrada: AsyncNode[GuardrailEntradaUpdate]       = no_guardrail_entrada
+    roteador:          AsyncNodeComContexto[RouterUpdate]          = no_roteador
+    estoque:           AsyncNodeComContexto[EspecialistaUpdate]    = no_estoque
+    compras:           AsyncNodeComContexto[EspecialistaUpdate]    = no_compras
+    financeiro:        AsyncNodeComContexto[EspecialistaUpdate]    = no_financeiro
+    receitas:          AsyncNodeComContexto[FaqUpdate]             = no_receitas
+    faq:               AsyncNodeComContexto[FaqUpdate]             = no_faq
+    assessor:          AsyncNode[AssessorUpdate]                   = no_assessor
+    visao:             AsyncNode[VisaoUpdate]                      = no_visao
+    orquestrador:      AsyncNodeComContexto[OrquestradorUpdate]    = no_orquestrador
+    juiz:              AsyncNode[JuizUpdate]                       = no_juiz
+    guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]             = no_guardrail_saida
 
-    grafo = StateGraph(Estado, input_schema=EntradaGrafo, output_schema=SaidaGrafo)
+    grafo = StateGraph(
+        Estado, context_schema=ContextoPrompt, input_schema=EntradaGrafo, output_schema=SaidaGrafo
+    )
 
     grafo.add_node(GUARDRAIL_ENTRADA, guardrail_entrada)
     grafo.add_node(ROTEADOR,          roteador)

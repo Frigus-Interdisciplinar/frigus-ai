@@ -1,17 +1,18 @@
+from langgraph.runtime import Runtime
+
 from frigus_ai.graph.agents import compras_app
 from frigus_ai.graph.names import COMPRAS
 from frigus_ai.graph.nodes.contexto import (
-    contexto_do_estado,
     mensagens_do_turno,
     responder,
 )
-from frigus_ai.graph.state import EspecialistaUpdate, Estado
+from frigus_ai.graph.state import ContextoPrompt, EspecialistaUpdate, Estado
 from frigus_ai.telemetry import medir_node
 
 
 @medir_node(COMPRAS)
-async def no_compras(estado: Estado) -> EspecialistaUpdate:
-    resposta = await responder(compras_app, mensagens_do_turno(estado), contexto_do_estado(estado))
+async def no_compras(estado: Estado, runtime: Runtime[ContextoPrompt]) -> EspecialistaUpdate:
+    resposta = await responder(compras_app, mensagens_do_turno(estado), runtime.context)
 
     return EspecialistaUpdate(
         agentes_chamados=[COMPRAS],

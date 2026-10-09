@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langgraph.runtime import Runtime
 
 from frigus_ai.graph.agents import router_app
 from frigus_ai.graph.names import ROTEADOR
-from frigus_ai.graph.nodes.contexto import contexto_do_estado
 from frigus_ai.graph.state import (
     ContextoPrompt,
     Estado,
@@ -50,9 +50,9 @@ def _ultima_pergunta(mensagens: Sequence[AnyMessage]) -> str:
 
 
 @medir_node(ROTEADOR)
-async def no_roteador(estado: Estado) -> RouterUpdate:
+async def no_roteador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> RouterUpdate:
 
-    roteamento = await _rotear(estado["messages"], contexto_do_estado(estado))
+    roteamento = await _rotear(estado["messages"], runtime.context)
     pergunta   = _ultima_pergunta(estado["messages"])
 
     log.debug("Rota escolhida: %s | pergunta: '%s'", roteamento.rota, pergunta)

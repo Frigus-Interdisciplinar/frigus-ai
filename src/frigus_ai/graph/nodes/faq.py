@@ -1,20 +1,20 @@
 from langchain_core.messages import AIMessage
+from langgraph.runtime import Runtime
 
 from frigus_ai.graph.agents import faq_app
 from frigus_ai.graph.names import FAQ
 from frigus_ai.graph.nodes.contexto import (
-    contexto_do_estado,
     mensagens_do_turno,
     responder,
 )
-from frigus_ai.graph.state import Estado, FaqUpdate
+from frigus_ai.graph.state import ContextoPrompt, Estado, FaqUpdate
 from frigus_ai.telemetry import medir_node
 
 
 @medir_node(FAQ)
-async def no_faq(estado: Estado) -> FaqUpdate:
+async def no_faq(estado: Estado, runtime: Runtime[ContextoPrompt]) -> FaqUpdate:
     resposta = await responder(
-        faq_app, mensagens_do_turno(estado, apenas_pergunta=True), contexto_do_estado(estado)
+        faq_app, mensagens_do_turno(estado, apenas_pergunta=True), runtime.context
     )
 
     return FaqUpdate(
