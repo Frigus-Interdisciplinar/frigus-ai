@@ -10,6 +10,9 @@ from frigus_ai.settings import settings
 def register_middlewares(app: FastAPI) -> None:
     app.middleware("http")(observar_http)
     if settings.api.key_auth_enabled:
+        # O middleware só enxerga os `@guard.rate_limit` das rotas por aqui; sem isso os
+        # limites por rota (ex.: 5/h no POST /keys) eram ignorados em silêncio.
+        app.state.guard_decorator = guard
         app.add_middleware(SecurityMiddleware, config=_config)
     # Por último = mais externo: roda antes de todos e o header sai até nas respostas do guard.
     app.middleware("http")(propagar_request_id)

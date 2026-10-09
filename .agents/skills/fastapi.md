@@ -210,3 +210,15 @@ subia de jeito nenhum.
 Passou despercebido porque **não havia nenhum teste que importasse `interfaces.api.main`**. Hoje há
 (`tests/interfaces/api/test_chats.py`). Ao criar schema que traduz enum de domínio pra enum público:
 importe o de domínio só com alias, declare o público primeiro, monte o mapa depois.
+
+## fastapi-guard: limites por rota ignorados e 429 por IP em tudo
+
+`SecurityMiddleware(config=...)` só enxerga os `@guard.rate_limit(...)` das rotas via
+`app.state.guard_decorator` — sem isso eles são ignorados em silêncio e vale só o limite global,
+cujo default é **10 req/60s por IP em toda rota** (inclusive `/health` e `/metrics`). Polling da
+web, SSE e o scrape do Prometheus viravam 429. Hoje: `app.state.guard_decorator = guard` em
+`api/middleware/__init__.py`, limite global explícito e `/health`/`/metrics` em `exclude_paths`
+(`api/middleware/security.py`). Bloqueios saem em `frigus_guard_blocks_total{check}`.
+
+Pra testar com o guard ligado não use o `TestClient`: o IP dele é a string `testclient`, que o guard
+barra com 403 ("IP not allowed"). Use `httpx.ASGITransport(app=app, client=("127.0.0.1", 5000))`.
