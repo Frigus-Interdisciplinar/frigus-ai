@@ -24,8 +24,8 @@ from frigus_ai.infra.assessor import client as assessor
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import current_stock_id
 from frigus_ai.infra.redis import ranking
-from frigus_ai.observability import medir_node
 from frigus_ai.repositories import financeiro_repository
+from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 

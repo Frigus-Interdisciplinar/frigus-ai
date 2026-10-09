@@ -8,7 +8,7 @@ from frigus_ai.graph.nodes.contexto import (
     responder,
 )
 from frigus_ai.graph.state import Estado, FaqUpdate
-from frigus_ai.observability import medir_node
+from frigus_ai.telemetry import medir_node
 
 
 @medir_node(FAQ)

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request
 from fastapi.responses import Response
 
-from frigus_ai.observability.metrics import (
+from frigus_ai.telemetry.metrics import (
     ACTIVE_REQUESTS,
     HTTP_DURATION,
     HTTP_REQUESTS,
