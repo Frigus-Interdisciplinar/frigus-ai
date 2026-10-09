@@ -18,6 +18,8 @@ from frigus_ai.graph.guardrail.schemas import (
     Classificacao,
     RevisaoCompliance,
 )
+from frigus_ai.graph.names import ESTOQUE
+from frigus_ai.graph.nodes.especialista import especialista_com_agente
 from frigus_ai.graph.nodes.juiz import VereditoJuiz
 from frigus_ai.graph.state import EntradaGrafo, Roteamento
 
@@ -67,7 +69,6 @@ def grafo(monkeypatch):
 
     from frigus_ai.graph.guardrail import entrada as entrada_mod
     from frigus_ai.graph.guardrail import saida as saida_mod
-    from frigus_ai.graph.nodes import estoque as estoque_mod
     from frigus_ai.graph.nodes import juiz as no_juiz_mod
     from frigus_ai.graph.nodes import orquestrador as orq_mod
     from frigus_ai.graph.nodes import router as router_mod
@@ -78,7 +79,8 @@ def grafo(monkeypatch):
         "orquestrador": _FakeAgente("Você tem leite na geladeira."),
     }
     monkeypatch.setattr(router_mod,   "router_app",       agentes["router"])
-    monkeypatch.setattr(estoque_mod,  "estoque_app",      agentes["estoque"])
+    # A fábrica captura o agente no import, então o que se troca é o nó que o builder usa.
+    monkeypatch.setattr(builder, "no_estoque", especialista_com_agente(ESTOQUE, agentes["estoque"]))
     monkeypatch.setattr(orq_mod,      "orquestrador_app", agentes["orquestrador"])
 
     # Guardrail de entrada aprova, guardrail de saída devolve o texto revisado.
@@ -109,6 +111,9 @@ async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
     assert saida["mensagem_bloqueada"] is None
     assert saida["messages"][-1].content == "Você tem leite na geladeira."
     assert agentes["estoque"].chamadas == 1
+    # Só o guardrail de saída publica: especialista e orquestrador não deixam resposta intermediária
+    # no histórico que volta pro LLM no turno seguinte.
+    assert [type(m) for m in saida["messages"]] == [HumanMessage, AIMessage]
 
 
 async def test_juiz_reprovado_volta_pro_especialista_de_origem(grafo):

@@ -1,9 +1,11 @@
 from collections.abc import Callable
 from functools import wraps
 
+from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
 from frigus_ai.graph.names import NodeLiteral
+from frigus_ai.graph.nodes.contexto import mensagens_do_turno, responder
 from frigus_ai.graph.state import (
     AsyncNodeComContexto,
     ConteudoEspecialista,
@@ -53,4 +55,16 @@ def especialista(
     return decorar
 
 
-__all__ = ["especialista"]
+def especialista_com_agente(
+    nome: NodeLiteral, agente: Runnable
+) -> AsyncNodeComContexto[EspecialistaUpdate]:
+    """Nó de especialista que só pergunta ao agente (LLM + tools) com o histórico do turno."""
+
+    @especialista(nome)
+    async def no(estado: Estado, runtime: Runtime[ContextoPrompt]) -> str:
+        return await responder(agente, mensagens_do_turno(estado), runtime.context)
+
+    return no
+
+
+__all__ = ["especialista", "especialista_com_agente"]

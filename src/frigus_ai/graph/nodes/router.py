@@ -13,7 +13,8 @@ from frigus_ai.graph.state import (
     RouterUpdate,
 )
 from frigus_ai.infra.logging import Logging
-from frigus_ai.telemetry.metrics import ROUTER_DECISIONS, medir_node
+from frigus_ai.telemetry import medir_node
+from frigus_ai.telemetry.metrics import ROUTER_DECISIONS
 
 log = Logging.get_logger(__name__)
 

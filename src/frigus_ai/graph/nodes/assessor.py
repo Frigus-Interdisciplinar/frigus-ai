@@ -19,6 +19,7 @@ from langgraph.runtime import Runtime
 
 from frigus_ai.domain.errors import AssessorIndisponivel
 from frigus_ai.graph.names import A2A_ASSESSOR
+from frigus_ai.graph.nodes.contexto import revisao_do_juiz
 from frigus_ai.graph.nodes.especialista import especialista
 from frigus_ai.graph.state import ConteudoEspecialista, ContextoPrompt, Estado
 from frigus_ai.infra.assessor import client as assessor
@@ -91,8 +92,8 @@ async def no_assessor(
     runtime: Runtime[ContextoPrompt],  # não usado; o contrato do decorator exige
 ) -> ConteudoEspecialista:
     pergunta = estado.get("pergunta_original", "")
-    if feedback := estado.get("feedback_juiz"):
-        pergunta += f"\n\n[REVISÃO SOLICITADA] {feedback}"
+    if revisao := revisao_do_juiz(estado):
+        pergunta += f"\n\n{revisao}"
 
     try:
         contexto = await asyncio.to_thread(_contexto_financeiro)

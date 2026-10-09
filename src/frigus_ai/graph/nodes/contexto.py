@@ -50,33 +50,41 @@ def podar_historico(mensagens: Sequence[AnyMessage]) -> list[RemoveMessage]:
     """
     Deltas que apagam as mensagens além de `MAX_MENSAGENS` (vazio quando ainda cabe). Podar por
     contagem só é seguro porque `messages` guarda apenas Human/AI de texto; um `ToolMessage`
-    ali poderia separar um tool_call da sua resposta.
+    ali poderia separar um tool_call da sua resposta. O corte avança até a próxima pergunta do
+    usuário, pra o histórico nunca começar com uma resposta sem a pergunta que a originou.
     """
 
     if any(isinstance(m, ToolMessage) for m in mensagens):
         logger.warning("ToolMessage no estado — poda desativada para não separar tool_call/resposta.")
         return []
 
-    excedente = len(mensagens) - MAX_MENSAGENS
-    if excedente <= 0:
+    corte = len(mensagens) - MAX_MENSAGENS
+    if corte <= 0:
         return []
 
-    return [RemoveMessage(id=msg.id) for msg in mensagens[:excedente] if msg.id]
+    while corte < len(mensagens) and not isinstance(mensagens[corte], HumanMessage):
+        corte += 1
+
+    # Sem pergunta depois do ponto de corte, preserva o histórico em vez de esvaziá-lo.
+    if corte == len(mensagens):
+        return []
+
+    return [RemoveMessage(id=msg.id) for msg in mensagens[:corte] if msg.id]
 
 
-def mensagens_do_turno(estado: Estado, apenas_pergunta: bool = False) -> list[AnyMessage]:
-    """`apenas_pergunta=True` para nós que respondem só da pergunta isolada (FAQ, Receitas)."""
+def revisao_do_juiz(estado: Estado) -> str | None:
+    """O pedido de revisão que o Juiz deixou no estado quando reprovou a tentativa anterior."""
 
-    if apenas_pergunta:
-        mensagens: list[AnyMessage] = [HumanMessage(content=estado.get("pergunta_original", ""))]
-    else:
-        mensagens = list(estado["messages"])
+    if feedback := estado.get("feedback_juiz"):
+        return f"[REVISÃO SOLICITADA PELO JUIZ] {feedback}"
+    return None
 
-    feedback = estado.get("feedback_juiz")
-    if feedback:
-        mensagens.append(
-            HumanMessage(content=f"[REVISÃO SOLICITADA PELO JUIZ] {feedback}")
-        )
+
+def mensagens_do_turno(estado: Estado) -> list[AnyMessage]:
+    mensagens = list(estado["messages"])
+
+    if revisao := revisao_do_juiz(estado):
+        mensagens.append(HumanMessage(content=revisao))
 
     return mensagens
 
@@ -106,4 +114,5 @@ __all__ = [
     "perguntar",
     "podar_historico",
     "responder",
+    "revisao_do_juiz",
 ]

@@ -16,6 +16,7 @@ from langgraph.runtime import Runtime
 from frigus_ai.domain.errors import FalhaNoAgente
 from frigus_ai.graph.llm import llm_visao
 from frigus_ai.graph.names import VISAO
+from frigus_ai.graph.nodes.contexto import revisao_do_juiz
 from frigus_ai.graph.nodes.especialista import especialista
 from frigus_ai.graph.prompts import load_prompt
 from frigus_ai.graph.state import ContextoPrompt, Estado, Route
@@ -30,8 +31,8 @@ async def no_visao(estado: Estado, runtime: Runtime[ContextoPrompt]) -> str:
     prompt = load_prompt("visao")
 
     # Retry do Juiz: sem o feedback, a segunda chamada seria idêntica à reprovada.
-    if feedback := estado.get("feedback_juiz"):
-        prompt += f"\n\n[REVISÃO SOLICITADA PELO JUIZ] {feedback}"
+    if revisao := revisao_do_juiz(estado):
+        prompt += f"\n\n{revisao}"
 
     msg = HumanMessage(content=[
         {"type": "text", "text": prompt},
