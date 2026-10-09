@@ -41,7 +41,7 @@ def dados(monkeypatch):
 
 async def test_manda_a_pergunta_com_os_numeros_do_frigus(enviado, dados):
     with session_context(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1):
-        update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"})
+        update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"}, None)
 
     [mensagem] = enviado["mensagens"]
     assert mensagem.startswith("como economizo no mercado?")
@@ -55,7 +55,7 @@ async def test_manda_a_pergunta_com_os_numeros_do_frigus(enviado, dados):
 
 
 async def test_sem_estoque_na_sessao_pergunta_sem_dados(enviado):
-    update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"})
+    update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"}, None)
 
     assert enviado["mensagens"] == ["como economizo no mercado?"]
     assert update["dados_especialista"]  # respondeu: não é o sinal de indisponível
@@ -69,7 +69,7 @@ async def test_assessor_fora_do_ar_devolve_mensagem_limpa(monkeypatch, dados):
     monkeypatch.setattr(mod, "_session_id", lambda: "chat-1")
 
     with session_context(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1):
-        update = await mod.no_assessor({"pergunta_original": "como economizo?"})
+        update = await mod.no_assessor({"pergunta_original": "como economizo?"}, None)
 
     assert update["resposta_especialista"] == mod.INDISPONIVEL
     assert update["dados_especialista"] == ""
