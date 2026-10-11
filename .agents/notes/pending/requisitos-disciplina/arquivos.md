@@ -16,7 +16,7 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | MCP | ✅ | `api/mcp.py` em `/mcp`, 20 tools. Validado ao vivo com o cliente oficial do SDK `mcp` (`list_tools` + `call_tool(query_stock)`) |
 | A2A | ✅ | Superfície única em `api/routes/a2a.py` (contrato manual, `a2a-sdk` removido — decisão em `AGENTS.md`) |
 | RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
-| Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding/relevância, até 2 retentativas |
+| Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding contra o retorno das tools, até 2 retentativas; falha vira `INDISPONIVEL` |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
 | SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 16 painéis (inclui memória, chamadas externas, bloqueios do guard) |
 | SRE: custo 100 e 1000 usuários/semana | ⚠️ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
