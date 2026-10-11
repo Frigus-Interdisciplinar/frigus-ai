@@ -4,13 +4,14 @@ o checkpoint no Mongo incha e todo turno relê o histórico inteiro pro contexto
 (custo em token, não só memória).
 """
 
-from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, ToolMessage
 from langgraph.graph.message import add_messages
 
 from frigus_ai.graph.nodes.contexto import (
     MAX_MENSAGENS,
     mensagens_do_turno,
     podar_historico,
+    responder_com_evidencias,
     revisao_do_juiz,
 )
 
@@ -101,10 +102,6 @@ class _AgenteFake:
 
 
 async def test_responder_com_evidencias_separa_retorno_das_tools_da_resposta():
-    from langchain_core.messages import AIMessage, ToolMessage
-
-    from frigus_ai.graph.nodes.contexto import responder_com_evidencias
-
     agente = _AgenteFake(
         [
             ToolMessage(content='[{"nome": "leite"}]', name="listar_estoque", tool_call_id="1"),
