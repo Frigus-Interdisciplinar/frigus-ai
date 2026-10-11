@@ -125,7 +125,8 @@ O **Juiz** é um agente LLM-as-judge: audita a resposta quanto a grounding (só 
 tools), relevância e completude, ANTES do guardrail de saída. Se reprovar, a resposta volta para o
 **orquestrador** (com o motivo da reprovação), até 2 tentativas — os especialistas não rodam de novo, para
 não regravar estoque nem lista de compras. Depois disso, segue mesmo reprovado (loga um aviso), para nunca
-travar o usuário.
+travar o usuário. O que ele confere é o retorno das tools (não o texto do especialista), e falha na
+avaliação vira `INDISPONIVEL`, não aprovação.
 
 ---
 
@@ -247,8 +248,8 @@ resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
 - **Guardrail de Entrada**: detecção determinística de prompt injection/acesso a dados internos →
   anonimização de PII → classificação por LLM (aprova, ou bloqueia por conteúdo ofensivo, perigoso,
   ilícito, político ou pedido de conselho médico).
-- **Juiz**: audita grounding, relevância e completude da resposta antes dela sair; pode mandar o
-  especialista tentar de novo (até 2 vezes).
+- **Juiz**: audita grounding (contra o retorno das tools), relevância e completude da resposta antes
+  dela sair; pode mandar o orquestrador reescrever (até 2 vezes).
 - **Guardrail de Saída**: nunca bloqueia — redige PII remanescente e corrige afirmações de segurança
   alimentar/validade sem ressalva ou conselhos de saúde/nutrição clínica.
 
