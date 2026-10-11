@@ -94,19 +94,17 @@ async def responder(
 ) -> str:
     """Roda um agente compilado e devolve o texto da última mensagem que ele produziu."""
 
-    saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
+    resposta, _ = await responder_com_evidencias(app, mensagens, contexto)
 
-    return _texto(saida["messages"][-1].content)
+    return resposta
 
 
 async def responder_com_evidencias(
     app: Runnable[Any, Any], mensagens: Sequence[AnyMessage], contexto: ContextoPrompt | None = None
 ) -> tuple[str, str]:
     """
-    Como `responder`, mas devolve também o que as tools retornaram nesta execução (vazio se o
-    agente não chamou nenhuma). É a evidência que o Juiz confere: sem ela ele só compararia a
-    resposta do agente com ela mesma. `messages` do estado só tem Human/AI, então todo
-    `ToolMessage` na saída é deste turno.
+    Como `responder`, mais o retorno das tools desta execução (vazio se não chamou nenhuma) — é o
+    que o Juiz confere. `messages` do estado só tem Human/AI, então todo `ToolMessage` é do turno.
     """
 
     saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
