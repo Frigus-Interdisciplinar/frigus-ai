@@ -1204,16 +1204,16 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint-mongodb"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-mongodb" },
     { name = "langgraph-checkpoint" },
     { name = "pymongo" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/6d/0d4d03cd849fbf191f5440a1048360c6877ce651488ad943643a00071597/langgraph_checkpoint_mongodb-0.4.0.tar.gz", hash = "sha256:21833db58637993b2e4f989d96093cd23f41d13f17b697a12a17f87ad6d987a4", size = 144440, upload-time = "2026-05-12T17:07:24.043Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/5a/ea97bf0835cac2ba9a9766c890200d26da466d3dad185af84d4ac4c24e0e/langgraph_checkpoint_mongodb-0.5.0.tar.gz", hash = "sha256:ac0f1f0f19d4ec28e7f0b21166ff1f2f3a85d8913f570f27ea7b40b6bbc53261", size = 200096, upload-time = "2026-09-04T15:28:29.405Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/26/ab8f68ba99377b65252adff18e3a973c292b86743a3ba197bbb948f551fd/langgraph_checkpoint_mongodb-0.4.0-py3-none-any.whl", hash = "sha256:f7da2d48cf6adac7c169d88bd70f94358f9f7debdc0cb53b93c417250f589823", size = 8361, upload-time = "2026-05-12T17:07:23.004Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/b2/88ec108f2c7ec5fc4ee78c39398b1fa45ff96106e1c6ad1f62651ed020b5/langgraph_checkpoint_mongodb-0.5.0-py3-none-any.whl", hash = "sha256:76665e5b861a9eb36d9abb873264e795adce34d408719460bb3bdc2bb9783d53", size = 8348, upload-time = "2026-09-04T15:28:28.635Z" },
 ]
 
 [[package]]
