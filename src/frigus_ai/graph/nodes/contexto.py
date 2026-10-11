@@ -99,6 +99,24 @@ async def responder(
     return _texto(saida["messages"][-1].content)
 
 
+async def responder_com_evidencias(
+    app: Runnable[Any, Any], mensagens: Sequence[AnyMessage], contexto: ContextoPrompt | None = None
+) -> tuple[str, str]:
+    """
+    Como `responder`, mas devolve também o que as tools retornaram nesta execução (vazio se o
+    agente não chamou nenhuma). É a evidência que o Juiz confere: sem ela ele só compararia a
+    resposta do agente com ela mesma. `messages` do estado só tem Human/AI, então todo
+    `ToolMessage` na saída é deste turno.
+    """
+
+    saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
+    evidencias = "\n\n".join(
+        f"{m.name or 'tool'}:\n{m.content}" for m in saida["messages"] if isinstance(m, ToolMessage)
+    )
+
+    return _texto(saida["messages"][-1].content), evidencias
+
+
 async def perguntar(llm: BaseChatModel, entrada: str | Sequence[AnyMessage]) -> str:
     """Roda um LLM cru e devolve o texto. Aceita prompt formatado ou lista de mensagens."""
 
@@ -114,5 +132,6 @@ __all__ = [
     "perguntar",
     "podar_historico",
     "responder",
+    "responder_com_evidencias",
     "revisao_do_juiz",
 ]

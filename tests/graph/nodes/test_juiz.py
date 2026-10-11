@@ -1,4 +1,4 @@
-"""Juiz com structured output: falha na chamada ou saída fora do schema aprova (falha aberta)."""
+"""Juiz com structured output: falha na chamada ou saída fora do schema segue como INDISPONIVEL (falha aberta, sem fingir aprovação)."""
 
 import pytest
 from langchain_core.messages import HumanMessage
@@ -45,10 +45,10 @@ async def test_reprovado_sem_tentativas_sobrando_segue_sem_feedback(monkeypatch)
 
 
 @pytest.mark.parametrize("falha", [RuntimeError("provider fora"), "texto solto"])
-async def test_falha_ou_saida_fora_do_schema_aprova(monkeypatch, falha):
+async def test_falha_ou_saida_fora_do_schema_fica_indisponivel(monkeypatch, falha):
     monkeypatch.setattr(mod, "llm_avaliador", _FakeLLM(falha))
 
     update = await no_juiz(_estado())
 
-    assert update["veredito_juiz"] == "APROVADO"
+    assert update["veredito_juiz"] == "INDISPONIVEL"
     assert update["feedback_juiz"] == ""
