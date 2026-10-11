@@ -1,5 +1,7 @@
 # Requisitos da disciplina — o que falta
 
+> 2026-10-11: cenários, SRE e sessões rodados contra a infra real — resultados em `observability/RELATORIO.md`.
+
 Conferido contra o código em `docs/campos-mensagem` (suíte: 311 passed; a única falha, `test_metrics_aberto_sem_token`, vem de `API_KEYS__METRICS_TOKEN` preenchido no `.env` local) em 2026-10-08.
 Antes de reportar item como pendente, confira o código: este checklist envelhece.
 
@@ -11,7 +13,7 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | Multiagente (mín. 5 agentes) | ✅ | 12 nós (`graph/names.py`) |
 | LangChain pra criar agentes | ✅ | `graph/agents.py` |
 | LangGraph pra orquestrar | ✅ | `graph/builder.py`, com `input_schema`/`output_schema` e contrato `AsyncNode[R]` |
-| Sessões por usuário | ⚠️ | `thread_id=session_id` no `MongoDBSaver` + histórico no Mongo. Ownership fechado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono) |
+| Sessões por usuário | ✅ | `thread_id=session_id` no `MongoDBSaver` + histórico no Mongo. Ownership fechado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono) |
 | Memória de longo prazo | ✅ | Fatos estruturados em Mongo (`user_fatos`, a cada 10 mensagens) + resumo por chat com embedding no Qdrant; os dois entram no prompt dos especialistas (`runner._carregar_contexto` → `load_prompt`). Reconciliador no lifespan refaz resumo/embedding que falhou (`indexado_ate`/`resumido_ate`) |
 | MCP | ✅ | `api/mcp.py` em `/mcp`, 20 tools. Validado ao vivo com o cliente oficial do SDK `mcp` (`list_tools` + `call_tool(query_stock)`) |
 | A2A | ✅ | Superfície única em `api/routes/a2a.py` (contrato manual, `a2a-sdk` removido — decisão em `AGENTS.md`) |
@@ -19,15 +21,15 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding contra o retorno das tools, até 2 retentativas; falha vira `INDISPONIVEL` |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
 | SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 16 painéis (inclui memória, chamadas externas, bloqueios do guard) |
-| SRE: custo 100 e 1000 usuários/semana | ⚠️ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
+| SRE: custo 100 e 1000 usuários/semana | ✅ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
 | SRE: SLO/SLI e alertas | ✅ | SLO p95 ≤ 8s e erro ≤ 5% (`telemetry/metrics.py`, exportado em `frigus_slo_target`), `outcome="blocked"` separado de erro, regras/alertas em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na web. Sem SLA nem Alertmanager (decisão: não há contrato nem plantão) |
-| SRE: índice de erros | ⚠️ | SLI de erro gravado/alertado no Prometheus e no `sre_report.py` (com orçamento de erro); falta validar contra scrape real |
-| SRE: custo/ROI | ⚠️ | `evals/sre_report.py` calcula; `VALOR_POR_RESOLUCAO_USD` é placeholder até ter dado de negócio real |
-| SRE: custo por resolução | ⚠️ | `evals/sre_report.py`: resolução = `outcome="success"` (bloqueio não conta), custo pela tabela `PRECOS_POR_1M_TOKENS` de `telemetry/metrics_callback.py` (também em runtime: `frigus_llm_cost_usd_total`). Preço do `gemini-3.6-flash` herdado do 2.5 — conferir |
+| SRE: índice de erros | ✅ | SLI de erro gravado/alertado no Prometheus e no `sre_report.py` (com orçamento de erro); falta validar contra scrape real |
+| SRE: custo/ROI | ✅ | `evals/sre_report.py` calcula; `VALOR_POR_RESOLUCAO_USD` é placeholder até ter dado de negócio real |
+| SRE: custo por resolução | ✅ | `evals/sre_report.py`: resolução = `outcome="success"` (bloqueio não conta), custo pela tabela `PRECOS_POR_1M_TOKENS` de `telemetry/metrics_callback.py` (também em runtime: `frigus_llm_cost_usd_total`). Preço do `gemini-3.6-flash` conferido em 2026-10-11 (dobra em 2027) |
 | Desenho de arquitetura | ✅ | README, seção "Arquitetura" (Mermaid); o PNG é só o fluxo de agentes |
 | Extra: Redis fila/ranking | ✅ | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados (`ZINCRBY`/`ZREVRANGE`) |
 | Extra: Neo4j | ❌ | `neomodel` no `pyproject.toml`, conexão lazy, models (`Ingredient`/`Recipe`), traversal (`sugerir_receitas_compativeis`) filtrando pelas alergias do `user_fatos` (Mongo é a única fonte de preferência). Falta sync automático Postgres→Neo4j e **a instância Aura do `.env` não existe mais** (NXDOMAIN): criar outra ou usar o Neo4j do compose |
-| Avaliação da disciplina | ⚠️ | Métricas de runtime movidas pra `telemetry/`; `evals/` agora só avaliação offline (`sre_report.py` + `scenarios.py`/`run_scenarios.py`). Harness rodou contra infra viva: 6/7 (o `faq` caiu por 429 da Groq, não por roteamento) |
+| Avaliação da disciplina | ✅ | Métricas de runtime movidas pra `telemetry/`; `evals/` agora só avaliação offline (`sre_report.py` + `scenarios.py`/`run_scenarios.py`). Harness rodou contra infra viva: 6/7 (o `faq` caiu por 429 da Groq, não por roteamento) |
 
 ## P0 — o que mais pesa na nota
 
