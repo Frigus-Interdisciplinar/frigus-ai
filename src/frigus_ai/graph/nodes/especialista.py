@@ -57,10 +57,7 @@ def especialista(
 def especialista_com_agente(
     nome: NodeLiteral, agente: Runnable
 ) -> AsyncNodeComContexto[EspecialistaUpdate]:
-    """
-    Nó de especialista que só pergunta ao agente (LLM + tools) com o histórico do turno. O Juiz
-    confere o que as tools retornaram; sem chamada de tool não há o que conferir além da resposta.
-    """
+    """Nó de especialista que só pergunta ao agente (LLM + tools); sem tool, o Juiz confere a resposta."""
 
     @especialista(nome)
     async def no(estado: Estado, runtime: Runtime[ContextoPrompt]) -> ConteudoEspecialista:

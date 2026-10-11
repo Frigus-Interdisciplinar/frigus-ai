@@ -13,7 +13,7 @@ from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 
-# Quantas vezes o Juiz manda o especialista tentar de novo antes de deixar passar
+# Quantas vezes o Juiz manda o orquestrador reescrever antes de deixar passar
 # mesmo reprovado (mesmo princípio do guardrail de saída: nunca trava o usuário). Falha na
 # chamada ou saída fora do schema também deixa passar, mas como INDISPONIVEL: não é aprovação.
 MAX_TENTATIVAS = settings.llm.max_tentativas_juiz
@@ -57,7 +57,7 @@ def _logar(veredito: str, justificativa: str, tentativas: int, repetir: bool) ->
         logger.warning(
             "Juiz REPROVOU mas as tentativas se esgotaram — seguindo mesmo assim: %s", justificativa
         )
-    else:
+    elif veredito == APROVADO:
         logger.info("Juiz APROVOU: %s", justificativa)
 
 
