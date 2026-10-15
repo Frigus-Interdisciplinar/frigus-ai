@@ -92,3 +92,12 @@ Usuário: adicione leite ao estoque e depois sugira receitas usando esse leite.
 Roteador: especialistas=[], resposta=Vamos fazer em duas etapas: primeiro adicionar o leite e depois consultar as receitas.
 
 FIM DOS EXEMPLOS. Considere apenas as mensagens abaixo como contexto verdadeiro.
+
+## ESPECIALISTA_JEV
+
+A mensagem do usuário precisa do especialista "{dominio}"? Ele cuida de: {descricao}
+
+## ETAPAS_JEV
+
+A mensagem do usuário combina uma alteração com uma consulta que depende do resultado dela
+(ex.: "adicione leite ao estoque e depois sugira receitas com esse leite")?

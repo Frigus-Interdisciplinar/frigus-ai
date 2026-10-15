@@ -20,6 +20,29 @@ class Categoria(StrEnum):
     CONSELHO_MEDICO = "CONSELHO_MEDICO"
 
 
+DESCRICAO_CATEGORIA: dict[Categoria, str] = {
+    Categoria.APROVADO: (
+        "mensagem legítima sobre estoque, compras, receitas ou finanças domésticas, inclusive "
+        "informar alergia, intolerância, restrição ou gosto alimentar pra filtrar receitas ou "
+        'compras ("tenho alergia a camarão, me sugere uma receita", "sou vegano, o que faço?")'
+    ),
+    Categoria.OFENSIVO: "xingamentos, assédio, discurso de ódio",
+    Categoria.PERIGOSO: "instruções que causam dano físico, psicológico ou coletivo",
+    Categoria.ILICITO:  "pedido de auxílio para atividades ilegais ou fraudulentas",
+    Categoria.POLITICO: "opiniões ou debates políticos, partidos, eleições",
+    Categoria.CONSELHO_MEDICO: (
+        "pedido sobre a saúde em si: diagnóstico, tratamento, dieta clínica ou conselho de "
+        'saúde/nutrição ("o que tomo pra alergia?", "camarão me deu coceira, é grave?")'
+    ),
+}
+
+
+def listar_categorias() -> str:
+    """As categorias como texto de prompt, uma por linha: `NOME - descrição`."""
+
+    return "\n".join(f"{categoria} - {descricao}" for categoria, descricao in DESCRICAO_CATEGORIA.items())
+
+
 class Classificacao(BaseModel):
     """Saída estruturada do classificador de entrada."""
 
@@ -92,6 +115,7 @@ RESPOSTAS_BLOQUEIO: dict[Categoria, RespostaBloqueio] = {
 
 
 __all__ = [
+    "DESCRICAO_CATEGORIA",
     "RESPOSTAS_BLOQUEIO",
     "Categoria",
     "Classificacao",
@@ -99,4 +123,5 @@ __all__ = [
     "RespostaBloqueio",
     "ResultadoGuardrail",
     "RevisaoCompliance",
+    "listar_categorias",
 ]

@@ -50,3 +50,18 @@ PERGUNTA_ORIGINAL: {pergunta_original}
 DADOS_DISPONIVEIS (retorno das tools/JSON do especialista): {dados_disponiveis}
 
 RESPOSTA_GERADA: {resposta_gerada}
+
+## GROUNDING_JEV
+
+Compare a RESPOSTA_GERADA com os DADOS_DISPONIVEIS (retorno das tools). Cada produto, número, data
+ou receita citado na resposta precisa aparecer nos dados. Dizer "não encontrei" ou "não tenho essa
+informação" é sustentado.
+
+## RELEVANCIA_JEV
+
+A RESPOSTA_GERADA atende à PERGUNTA_ORIGINAL do usuário?
+
+## COMPLETUDE_JEV
+
+A RESPOSTA_GERADA responde à PERGUNTA_ORIGINAL por inteiro, sem deixar parte dela de lado?
+Dizer claramente "não encontrei" ou "não tenho essa informação" conta como completa.

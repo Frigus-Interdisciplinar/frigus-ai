@@ -197,6 +197,21 @@ SSE_DISCONNECTS = Counter(
     "Streams SSE encerrados pelo cliente antes do fim da execução.",
 )
 
+# ponytail: `escolha` como label só serve pra opções fixas; opções dinâmicas (IDs de produto)
+# precisam de um rótulo genérico, senão a cardinalidade explode.
+JEV_DECISIONS = Counter(
+    "frigus_jev_decisions_total",
+    "Respostas do JeV por uso, pergunta, resposta (ou recusa/invalida) e modelo que respondeu.",
+    labelnames=("uso", "pergunta", "escolha", "modelo"),
+)
+
+JEV_CONFIDENCE = Histogram(
+    "frigus_jev_confidence",
+    "Confiança do JeV na opção escolhida.",
+    labelnames=("uso",),
+    buckets=(0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99),
+)
+
 EXTERNAL_CALLS = Counter(
     "frigus_external_calls_total",
     "Chamadas a serviços externos.",
@@ -278,6 +293,8 @@ __all__ = [
     "HTTP_DURATION",
     "HTTP_REQUESTS",
     "HTTP_UNMATCHED",
+    "JEV_CONFIDENCE",
+    "JEV_DECISIONS",
     "LLM_COST",
     "LLM_DURATION",
     "LLM_FALLBACKS",

@@ -41,7 +41,6 @@ def especialista(
                 conteudo = ConteudoEspecialista(resposta=conteudo, dados=conteudo)
 
             return EspecialistaUpdate(
-                agentes_chamados=[nome],
                 dados_especialistas=[
                     ResultadoEspecialista(
                         agente=nome, resposta=conteudo["resposta"], dados=conteudo["dados"]

@@ -30,7 +30,7 @@ async def test_reprovado_devolve_feedback_e_conta_tentativa(monkeypatch):
 
     assert update["veredito_juiz"] == "REPROVADO"
     assert update["feedback_juiz"] == "citou iogurte"
-    assert update["tentativas_juiz"] == 1
+    assert update["reescritas_juiz"] == 1
 
 
 async def test_reprovado_sem_tentativas_sobrando_segue_sem_feedback(monkeypatch):
@@ -38,10 +38,10 @@ async def test_reprovado_sem_tentativas_sobrando_segue_sem_feedback(monkeypatch)
         mod, "llm_avaliador", _FakeLLM(VereditoJuiz(veredito="REPROVADO", justificativa="x"))
     )
 
-    update = await no_juiz(_estado(tentativas_juiz=mod.MAX_TENTATIVAS))
+    update = await no_juiz(_estado(reescritas_juiz=mod.MAX_REESCRITAS))
 
     assert update["feedback_juiz"] == ""
-    assert update["tentativas_juiz"] == mod.MAX_TENTATIVAS
+    assert update["reescritas_juiz"] == mod.MAX_REESCRITAS
 
 
 @pytest.mark.parametrize("falha", [RuntimeError("provider fora"), "texto solto"])
@@ -52,3 +52,60 @@ async def test_falha_ou_saida_fora_do_schema_fica_indisponivel(monkeypatch, falh
 
     assert update["veredito_juiz"] == "INDISPONIVEL"
     assert update["feedback_juiz"] == ""
+
+
+# --------------------- JeV como avaliador ---------------------
+
+def _jev_avalia(monkeypatch, grounding: mod.Grounding, relevante: bool = True, completa: bool = True):
+    from frigus_ai.infra.llm.jev import Decisoes
+    from frigus_ai.infra.llm.jev.schemas import Escolha, Predicado
+
+    async def decidir(uso, _entrada, _perguntas):
+        assert uso == "juiz"
+        return Decisoes({
+            mod.Criterio.GROUNDING: Escolha(type="choice", name=mod.Criterio.GROUNDING, choice=grounding),
+            mod.Criterio.RELEVANCIA: Predicado(
+                type="predicate", name=mod.Criterio.RELEVANCIA, probability=0.9 if relevante else 0.1
+            ),
+            mod.Criterio.COMPLETUDE: Predicado(
+                type="predicate", name=mod.Criterio.COMPLETUDE, probability=0.9 if completa else 0.1
+            ),
+        })
+
+    monkeypatch.setattr(mod.jev, "disponivel", lambda: True)
+    monkeypatch.setattr(mod.jev, "decidir", decidir)
+    monkeypatch.setattr(mod, "llm_avaliador", _FakeLLM(AssertionError("não devia chamar o LLM")))
+
+
+async def test_jev_aprova_sustentada_relevante_e_completa(monkeypatch):
+    _jev_avalia(monkeypatch, mod.Grounding.SUSTENTADA)
+
+    update = await no_juiz(_estado())
+
+    assert update["veredito_juiz"] == "APROVADO"
+    assert update["feedback_juiz"] == ""
+
+
+async def test_jev_reprova_com_feedback_de_cada_criterio(monkeypatch):
+    _jev_avalia(monkeypatch, mod.Grounding.SEM_EVIDENCIA, completa=False)
+
+    update = await no_juiz(_estado())
+
+    assert update["veredito_juiz"] == "REPROVADO"
+    feedback = mod._FEEDBACK
+    assert update["feedback_juiz"] == f"{feedback[mod.Grounding.SEM_EVIDENCIA]} {feedback[mod.Criterio.COMPLETUDE]}"
+    assert update["reescritas_juiz"] == 1
+
+
+async def test_jev_falhando_cai_no_juiz_llm(monkeypatch):
+    async def falha(*_args):
+        raise RuntimeError("gateway fora")
+
+    monkeypatch.setattr(mod.jev, "disponivel", lambda: True)
+    monkeypatch.setattr(mod.jev, "decidir", falha)
+    monkeypatch.setattr(mod, "llm_avaliador", _FakeLLM(VereditoJuiz(veredito="APROVADO", justificativa="ok")))
+
+    update = await no_juiz(_estado())
+
+    assert update["veredito_juiz"] == "APROVADO"
+    assert update["justificativa_juiz"] == "ok"
