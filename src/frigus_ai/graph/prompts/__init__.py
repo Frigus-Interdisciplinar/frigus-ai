@@ -1,12 +1,6 @@
 """
-Único módulo Python em agents/prompts/ — os outros arquivos da pasta são só .md.
-
-Cada .md pode ter um header `---\nchave: valor\n---` (metadados, hoje só
-`usa_tools_obrigatorias`) seguido de seções `## NOME` (PAPEL, SHOTS, TEMPLATE
-etc.). `load_prompt()` monta o system_prompt completo (persona + contexto
-temporal + [obrigatoriedade de tools] + papel + [shots]) a partir da seção
-PAPEL/SHOTS; `load_sections()` devolve as seções cruas, pra quem precisa de
-outra seção (TEMPLATE do Juiz) ou não quer o envelope de persona (Guardrail).
+Carrega os prompts dos `.md` desta pasta. Cada arquivo é dividido em seções `## NOME` (a chave
+fica em minúsculas); `sistema.md` guarda os blocos comuns a todos os agentes.
 """
 
 from collections.abc import Sequence
@@ -18,156 +12,71 @@ from frigus_ai.domain.models import Fatos
 
 _PASTA = Path(__file__).parent
 _MARCADOR_SECAO = "## "
-_MARCADOR_FRONTMATTER = "---"
 
-PERSONA_SISTEMA = """
-### PERSONA
-Você é o Frigus.AI — o assistente pessoal do aplicativo Frigus, especialista em gestão de alimentos. Você ajuda o usuário a controlar geladeira, freezer e despensa, reduzir desperdício, aproveitar ingredientes antes do vencimento e planejar compras. Sua principal característica é a objetividade e a confiabilidade. Você é prático, direto e nunca inventa dados sobre o estoque, preços ou receitas que não vieram das tools. Seu objetivo é ser um parceiro confiável para o usuário economizar dinheiro e evitar desperdício de comida.
-"""
+_USAM_TOOLS_OBRIGATORIAS = frozenset({"compras", "estoque", "financeiro", "receitas"})
+
+
+@lru_cache(maxsize=32)
+def load_sections(nome_arquivo: str | Path) -> dict[str, str]:
+    """Seções cruas do .md, sem o envelope de persona — pra quem monta o prompt na mão."""
+
+    secoes: dict[str, list[str]] = {}
+    atual: list[str] | None = None
+
+    for linha in (_PASTA / nome_arquivo).read_text(encoding="utf-8").splitlines():
+        if linha.startswith(_MARCADOR_SECAO):
+            atual = secoes.setdefault(linha.removeprefix(_MARCADOR_SECAO).strip().lower(), [])
+        elif atual is not None:
+            atual.append(linha)
+
+    return {nome: "\n".join(linhas).strip() for nome, linhas in secoes.items()}
+
+
+def _sistema(secao: str, **campos: str) -> str:
+    texto = load_sections("sistema.md")[secao]
+    return texto.format(**campos) if campos else texto
+
 
 def contexto_temporal() -> str:
-    """Montado a cada chamada, nunca no import: como constante de módulo, um processo de API vivo continuava dizendo "hoje" com a data em que subiu — e "o que vence hoje" é o core do domínio. Por isso `load_prompt` também não pode ser cacheado."""
+    """Montado a cada chamada, nunca no import: senão a API viva diz "hoje" com a data em que subiu."""
+
     agora = datetime.now(UTC).astimezone()
+    return _sistema("contexto_temporal", agora=agora.strftime("%A, %d de %B de %Y — %H:%M:%S %Z"))
 
-    return f"""
-### CONTEXTO TEMPORAL
-Data e hora atual (fornecida pelo sistema): {agora.strftime("%A, %d de %B de %Y — %H:%M:%S %Z")}
-Use esta referência para interpretar "hoje", "ontem", "essa semana", calcular datas relativas e preencher timestamps nas operações.
-"""
-
-OBRIGATORIEDADE_TOOLS = """
-### OBRIGATORIEDADE DE TOOLS
-- TODA resposta que contenha produtos, quantidades, preços, datas de validade ou receitas DEVE ser precedida de uma chamada de tool nesta mesma execução.
-- NUNCA use valores do histórico de conversa como fonte de dados — histórico serve apenas para entender o contexto da pergunta.
-- Toda tool devolve um objeto JSON com "status". Sucesso: {"status": "ok", ...dados}. Falha: {"status": "error", "message": "<motivo>"} — leia o "message" para decidir: corrija o argumento e tente de novo se o erro apontar um valor inválido; senão, explique a falha ao usuário.
-- Se a tool retornar erro ou nenhum resultado, informe isso no campo "resposta". Jamais invente um produto, preço ou data substituta.
-"""
-
-CONTEXTO_FACTOS = """
-### CONTEXTO DE FATOS ESTRUTURADOS
-Estes são fatos sobre o usuário extraídos da conversa (alergias, preferências, restrições alimentares e hábitos). Use estas informações para personalizar a resposta, filtrar opções e evitar sugerir itens que conflitam com o perfil do usuário.
-
-- Alergias: {alergias}
-- Preferências: {preferencias}
-- Restrições: {restricoes}
-- Hábitos: {habitos}
-
-"não informado" quer dizer que o usuário não cadastrou nada ali — não é o mesmo que confirmar que ele não tem alergia ou restrição. Não invente ou alucine fatos que não estejam nesta lista.
-"""
 
 def _juntar(valores: Sequence[str]) -> str:
     # Lista vazia é ausência de cadastro: "nenhuma" fazia o LLM afirmar que não há alergia.
     return ", ".join(valores) or "não informado"
 
 
-def _formatar_fatos(fatos: Fatos) -> str:
-    """Formata objeto Fatos em texto para inclusão no prompt."""
-    return CONTEXTO_FACTOS.format(
-        alergias=_juntar(fatos.alergias),
-        preferencias=_juntar(fatos.preferencias),
-        restricoes=_juntar(fatos.restricoes),
-        habitos=_juntar(fatos.habitos),
-    )
+def load_prompt(nome: str, fatos: Fatos | None = None, conversas: Sequence[str] = ()) -> str:
+    """System prompt: persona, data, [tools obrigatórias], papel, [shots], [fatos], [conversas]."""
 
-
-CONTEXTO_CONVERSAS = """
-### CONVERSAS ANTERIORES RELEVANTES
-Resumos de outras conversas deste usuário parecidas com a pergunta atual. Use só como
-contexto (o que ele já pediu, decidiu ou deixou pendente) — nunca como fonte de estoque,
-preço ou validade, que mudam e só valem vindos das tools.
-
-{resumos}
-"""
-
-
-def _parse_frontmatter(texto: str) -> tuple[dict[str, str], str]:
-    linhas = texto.splitlines()
-
-    if not linhas or linhas[0].strip() != _MARCADOR_FRONTMATTER:
-        return {}, texto
-
-    for i, linha in enumerate(linhas[1:], start=1):
-        if linha.strip() != _MARCADOR_FRONTMATTER:
-            continue
-
-        metadados = {}
-        for linha_meta in linhas[1:i]:
-            if ":" in linha_meta:
-                chave, valor = linha_meta.split(":", 1)
-                metadados[chave.strip()] = valor.strip()
-
-        return metadados, "\n".join(linhas[i + 1 :])
-
-    return {}, texto
-
-
-def _parse_secoes(texto: str) -> dict[str, str]:
-    secoes: dict[str, str] = {}
-    nome_atual: str | None = None
-    linhas_atuais: list[str] = []
-
-    for linha in texto.splitlines():
-        if linha.startswith(_MARCADOR_SECAO):
-            if nome_atual:
-                secoes[nome_atual] = "\n".join(linhas_atuais).strip()
-            nome_atual = linha.removeprefix(_MARCADOR_SECAO).strip().lower()
-            linhas_atuais = []
-        elif nome_atual:
-            linhas_atuais.append(linha)
-
-    if nome_atual:
-        secoes[nome_atual] = "\n".join(linhas_atuais).strip()
-
-    return secoes
-
-
-@lru_cache(maxsize=32)
-def _ler(nome_arquivo: str) -> tuple[dict[str, str], dict[str, str]]:
-    texto = (_PASTA / nome_arquivo).read_text(encoding="utf-8")
-    metadados, corpo = _parse_frontmatter(texto)
-    return metadados, _parse_secoes(corpo)
-
-
-def load_sections(nome_arquivo: str) -> dict[str, str]:
-    """Seções cruas do .md (sem persona/contexto), pra quem monta o prompt na mão
-    (TEMPLATE do Juiz) ou não quer o envelope de agente nenhum (Guardrail)."""
-
-    _, secoes = _ler(nome_arquivo)
-    return secoes
-
-
-def load_prompt(
-    nome_arquivo: str, fatos: Fatos | None = None, conversas: Sequence[str] = ()
-) -> str:
-    """System prompt completo: persona + contexto temporal +
-    [obrigatoriedade de tools, se o frontmatter marcar] + papel + [shots].
-
-    Se `fatos` for fornecido, inclui uma seção CONTEXTO DE FATOS estruturados
-    no final do prompt para que o LLM possa usar essas informações na resposta.
-    Ordem fixa no fim: fatos (sobre o usuário) antes de conversas (sobre o passado).
-    """
-
-    metadados, secoes = _ler(nome_arquivo + ".md")
-
-    partes = [PERSONA_SISTEMA, contexto_temporal()]
-
-    if metadados.get("usa_tools_obrigatorias") == "true":
-        partes.append(OBRIGATORIEDADE_TOOLS)
-
+    secoes = load_sections(f"{nome}.md")
     if not secoes.get("papel"):
-        raise ValueError(f"Prompt {nome_arquivo}.md não tem a seção ## PAPEL")
+        raise ValueError(f"Prompt {nome}.md não tem a seção ## PAPEL")
+
+    partes = [_sistema("persona"), contexto_temporal()]
+
+    if nome in _USAM_TOOLS_OBRIGATORIAS:
+        partes.append(_sistema("obrigatoriedade_tools"))
 
     partes.append(f"### PAPEL\n{secoes['papel']}")
 
-    if secoes.get("shots"):
-        partes.append(secoes["shots"])
+    if shots := secoes.get("shots"):
+        partes.append(shots)
 
     if fatos is not None:
-        partes.append(_formatar_fatos(fatos))
+        partes.append(_sistema(
+            "fatos",
+            alergias=_juntar(fatos.alergias),
+            preferencias=_juntar(fatos.preferencias),
+            restricoes=_juntar(fatos.restricoes),
+            habitos=_juntar(fatos.habitos),
+        ))
 
     if conversas:
-        resumos = "\n".join(f"- {c}" for c in conversas)
-        partes.append(CONTEXTO_CONVERSAS.format(resumos=resumos))
+        partes.append(_sistema("conversas", resumos="\n".join(f"- {c}" for c in conversas)))
 
     return "\n\n".join(partes)
 

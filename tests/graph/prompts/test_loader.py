@@ -97,7 +97,7 @@ def test_load_prompt_carrega_a_data_do_momento_da_chamada():
 
 
 def test_load_prompt_sem_secao_papel_levanta(monkeypatch):
-    monkeypatch.setattr(prompts, "_ler", lambda _nome: ({}, {"shots": "x"}))
+    monkeypatch.setattr(prompts, "load_sections", lambda _nome: {"shots": "x"})
 
     with pytest.raises(ValueError, match="PAPEL"):
         prompts.load_prompt("sem_papel")
