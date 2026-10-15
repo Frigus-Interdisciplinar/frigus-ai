@@ -13,6 +13,9 @@
    - `pending/visao/arquivos.md` — limpeza de checkpoint, retry do Juiz, fallback de provider
    - `pending/api-e-services/arquivos.md` — schemas de resposta e organização de rotas
    - `pending/guardrail-privacy/arquivos.md` — custo do guardrail de saída
+   - `pending/jev/arquivos.md` — onde o JeV já decide e os próximos usos (guardrail de saída,
+     categoria e resolução de nome de produto)
+   - `observability/RELATORIO.md` — cenários, SRE e sessões rodados contra a infra real
 4. Consultar `implemented/` para entender o que já foi feito e decisões descartadas:
    - `implemented/gap-assessor/`, `implemented/a2a-sdk/`, `implemented/tools-repos/`,
      `implemented/plano-correcao-refactor/` — arquivadas em 2026-09-23, cada uma com um aviso

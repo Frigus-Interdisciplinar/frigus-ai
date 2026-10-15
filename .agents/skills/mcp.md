@@ -1,6 +1,6 @@
 # MCP (SDK oficial `mcp`)
 
-Pegadinhas reais encontradas ao montar `interfaces/mcp/server.py` — o servidor MCP que expõe as
+Pegadinhas reais encontradas ao montar `api/mcp.py` — o servidor MCP que expõe as
 tools de domínio em `POST /mcp`, montado dentro da API FastAPI. Consulte antes de mexer nele.
 
 ## `mcp` 2.x renomeou `FastMCP` para `MCPServer`
@@ -26,7 +26,7 @@ encadear toda chamada morre em `RuntimeError: Task group is not initialized`.
 Do this — encadeia no lifespan do app principal:
 
 ```python
-# interfaces/mcp/server.py
+# api/mcp.py
 _app_mcp = servidor.streamable_http_app(streamable_http_path="/", stateless_http=True)
 
 
@@ -34,7 +34,7 @@ def lifespan_mcp():
     return _app_mcp.router.lifespan_context(_app_mcp)
 
 
-# interfaces/api/main.py
+# api/routes/__init__.py
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with lifespan_mcp():
@@ -55,12 +55,12 @@ segundo teste quebra com "can only be called once per instance".
 
 ## `stateless_http=True` é o que mantém o `session_context` válido
 
-As tools de Postgres leem `user_id`/`stock_id` de `contextvars` (`tools/postgres/context.py`), e app
+As tools de Postgres leem `user_id`/`stock_id` de `contextvars` (`infra/postgres/context.py`), e app
 montado não executa dependência do FastAPI — quem preenche isso é um middleware ASGI. Com sessão MCP
 de longa duração o handler roda em **outra task**, e o contextvar aberto no middleware não chega na
 tool. Em modo stateless cada request se resolve dentro da própria chamada.
 
-`tests/interfaces/mcp/test_server.py` tem um teste que registra uma tool-espiã e afirma que
+`tests/mcp/test_server.py` tem um teste que registra uma tool-espiã e afirma que
 `current_user_id()`/`current_stock_id()` chegam corretos — é o que trava essa regressão.
 
 ## Proteção contra DNS rebinding: 421 fora do localhost
@@ -88,7 +88,7 @@ def _adaptar(tool):
 
 Sem o `wraps`, o `**kwargs` vira um único parâmetro obrigatório chamado `kwargs` e a chamada falha
 com `1 validation error: kwargs Field required` — a tool aparece no `tools/list` e é impossível de
-chamar. `tests/interfaces/mcp/test_server.py::test_schema_da_tool_vem_dos_parametros_reais` trava isso.
+chamar. `tests/mcp/test_server.py::test_schema_da_tool_vem_dos_parametros_reais` trava isso.
 
 **Limitação aceita:** a descrição por campo vive no `args_schema` do LangChain e o SDK não a lê, então
 o schema publicado sai sem ela. A descrição da tool (docstring), que é o que guia o host, é preservada.
