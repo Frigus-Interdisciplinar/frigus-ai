@@ -1,6 +1,6 @@
 """
-Auth por API key: o que se testa aqui é a dependência (bypass, 401, resolução do
-user_id) e a rota de emissão — sem Redis/Postgres, ambos trocados por stubs.
+Auth por API key ou login Firebase: o que se testa aqui é a dependência (bypass, 401, resolução
+do user_id) e a rota de emissão — sem Redis/Postgres/Firebase, trocados por stubs.
 """
 
 import pytest
@@ -68,6 +68,88 @@ def test_auth_ligada_resolve_user_id_da_key(cliente, monkeypatch):
     assert get_history.chamado_com == (CHAT_ID, 42)
 
     assert client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"X-API-Key": "ruim"}).status_code == 401
+
+
+# --------------------- login Firebase (Bearer) ---------------------
+
+def _firebase_devolve(monkeypatch, claims, user_id="uuid-do-usuario"):
+    """Troca a checagem do token (chaves públicas do Google) e a criação do usuário por stubs."""
+
+    criados = []
+
+    def _verify(token, app=None):
+        if token != "token-bom":
+            raise auth.firebase_auth.InvalidIdTokenError("token inválido")
+        return claims
+
+    monkeypatch.setattr(auth.settings.api, "key_auth_enabled", True)
+    monkeypatch.setattr(auth, "get_firebase_app", lambda: None)
+    monkeypatch.setattr(auth.firebase_auth, "verify_id_token", _verify)
+    monkeypatch.setattr(
+        auth.identidade_repository, "criar_usuario", lambda nome, email: criados.append((nome, email)) or user_id
+    )
+    return criados
+
+
+def test_bearer_valido_resolve_o_usuario_pelo_email(cliente, monkeypatch):
+    client, get_history = cliente
+    claims = {"email": "ana@frigus.com", "email_verified": True, "name": "Ana"}
+    criados = _firebase_devolve(monkeypatch, claims)
+
+    r = client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"Authorization": "Bearer token-bom"})
+
+    assert r.status_code == 200
+    assert get_history.chamado_com == (CHAT_ID, "uuid-do-usuario")
+    assert criados == [("Ana", "ana@frigus.com")]
+
+
+def test_bearer_sem_nome_usa_o_email_como_nome(cliente, monkeypatch):
+    client, _ = cliente
+    criados = _firebase_devolve(monkeypatch, {"email": "ana@frigus.com", "email_verified": True})
+
+    client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"Authorization": "Bearer token-bom"})
+
+    assert criados == [("ana@frigus.com", "ana@frigus.com")]
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"email": "ana@frigus.com", "email_verified": False},
+        {"email": "ana@frigus.com"},
+        {"email_verified": True},
+    ],
+)
+def test_bearer_sem_email_verificado_vira_401_e_nao_cria_usuario(cliente, monkeypatch, claims):
+    client, _ = cliente
+    criados = _firebase_devolve(monkeypatch, claims)
+
+    r = client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"Authorization": "Bearer token-bom"})
+
+    assert r.status_code == 401
+    assert criados == []
+
+
+def test_bearer_invalido_vira_401_em_vez_de_500(cliente, monkeypatch):
+    client, _ = cliente
+    _firebase_devolve(monkeypatch, {"email": "ana@frigus.com", "email_verified": True})
+
+    r = client.get(f"/v1/chats/{CHAT_ID}/messages", headers={"Authorization": "Bearer token-ruim"})
+
+    assert r.status_code == 401
+
+
+def test_bearer_tem_prioridade_sobre_a_api_key(cliente, monkeypatch):
+    client, get_history = cliente
+    _firebase_devolve(monkeypatch, {"email": "ana@frigus.com", "email_verified": True})
+    monkeypatch.setattr(auth.auth_service, "get_user_id_by_api_key", lambda key: "usuario-da-key")
+
+    client.get(
+        f"/v1/chats/{CHAT_ID}/messages",
+        headers={"Authorization": "Bearer token-bom", "X-API-Key": "qualquer"},
+    )
+
+    assert get_history.chamado_com == (CHAT_ID, "uuid-do-usuario")
 
 
 def test_signup_secret_vazio_nao_libera_emissao_de_key(cliente, monkeypatch):

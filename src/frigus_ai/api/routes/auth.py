@@ -1,7 +1,8 @@
 """
 Emissão, rotação e revogação de API key. A emissão é protegida por `X-Signup-Secret` — sem
 cadastro aberto, que neste projeto criaria usuário no Postgres pra qualquer um que chamasse a
-rota. Rotação e revogação são do próprio dono: autenticadas pela key atual (`X-API-Key`).
+rota. Rotação e revogação são do próprio dono: autenticadas pela key atual (`X-API-Key`) ou pelo login
+Firebase (Bearer).
 """
 
 import secrets
