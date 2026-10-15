@@ -89,7 +89,7 @@ def _mensagem(pergunta: str, contexto: str) -> str:
 @especialista(A2A_ASSESSOR)
 async def no_assessor(
     estado: Estado,
-    runtime: Runtime[ContextoPrompt],  # não usado; o contrato do decorator exige
+    runtime: Runtime[ContextoPrompt],
 ) -> ConteudoEspecialista:
     pergunta = estado.get("pergunta_original", "")
     if revisao := revisao_do_juiz(estado):
@@ -97,7 +97,8 @@ async def no_assessor(
 
     try:
         contexto = await asyncio.to_thread(_contexto_financeiro)
-    except Exception as e:  # sem estoque na sessão, Postgres/Redis fora: pergunta sem dados
+    # Sem estoque na sessão ou Postgres/Redis fora: pergunta sem os dados financeiros.
+    except Exception as e:
         logger.warning("Sem dados financeiros pro Assessor, perguntando sem contexto: %s", e)
         contexto = ""
 

@@ -3,8 +3,8 @@ Uma execução ponta a ponta do grafo com os agentes/LLMs stubados.
 
 Cobre o que os contratos tipados (`EntradaGrafo`/`SaidaGrafo` + os `*Update`) prometem e que
 nenhum teste de nó isolado pega: que as chaves dos TypedDicts batem com as do `Estado` (um typo
-viraria update silenciosamente descartado pelo LangGraph), que `agentes_chamados` e
-`dados_especialistas` acumulam pelo reducer, que especialistas escolhidos juntos rodam em paralelo
+viraria update silenciosamente descartado pelo LangGraph), que `dados_especialistas` acumula pelo
+reducer, que especialistas escolhidos juntos rodam em paralelo
 e o orquestrador espera todos, que o laço do Juiz volta só pro orquestrador, e que a saída expõe
 só `messages`.
 """
@@ -101,6 +101,23 @@ def grafo(monkeypatch):
     return compilar, agentes
 
 
+async def _rodar(app, texto: str, thread_id: str = "t") -> tuple[list[str], list]:
+    """Os nós que rodaram, na ordem, e o histórico final do turno."""
+
+    caminho, mensagens = [], []
+    async for modo, dados in app.astream(
+        EntradaGrafo(messages=[HumanMessage(content=texto)]),
+        config={"configurable": {"thread_id": thread_id}},
+        stream_mode=["updates", "values"],
+    ):
+        if modo == "updates":
+            caminho.extend(dados)
+        else:
+            mensagens = dados["messages"]
+
+    return caminho, mensagens
+
+
 async def test_fluxo_feliz_ate_o_guardrail_de_saida(grafo):
     compilar, agentes = grafo
     app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
@@ -138,26 +155,13 @@ async def test_juiz_reprovado_reescreve_no_orquestrador_sem_repetir_o_especialis
     assert "[REVISÃO SOLICITADA PELO JUIZ] faltou citar a validade" in segunda
 
 
-async def test_agentes_chamados_acumula_sem_ser_semeado_na_entrada(grafo):
-    """`agentes_chamados` não está em EntradaGrafo: quem cria a lista é o reducer operator.add."""
-
+async def test_caminho_do_turno_de_estoque(grafo):
     compilar, _ = grafo
     app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
-    estado = await app.ainvoke(
-        EntradaGrafo(messages=[HumanMessage(content="o que tem na geladeira?")]),
-        config={"configurable": {"thread_id": "t1"}},
-    )
-    del estado
+    caminho, _ = await _rodar(app, "o que tem na geladeira?")
 
-    # O estado interno completo não sai pelo SaidaGrafo; lemos pelo próprio grafo.
-    interno = await app.ainvoke(
-        EntradaGrafo(messages=[HumanMessage(content="e agora?")]),
-        config={"configurable": {"thread_id": "t2"}},
-        output_keys=["agentes_chamados"],
-    )
-
-    assert interno["agentes_chamados"] == [
+    assert caminho == [
         "guardrail_entrada_node",
         "roteador_node",
         "estoque_node",
@@ -254,18 +258,14 @@ async def test_plano_de_economia_vai_pro_assessor_e_passa_pelo_juiz(grafo, monke
     compilar, _ = grafo
     app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
-    interno = await app.ainvoke(
-        EntradaGrafo(messages=[HumanMessage(content="como economizo no mercado?")]),
-        config={"configurable": {"thread_id": "chat-9"}},
-        output_keys=["agentes_chamados", "messages"],
-    )
+    caminho, mensagens = await _rodar(app, "como economizo no mercado?", thread_id="chat-9")
 
     assert perguntas[0][1] == "chat-9"  # session_id vem do thread_id
-    assert interno["agentes_chamados"] == [
+    assert caminho == [
         "guardrail_entrada_node", "roteador_node", "a2a_assessor_node",
         "orquestrador_node", "juiz_node", "guardrail_saida_node",
     ]
-    assert interno["messages"][-1].content == "Seu saldo é R$ 1.200,00."
+    assert mensagens[-1].content == "Seu saldo é R$ 1.200,00."
 
 
 async def test_assessor_fora_do_ar_responde_limpo_sem_passar_pelo_juiz(grafo, monkeypatch):
@@ -281,14 +281,10 @@ async def test_assessor_fora_do_ar_responde_limpo_sem_passar_pelo_juiz(grafo, mo
     compilar, _ = grafo
     app = compilar([VereditoJuiz(veredito="REPROVADO", justificativa="não deveria ser chamado")])
 
-    interno = await app.ainvoke(
-        EntradaGrafo(messages=[HumanMessage(content="como economizo no mercado?")]),
-        config={"configurable": {"thread_id": "chat-9"}},
-        output_keys=["agentes_chamados", "messages"],
-    )
+    caminho, mensagens = await _rodar(app, "como economizo no mercado?", thread_id="chat-9")
 
-    assert "juiz_node" not in interno["agentes_chamados"]
-    assert interno["messages"][-1].content == assessor_mod.INDISPONIVEL
+    assert "juiz_node" not in caminho
+    assert mensagens[-1].content == assessor_mod.INDISPONIVEL
 
 
 async def test_stream_do_runner_transmite_o_caminho_do_assessor(grafo, monkeypatch):
@@ -380,11 +376,7 @@ async def test_dois_especialistas_rodam_e_o_orquestrador_junta_os_resultados(gra
     _roteia_para(monkeypatch, "estoque", "receitas")
     app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
-    interno = await app.ainvoke(
-        EntradaGrafo(messages=[HumanMessage(content="o que vence e que receitas tenho?")]),
-        config={"configurable": {"thread_id": "t-paralelo"}},
-        output_keys=["agentes_chamados", "messages"],
-    )
+    caminho, mensagens = await _rodar(app, "o que vence e que receitas tenho?")
 
     assert agentes["estoque"].chamadas == 1 and receitas.chamadas == 1
     assert agentes["orquestrador"].chamadas == 1  # espera os dois, uma vez só
@@ -392,10 +384,9 @@ async def test_dois_especialistas_rodam_e_o_orquestrador_junta_os_resultados(gra
     assert "o que vence e que receitas tenho?" in pedido.content
     assert 'estoque:\n{"itens": ["leite"]}' in pedido.content
     assert "receitas:\nOmelete de queijo." in pedido.content
-    chamados = interno["agentes_chamados"]
-    assert chamados.count("orquestrador_node") == 1
-    assert set(chamados[2:4]) == {"estoque_node", "receitas_node"}
-    assert [type(m) for m in interno["messages"]] == [HumanMessage, AIMessage]
+    assert caminho.count("orquestrador_node") == 1
+    assert set(caminho[2:4]) == {"estoque_node", "receitas_node"}
+    assert [type(m) for m in mensagens] == [HumanMessage, AIMessage]
 
 
 async def test_especialista_de_texto_sozinho_nao_gasta_chamada_do_orquestrador(grafo, monkeypatch):

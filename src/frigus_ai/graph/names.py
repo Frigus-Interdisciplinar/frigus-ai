@@ -1,8 +1,7 @@
 """
 Nomes dos nodes registrados no `StateGraph`. Fica em `graph/`, e não em `graph/nodes/`, porque
-`graph/state.py` precisa do `NodeLiteral` pra tipar `agentes_chamados`: importar de dentro do
-pacote `nodes` executaria `nodes/__init__.py`, que importa todos os nodes, que importam `state` —
-`import frigus_ai.graph.state` sozinho morria com ImportError de ciclo.
+`graph/state.py` usa o `NodeLiteral`: importar de dentro do pacote `nodes` executaria
+`nodes/__init__.py`, que importa todos os nodes, que importam `state` — ciclo de import.
 """
 
 from typing import Literal
