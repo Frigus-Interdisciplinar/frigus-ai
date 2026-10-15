@@ -14,9 +14,12 @@ from frigus_ai.settings.llm import Model
 
 
 def test_openrouter_resolve_para_chatopenai_com_base_url():
+    from pydantic import SecretStr
+
     assert PROVIDER_MAP[Model.QWEN_3_8_FREE] == "openrouter"
 
-    modelo = BUILDERS["openrouter"](model=Model.QWEN_3_8_FREE, api_key="fake")
+    cfg = settings.llm.model_copy(update={"openrouter": settings.llm.openrouter.model_copy(update={"api_key": SecretStr("fake")})})
+    modelo = build_llm(Model.QWEN_3_8_FREE, 0.7, cfg)
 
     assert isinstance(modelo, ChatOpenAI)
     assert str(modelo.openai_api_base).rstrip("/") == "https://openrouter.ai/api/v1"
@@ -37,7 +40,7 @@ def test_provider_desconhecido_levanta():
 
 
 def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
-    monkeypatch.setenv("LLM__OPENROUTER_API_KEY", "fake-key")
+    monkeypatch.setenv("LLM__OPENROUTER__API_KEY", "fake-key")
 
     import frigus_ai.settings
     import frigus_ai.settings.base
@@ -52,7 +55,7 @@ def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
     finally:
         # setenv("") em vez de delenv: `OPENROUTER_API_KEY` não tem default no
         # `Settings` (é obrigatória, embora vazia conte como "provider desligado").
-        monkeypatch.setenv("LLM__OPENROUTER_API_KEY", "")
+        monkeypatch.setenv("LLM__OPENROUTER__API_KEY", "")
         for mod in (frigus_ai.settings.base, frigus_ai.settings):
             importlib.reload(mod)
         importlib.reload(llm_mod)
@@ -71,7 +74,10 @@ def _kwargs_passados(monkeypatch, modelo, llm_settings, **extra):
 def test_politica_do_provider_vira_timeout_e_retries(monkeypatch):
     """Gemini conta tentativas TOTAIS (retries=0 -> max_retries=1); Groq conta as EXTRAS."""
 
-    cfg = settings.llm.model_copy(update={"gemini_timeout_s": 12.0, "gemini_retries": 0, "groq_timeout_s": 20.0, "groq_retries": 1})
+    cfg = settings.llm.model_copy(update={
+        "gemini": settings.llm.gemini.model_copy(update={"timeout_s": 12.0, "retries": 0}),
+        "groq": settings.llm.groq.model_copy(update={"timeout_s": 20.0, "retries": 1}),
+    })
 
     gemini = _kwargs_passados(monkeypatch, Model.GEMINI_FLASH, cfg)
     groq = _kwargs_passados(monkeypatch, Model.GPT_OSS_120B, cfg)
@@ -92,8 +98,8 @@ def test_papeis_de_saida_curta_usam_timeout_menor():
     assert llm_mod.llm_guardrail.timeout == settings.llm.timeout_curto_s
     assert llm_mod.llm_juiz.timeout == settings.llm.timeout_curto_s
     assert llm_mod.llm_rapido.request_timeout == settings.llm.timeout_curto_s
-    assert llm_mod.llm_gemini.timeout == settings.llm.gemini_timeout_s
-    assert settings.llm.timeout_curto_s < settings.llm.gemini_timeout_s
+    assert llm_mod.llm_gemini.timeout == settings.llm.gemini.timeout_s
+    assert settings.llm.timeout_curto_s < settings.llm.gemini.timeout_s
 
 
 class _Elo:
@@ -138,20 +144,20 @@ def test_estruturado_usa_json_schema_so_no_elo_da_groq(monkeypatch):
     assert llm_mod.estruturado(Fatos, None, None) is None
 
 
-def test_luna_so_entra_com_chave_e_usa_a_politica_openai():
+def test_luna_so_entra_com_chave_e_vai_pelo_gateway():
     from langchain_openai import ChatOpenAI
     from pydantic import SecretStr
 
-    assert build_llm(Model.GPT_5_6_LUNA, 0.7, settings.llm) is None
+    assert build_llm(Model.GPT_6_LUNA, 0.7, settings.llm) is None
 
-    cfg = settings.llm.model_copy(update={"openai_api_key": SecretStr("fake"), "openai_timeout_s": 40.0})
-    luna = build_llm(Model.GPT_5_6_LUNA, 0.7, cfg)
+    cfg = settings.llm.model_copy(update={"gateway": settings.llm.gateway.model_copy(update={"api_key": SecretStr("fake"), "timeout_s": 40.0})})
+    luna = build_llm(Model.GPT_6_LUNA, 0.7, cfg)
 
     assert isinstance(luna, ChatOpenAI)
-    assert luna.model_name == "gpt-5.6-luna"
+    assert luna.model_name == "openai/gpt-6-luna"
     assert luna.request_timeout == 40.0
-    assert luna.max_retries == cfg.openai_retries
-    assert "openrouter" not in str(luna.openai_api_base)
+    assert luna.max_retries == cfg.gateway.retries
+    assert luna.openai_api_base == "https://ai-gateway.vercel.sh/v1"
 
 
 def test_guardrail_e_juiz_nao_dependem_so_do_gemini():
