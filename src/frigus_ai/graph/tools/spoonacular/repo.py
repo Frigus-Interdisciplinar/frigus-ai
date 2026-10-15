@@ -11,6 +11,7 @@ from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.response import Response, ToolResponse
 from frigus_ai.infra.spoonacular import spoonacular
 from frigus_ai.settings import settings
+from frigus_ai.telemetry.metrics import medir_externo
 
 from .schemas import (
     FindRecipesByIngredientsArgs,
@@ -49,12 +50,13 @@ class _CachedGet:
         if chave in self._cache:
             return self._cache[chave]
 
-        resposta = spoonacular.connect().get(path, params=dict(params), timeout=10)
-        if inspect.isawaitable(resposta):
-            resposta = await resposta
+        with medir_externo("spoonacular"):
+            resposta = spoonacular.connect().get(path, params=dict(params), timeout=10)
+            if inspect.isawaitable(resposta):
+                resposta = await resposta
 
-        resposta_http = cast(httpx.Response, resposta)
-        resposta_http.raise_for_status()
+            resposta_http = cast(httpx.Response, resposta)
+            resposta_http.raise_for_status()
 
         if len(self._cache) >= _MAX_CACHE_ENTRIES:
             self._cache.pop(next(iter(self._cache)))

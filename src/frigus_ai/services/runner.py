@@ -1,19 +1,16 @@
 import asyncio
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
-from typing import cast, get_args
+from typing import Any, cast, get_args
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from frigus_ai.domain.models import Fatos
 from frigus_ai.graph.builder import fluxo_agentes
-from frigus_ai.graph.names import NodeLiteral
-from frigus_ai.graph.state import EntradaGrafo, RouteLiteral
+from frigus_ai.graph.names import VISAO, NodeLiteral
+from frigus_ai.graph.state import ContextoPrompt, EntradaGrafo, Route, RouteLiteral
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.postgres.context import session_context
-from frigus_ai.observability.metrics import GRAPH_DURATION, GRAPH_RUNS
-from frigus_ai.observability.metrics_callback import PrometheusCallbackHandler
 from frigus_ai.repositories import chat_embeddings_repository
 from frigus_ai.schemas.execution import (
     AnswerReady,
@@ -26,20 +23,18 @@ from frigus_ai.schemas.execution import (
     RunStarted,
 )
 from frigus_ai.services.user_service import user_service
+from frigus_ai.telemetry.metrics import GRAPH_DURATION, GRAPH_IN_PROGRESS, GRAPH_RUNS
+from frigus_ai.telemetry.metrics_callback import PrometheusCallbackHandler
 
 logger = Logging.get_logger(__name__)
 
-# Nomes registrados via StateGraph.add_node() — event["name"] do astream_events bate com essa
-# string exata pro evento de início/fim do node em si (metadata["langgraph_node"] é herdado por
-# todo runnable filho, event["name"] não é: por isso filtramos por name, não por metadata).
+# O nome do evento do `astream_events` bate com o nome registrado no `add_node`; filtramos por
+# `name` porque `metadata["langgraph_node"]` é herdado por todo runnable filho.
 _NOMES_DE_NODE = frozenset(get_args(NodeLiteral))
 
 
 def _extrair_resposta(estado: Mapping[str, object]) -> str | None:
-    """
-    Última mensagem de IA do estado — seja o estado final consolidado do `ainvoke`,
-    seja o delta de um nó vindo do `astream`.
-    """
+    """Última mensagem de IA do estado (final do `ainvoke` ou delta de um node)."""
 
     mensagens = estado.get("messages") or []
     if not isinstance(mensagens, Sequence):
@@ -55,13 +50,8 @@ def _estado_inicial(
     conteudo: str,
     stock_id: int | None,
     imagem_b64: str | None = None,
-    fatos: Fatos | None = None,
-    conversas: Sequence[str] = (),
 ) -> EntradaGrafo:
-    """
-    Só os campos de `EntradaGrafo`: o resto do `Estado` é interno do grafo. `agentes_chamados`
-    parte vazio pelo reducer e `tentativas_juiz` é zerado pelo roteador a cada turno.
-    """
+    """Só os campos de `EntradaGrafo`; o resto do `Estado` é interno do grafo."""
 
     mensagens: list[AnyMessage] = [HumanMessage(content=conteudo)]
 
@@ -71,24 +61,17 @@ def _estado_inicial(
     )
     if imagem_b64:
         entrada["imagem_b64"] = imagem_b64
-    if fatos is not None:
-        entrada["fatos"] = fatos.model_dump()
-    if conversas:
-        entrada["conversas_anteriores"] = list(conversas)
 
     return entrada
 
 
 async def _carregar_contexto(
     conteudo: str, session_id: str, user_id: str, imagem_b64: str | None
-) -> tuple[Fatos | None, list[str]]:
-    """
-    Fatos do usuário e conversas anteriores relevantes, buscados aqui (fora do event loop
-    do grafo) e entregues pelo estado. Os dois são opcionais: Postgres/Mongo/Qdrant fora do
-    ar não pode derrubar o turno — o prompt só sai sem essas seções.
-    """
+) -> ContextoPrompt:
+    """Fatos e conversas anteriores, opcionais: banco fora do ar não derruba o turno. Vai por
+    `context=`, fora do checkpoint — falha aqui deixa o turno sem perfil, nunca com o antigo."""
 
-    fatos: Fatos | None = None
+    fatos = None
     try:
         fatos = await user_service.buscar_fatos(user_id)
     except Exception as e:
@@ -103,7 +86,14 @@ async def _carregar_contexto(
         except Exception as e:
             logger.warning("Busca de conversas anteriores falhou, seguindo sem: %s", e)
 
-    return fatos, resumos
+    return ContextoPrompt(fatos=fatos, conversas=tuple(resumos))
+
+
+def _outcome(estado: Mapping[str, Any]) -> str:
+    """Bloqueio do guardrail de entrada é o sistema funcionando: conta à parte, não como
+    erro do SLO (nem como resolução no `sre_report`)."""
+
+    return "blocked" if estado.get("mensagem_bloqueada") else "success"
 
 
 def _config(session_id: str, user_id: str) -> RunnableConfig:
@@ -119,10 +109,8 @@ def _config(session_id: str, user_id: str) -> RunnableConfig:
 
 async def descartar_thread(thread_id: str) -> None:
     """
-    Apaga todos os checkpoints de uma thread. Pra thread descartável (foto): o MongoDBSaver
-    grava um checkpoint por passo do grafo, cada um com o `imagem_b64` inteiro — limpar o
-    campo no estado final não tiraria a imagem dos anteriores. Falha só loga: a resposta
-    já foi dada, lixo no Mongo não é motivo pra derrubar a request.
+    Apaga todos os checkpoints de uma thread descartável (foto): cada passo do grafo grava o
+    `imagem_b64` inteiro. Falha só loga, a resposta já foi dada.
     """
 
     try:
@@ -143,21 +131,24 @@ async def executar(
     inicio = time.perf_counter()
     outcome = "error"
 
-    fatos, conversas = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
+    contexto = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
 
+    GRAPH_IN_PROGRESS.inc()
     try:
         # stock_id/user_id ficam disponíveis via contextvars para as tools de
         # Postgres (tools/postgres/context.py) durante toda a invocação do grafo.
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
             estado_final = await grafo.ainvoke(
-                _estado_inicial(conteudo, stock_id, imagem_b64, fatos, conversas),
+                _estado_inicial(conteudo, stock_id, imagem_b64),
+                context=contexto,
                 config=_config(session_id, user_id),
             )
 
-        outcome = "success"
+        outcome = _outcome(estado_final)
         return _extrair_resposta(estado_final)
     finally:
+        GRAPH_IN_PROGRESS.dec()
         GRAPH_RUNS.labels(outcome=outcome).inc()
         GRAPH_DURATION.labels(outcome=outcome).observe(time.perf_counter() - inicio)
 
@@ -170,29 +161,28 @@ async def executar_stream(
     imagem_b64: str | None = None,
 ) -> AsyncIterator[ExecutionEvent]:
     """
-    Mesma execução de `executar()`, mas emite a timeline de nodes em tempo real via
-    `astream_events` — consumida pelo painel de grafo do frontend.
-
-    Sem streaming de token da resposta final: quem responde (`guardrail_saida`, ou o
-    roteador/guardrail de entrada respondendo direto em `Route.FIM`) só está seguro
-    de mostrar depois de processar o texto inteiro, não em fragmentos — daí
-    `AnswerReady` chegar pronta, não como uma sequência de deltas.
+    Como `executar()`, emitindo a timeline de nodes via `astream_events` (painel de grafo do
+    front). Sem streaming de token: a resposta só é segura de mostrar depois de pronta
+    (guardrail de saída), então `AnswerReady` chega inteira.
     """
 
     yield RunStarted()
 
-    fatos, conversas = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
+    contexto = await _carregar_contexto(conteudo, session_id, user_id, imagem_b64)
 
     inicio = time.perf_counter()
     outcome = "error"
+    bloqueado = False
     resposta_final: str | None = None
 
+    GRAPH_IN_PROGRESS.inc()
     try:
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
 
             async for event in grafo.astream_events(
-                _estado_inicial(conteudo, stock_id, imagem_b64, fatos, conversas),
+                _estado_inicial(conteudo, stock_id, imagem_b64),
+                context=contexto,
                 config=_config(session_id, user_id),
                 version="v2",
             ):
@@ -204,6 +194,8 @@ async def executar_stream(
 
                 if tipo == "on_chain_start":
                     yield NodeStarted(node=cast(NodeLiteral, nome))
+                    if nome == VISAO:  # turno com foto não passa pelo roteador
+                        yield RouteSelected(route=Route.VISAO)
                     continue
 
                 if tipo != "on_chain_end":
@@ -212,14 +204,17 @@ async def executar_stream(
                 output = event.get("data", {}).get("output")
 
                 if isinstance(output, dict):
-                    if (rota := output.get("rota")) is not None:
-                        yield RouteSelected(route=cast(RouteLiteral, rota))
+                    bloqueado = bloqueado or _outcome(output) == "blocked"
+                    # Um RouteSelected por domínio escolhido; lista vazia = o roteador respondeu direto.
+                    if (escolhidos := output.get("especialistas")) is not None:
+                        for dominio in escolhidos or [Route.FIM]:
+                            yield RouteSelected(route=cast(RouteLiteral, dominio))
 
                     resposta_final = _extrair_resposta(output) or resposta_final
 
                 yield NodeFinished(node=cast(NodeLiteral, nome))
 
-        outcome = "success"
+        outcome = "blocked" if bloqueado else "success"
 
         if resposta_final is not None:
             yield AnswerReady(content=resposta_final)
@@ -229,5 +224,6 @@ async def executar_stream(
         logger.exception("Falha durante streaming da execução do agente | session_id=%s", session_id)
         yield RunFailed(message="Não foi possível processar a mensagem.")
     finally:
+        GRAPH_IN_PROGRESS.dec()
         GRAPH_RUNS.labels(outcome=outcome).inc()
         GRAPH_DURATION.labels(outcome=outcome).observe(time.perf_counter() - inicio)

@@ -132,15 +132,6 @@ class ProdutoNaoCadastrado(ComprasError):
         )
 
 
-class PreferenciasError(DomainError):
-    """Erro base das operações de preferências (repositories/preferencias_repository.py)."""
-
-
-class IngredienteNaoEncontrado(PreferenciasError):
-    def __init__(self, nome: str) -> None:
-        super().__init__(f"Ingrediente {nome!r} não encontrado.")
-
-
 class AssessorError(DomainError):
     """Erro base das chamadas A2A ao Assessor financeiro (infra/assessor/client.py)."""
 

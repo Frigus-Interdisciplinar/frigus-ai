@@ -73,3 +73,30 @@ export function histogramStatsByLabel(
   }
   return out;
 }
+
+// Quantil de um histogram somando os buckets de todas as séries (mesma interpolação linear do
+// `histogram_quantile` do Prometheus). Acumulado desde o start do processo — não é janela de 5m.
+export function histogramQuantile(samples: PromSample[], baseName: string, q: number): number | null {
+  const porLe = new Map<number, number>();
+  for (const s of samples) {
+    if (s.name !== `${baseName}_bucket`) continue;
+    const le = s.labels.le === "+Inf" ? Infinity : Number(s.labels.le);
+    porLe.set(le, (porLe.get(le) ?? 0) + s.value);
+  }
+  const buckets = [...porLe.entries()].sort((a, b) => a[0] - b[0]);
+  const total = buckets.at(-1)?.[1] ?? 0;
+  if (total === 0) return null;
+
+  const alvo = q * total;
+  let anteriorLe = 0;
+  let anteriorCount = 0;
+  for (const [le, count] of buckets) {
+    if (count >= alvo) {
+      if (le === Infinity) return anteriorLe; // além do maior bucket: o Prometheus devolve o maior limite
+      return anteriorLe + ((le - anteriorLe) * (alvo - anteriorCount)) / (count - anteriorCount || 1);
+    }
+    anteriorLe = le;
+    anteriorCount = count;
+  }
+  return anteriorLe;
+}

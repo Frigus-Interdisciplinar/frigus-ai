@@ -1,5 +1,4 @@
 from collections.abc import Mapping
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -9,7 +8,9 @@ _DA_API = ConfigDict(populate_by_name=True, extra="ignore")
 class FindRecipesByIngredientsArgs(BaseModel):
     ingredients: list[str] = Field(description="Ingredientes disponíveis (ex.: ['tomate', 'cebola', 'frango']).")
     number: int = Field(default=5, ge=1, le=10, description="Quantidade máxima de receitas retornadas (1-10).")
-    ranking: Literal[1, 2] = Field(default=2, description="1 = maximiza ingredientes usados, 2 = minimiza ingredientes faltando (melhor pra 'o que dá pra fazer com o que tenho').")
+    # `int` com limites, não `Literal[1, 2]`: o Gemini rejeita `enum` de inteiros no schema da tool
+    # (pydantic ValidationError em `Schema.enum`) e o especialista inteiro vira 500.
+    ranking: int = Field(default=2, ge=1, le=2, description="1 = maximiza ingredientes usados, 2 = minimiza ingredientes faltando (melhor pra 'o que dá pra fazer com o que tenho').")
     ignore_pantry: bool = Field(default=True, description="Ignora itens de despensa (sal, água, azeite etc.) na contagem de faltantes.")
 
 

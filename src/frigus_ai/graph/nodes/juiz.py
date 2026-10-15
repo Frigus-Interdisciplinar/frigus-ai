@@ -3,13 +3,13 @@ from typing import Literal
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-from frigus_ai.graph.llm import llm_juiz
+from frigus_ai.graph.llm import estruturado, llm_juiz, llm_luna, llm_rapido
 from frigus_ai.graph.names import JUIZ
 from frigus_ai.graph.prompts import load_prompt, load_sections
 from frigus_ai.graph.state import Estado, JuizUpdate
 from frigus_ai.infra.logging import Logging
-from frigus_ai.observability import medir_node
 from frigus_ai.settings import settings
+from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 
@@ -29,7 +29,7 @@ class VereditoJuiz(BaseModel):
     justificativa: str
 
 
-llm_avaliador = llm_juiz.with_structured_output(VereditoJuiz) if llm_juiz else None
+llm_avaliador = estruturado(VereditoJuiz, llm_juiz, llm_rapido, llm_luna)
 
 _TEMPLATE = load_sections("juiz.md")["template"]
 
@@ -81,8 +81,8 @@ async def no_juiz(estado: Estado) -> JuizUpdate:
         agentes_chamados=[JUIZ],
         veredito_juiz=veredito,
         justificativa_juiz=justificativa,
-        # feedback_juiz preenchido é o sinal que `decidir_apos_juiz` lê pra devolver
-        # a resposta ao especialista de origem; vazio segue pro guardrail de saída.
+        # feedback_juiz preenchido é o sinal que `decidir_apos_juiz` lê pra devolver a resposta
+        # ao orquestrador; vazio segue pro guardrail de saída.
         feedback_juiz=justificativa if repetir else "",
         tentativas_juiz=tentativas + 1 if repetir else tentativas,
     )

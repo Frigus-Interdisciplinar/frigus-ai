@@ -77,8 +77,10 @@ services:
       timeout: 5s
       retries: 10
 
+  # Só sobem com `docker compose --profile observability up -d` (ou `just obs`).
   prometheus:
     image: prom/prometheus:v3.0.1
+    profiles: ["observability"]
     container_name: frigus_prometheus
     restart: unless-stopped
     extra_hosts:
@@ -86,11 +88,13 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
       - frigus_prometheus_data:/prometheus
 
   grafana:
     image: grafana/grafana:11.4.0
+    profiles: ["observability"]
     container_name: frigus_grafana
     restart: unless-stopped
     depends_on:
@@ -102,8 +106,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - frigus_grafana_data:/var/lib/grafana
 
 volumes:

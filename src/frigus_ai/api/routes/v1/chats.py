@@ -13,7 +13,7 @@ aqui, mesma regra pra essa rota e pra `a2a.py`.
 from collections.abc import AsyncIterable
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from frigus_ai.api.deps import ChatServiceDep, CurrentUserDep, OptionalStockIdDep
@@ -28,8 +28,10 @@ from frigus_ai.schemas.chat import (
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
+ChatIdPath = Annotated[str, Path(description="Id do chat, devolvido por `POST /v1/chats`. Um id novo é criado no primeiro envio.")]
 
-async def _dono_do_chat_dentro_do_limite(chat_id: str, user_id: CurrentUserDep, chat: ChatServiceDep) -> str:
+
+async def _dono_do_chat_dentro_do_limite(chat_id: ChatIdPath, user_id: CurrentUserDep, chat: ChatServiceDep) -> str:
     """
     Dono do chat + rate limit do caminho SSE. Vai numa dependência, e não no corpo da
     rota, porque o corpo de um gerador só roda depois que o status HTTP saiu — 403/429
@@ -65,19 +67,15 @@ async def create_chat(user_id: CurrentUserDep, stock_id: OptionalStockIdDep, cha
     },
 )
 async def send_message(
-    chat_id: str,
+    chat_id: ChatIdPath,
     payload: MessageCreate,
     user_id: CurrentUserDep,
     stock_id: OptionalStockIdDep,
     chat: ChatServiceDep,
 ) -> ChatMessageResponse:
-    """
-    Envia a mensagem ao assistente e devolve a resposta completa.
-    `stock_id` no corpo sobrescreve o estoque padrão.
-    """
+    """Envia a mensagem ao assistente e devolve a resposta completa. O estoque é o do usuário autenticado."""
 
     await chat.validar_ownership(chat_id, user_id)
-    stock_id = payload.stock_id if payload.stock_id is not None else stock_id
     resposta = await chat.send_message(payload.content, chat_id, user_id, stock_id)
 
     return ChatMessageResponse(chat_id=chat_id, content=resposta)
@@ -93,7 +91,7 @@ async def send_message(
     },
 )
 async def stream_message(
-    chat_id: str,
+    chat_id: ChatIdPath,
     payload: MessageCreate,
     user_id: DonoComLimiteDep,
     stock_id: OptionalStockIdDep,
@@ -101,8 +99,6 @@ async def stream_message(
 ) -> AsyncIterable[ServerSentEvent]:
     """Timeline de execução do agente (`schemas/execution.py`) — um evento por
     node iniciado/concluído, rota escolhida e resposta final."""
-
-    stock_id = payload.stock_id if payload.stock_id is not None else stock_id
 
     async for evento in chat.stream_message(payload.content, chat_id, user_id, stock_id):
         yield ServerSentEvent(data=evento, event=evento.type)
@@ -116,12 +112,12 @@ async def stream_message(
     },
 )
 async def get_messages(
-    chat_id: str,
+    chat_id: ChatIdPath,
     user_id: CurrentUserDep,
     chat: ChatServiceDep,
-    limit: Annotated[int, Query(ge=1, le=100)] = 5,
+    limit: Annotated[int | None, Query(ge=1, le=100)] = None,
 ) -> list[MessageResponse]:
-    """Últimas `limit` mensagens (1–100, padrão 5)."""
+    """Conversa completa; com `limit` (1–100), só as últimas mensagens. Chat inexistente devolve lista vazia."""
 
     await chat.validar_ownership(chat_id, user_id)
     historico = await chat.get_history(chat_id, user_id, limit)
@@ -157,7 +153,7 @@ async def list_chats(user_id: CurrentUserDep, chat: ChatServiceDep) -> list[Chat
     },
 )
 async def close_chat(
-    chat_id: str, user_id: CurrentUserDep, chat: ChatServiceDep, background_tasks: BackgroundTasks
+    chat_id: ChatIdPath, user_id: CurrentUserDep, chat: ChatServiceDep, background_tasks: BackgroundTasks
 ) -> None:
     """
     202 porque `encerrar_sessao` pode disparar chamada de LLM (fatos/resumo do rabo

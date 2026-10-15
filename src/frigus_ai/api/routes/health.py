@@ -10,6 +10,7 @@ from frigus_ai.infra.postgres.connection import postgres
 from frigus_ai.infra.qdrant import get_qdrant_client
 from frigus_ai.infra.redis.connection import get_client
 from frigus_ai.schemas.health import HealthCheckResponse
+from frigus_ai.telemetry.metrics import DEPENDENCY_UP
 
 router = APIRouter(prefix="/health", tags=["health"])
 logger = Logging.get_logger(__name__)
@@ -53,6 +54,9 @@ def _verificar_dependencias() -> dict[str, bool]:
         checks["qdrant"] = True
     except Exception:
         checks["qdrant"] = False
+
+    for dep, ok in checks.items():
+        DEPENDENCY_UP.labels(dep=dep).set(int(ok))
 
     if not all(checks.values()):
         logger.warning("Dependência fora do ar durante /health/ready: %s", checks)

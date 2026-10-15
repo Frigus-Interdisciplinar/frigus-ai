@@ -3,7 +3,7 @@ Nó do Assessor (A2A) com o cliente e as fontes de dado stubadas — sem rede, P
 
 O que se protege: a pergunta vai pro Assessor COM os números do Frigus (é isso que dispensa a
 conta do usuário lá), falta de dado não impede a pergunta, e Assessor fora do ar vira
-mensagem limpa com `dados_especialista` vazio (o sinal pro builder pular o Juiz).
+mensagem limpa com `dados` vazio (o sinal pro builder pular o Juiz).
 """
 
 import pytest
@@ -41,7 +41,7 @@ def dados(monkeypatch):
 
 async def test_manda_a_pergunta_com_os_numeros_do_frigus(enviado, dados):
     with session_context(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1):
-        update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"})
+        update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"}, None)
 
     [mensagem] = enviado["mensagens"]
     assert mensagem.startswith("como economizo no mercado?")
@@ -50,15 +50,16 @@ async def test_manda_a_pergunta_com_os_numeros_do_frigus(enviado, dados):
     assert "pão (3x)" in mensagem
     assert "conta de serviço" in mensagem  # não misturar a conta de lá com o usuário
 
-    assert update["resposta_especialista"] == "Reserve R$ 600,00 por mês e congele o pão."
-    assert "R$ 580,50" in update["dados_especialista"]  # o Juiz confere contra os números enviados
+    [resultado] = update["dados_especialistas"]
+    assert resultado["resposta"] == "Reserve R$ 600,00 por mês e congele o pão."
+    assert "R$ 580,50" in resultado["dados"]  # o Juiz confere contra os números enviados
 
 
 async def test_sem_estoque_na_sessao_pergunta_sem_dados(enviado):
-    update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"})
+    update = await mod.no_assessor({"pergunta_original": "como economizo no mercado?"}, None)
 
     assert enviado["mensagens"] == ["como economizo no mercado?"]
-    assert update["dados_especialista"]  # respondeu: não é o sinal de indisponível
+    assert update["dados_especialistas"][0]["dados"]  # respondeu: não é o sinal de indisponível
 
 
 async def test_assessor_fora_do_ar_devolve_mensagem_limpa(monkeypatch, dados):
@@ -69,7 +70,8 @@ async def test_assessor_fora_do_ar_devolve_mensagem_limpa(monkeypatch, dados):
     monkeypatch.setattr(mod, "_session_id", lambda: "chat-1")
 
     with session_context(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1):
-        update = await mod.no_assessor({"pergunta_original": "como economizo?"})
+        update = await mod.no_assessor({"pergunta_original": "como economizo?"}, None)
 
-    assert update["resposta_especialista"] == mod.INDISPONIVEL
-    assert update["dados_especialista"] == ""
+    [resultado] = update["dados_especialistas"]
+    assert resultado["resposta"] == mod.INDISPONIVEL
+    assert resultado["dados"] == ""

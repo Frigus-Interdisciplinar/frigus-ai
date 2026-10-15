@@ -28,26 +28,27 @@ coisa; a nota diz o que fazer primeiro.
 
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ⚠️ Parcial | `src/frigus_ai/api/` — health, chats, keys, MCP e A2A, com autenticação/rate limit condicionais. `GET /chats` tipado (`ChatSummaryResponse`) e `DELETE /chats/{id}` checa ownership (403 pra não-dono). Validação de ownership em `POST /a2a`. Falta versionamento |
-| Multiagente, mínimo 5 agentes | ✅ Feito | 11 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, visão, orquestrador, juiz (`graph/names.py`) |
+| API FastAPI/Flask | ✅ Feito | `src/frigus_ai/api/` — rotas de negócio versionadas em `/v1` (chats, stock, shopping, recipes, profile), health, keys, MCP e A2A, com autenticação/rate limit condicionais (fastapi-guard com limites por rota via `app.state.guard_decorator`). `GET /chats` tipado (`ChatSummaryResponse`), ownership em `DELETE /chats/{id}` (403) e no `POST /a2a` |
+| Multiagente, mínimo 5 agentes | ✅ Feito | 12 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, assessor (A2A), visão, orquestrador, juiz (`graph/names.py`) |
 | LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
 | LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
 | Controle de sessões por usuário | ⚠️ Parcial | `thread_id=session_id` no `MongoDBSaver` + histórico em Mongo. Ownership checado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono antes de entrar na sessão) |
-| Memória de longo prazo | ⚠️ Parcial | Fatos estruturados (`alergias`/`preferencias`/`restricoes`/`habitos`) persistidos em Mongo (`user_fatos`, `repositories/fatos_repository.py`), extraídos automaticamente do chat e expostos via `GET/PUT /profile`. Perfil comportamental em texto livre (`user_profiles`) foi removido — nunca era lido pelo grafo, e a decisão foi ir direto para fatos estruturados em vez de reconsertar o texto livre. `fatos` em si também ainda não é lido de volta pelo prompt do chat, só usado na extração/merge |
-| MCP | ⚠️ Parcial | `src/frigus_ai/mcp.py` expõe as tools com autenticação por `X-API-Key`; falta validação externa ponta a ponta |
+| Memória de longo prazo | ✅ Feito | Fatos estruturados (`alergias`/`preferencias`/`restricoes`/`habitos`) em Mongo (`user_fatos`), extraídos do chat em segundo plano e expostos via `GET/PUT /v1/profile`; resumo por chat em Mongo + embedding no Qdrant (busca semântica de conversas anteriores, `repositories/chat_embeddings_repository.py`). Os dois voltam pro prompt via `Runtime.context` do LangGraph, fora do checkpoint (`services/runner.py:_carregar_contexto` → `graph/agents.py` → `graph/prompts/__init__.py:load_prompt`); o perfil só entra em compras e receitas. Entrega garantida: `indexado_ate`/`resumido_ate` no doc do Mongo + reconciliador (`chat_service.reconciliar_memoria_loop`, no lifespan) refazem o que falhou |
+| MCP | ✅ Feito | `api/mcp.py` (montado em `/mcp`) expõe 20 tools com identidade por `X-API-Key`. Validado ao vivo com o cliente oficial do SDK `mcp` (`initialize`, `list_tools` e `call_tool(query_stock)` devolvendo dados reais) |
 | A2A | ⚠️ Parcial | Superfície única e consolidada em `src/frigus_ai/api/routes/a2a.py` (contrato manual, com auth real por `X-API-Key`). A integração alternativa via `a2a-sdk` foi removida: o dispatcher da SDK sempre responde HTTP 200 e embute erro no corpo JSON-RPC, perdendo o 429/401 de transporte que o contrato manual já entrega |
 | RAG com fonte externa indicada | ✅ Feito | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
 | Agente juiz (mitigação de alucinação) | ✅ Feito | `graph/nodes/juiz.py` — audita grounding/relevância/completude, até 2 retentativas |
-| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `domain/privacy.py`, regex de ataque, classificador com cache no Redis) e saída |
-| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ⚠️ Parcial | `observability/evals/sre_report.py` calcula a estimativa a partir do custo médio por turno observado; premissa de volume (`MENSAGENS_POR_USUARIO_SEMANA`) é placeholder até haver dado real de uso |
+| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `domain/privacy.py`, regex de ataque, classificador com cache no Redis) e saída. Classificador, revisor e juiz têm cadeia de fallback (Gemini → Groq → Luna, `graph/llm.py:estruturado`): antes só tinham o Gemini e, sem cota, aprovavam tudo em silêncio (falha aberta). Verificado ao vivo com o Gemini sem cota: injeção bloqueada, resposta alucinada reprovada |
+| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ⚠️ Parcial | `telemetry/evals/sre_report.py` calcula a estimativa a partir do custo médio por turno observado; premissa de volume (`MENSAGENS_POR_USUARIO_SEMANA`) é placeholder até haver dado real de uso |
 | Observabilidade/SRE — latência interagentes e tempo total de resposta | ✅ Feito | Prometheus mede HTTP, grafo, nodes, tools e LLM; LangSmith complementa os traces individuais |
-| Observabilidade/SRE — índice de erros | ⚠️ Parcial | `observability/evals/sre_report.py` define fórmula (`error` / total de `frigus_graph_runs_total`) e relatório; falta rodar contra scrape real acumulado (não só o processo atual) |
-| Observabilidade/SRE — custo/ROI | ⚠️ Parcial | `observability/evals/sre_report.py` calcula ROI, mas `VALOR_POR_RESOLUCAO_USD` é placeholder — falta valor de negócio real pra o número fazer sentido |
-| Observabilidade/SRE — custo por resolução | ⚠️ Parcial | `observability/evals/sre_report.py` define resolução = `frigus_graph_runs_total{outcome="success"}` e calcula custo/resolução a partir da tabela de preços por modelo |
-| Desenho de arquitetura de alto nível | ✅ Feito | README.md — diagrama Mermaid + `assets/diagrama-agentes.png` |
+| Observabilidade/SRE — SLO/SLI e alertas | ✅ Feito | SLO do turno em `telemetry/metrics.py` (p95 ≤ 8s, erro ≤ 5%; exportado como `frigus_slo_target`), bloqueio do guardrail separado de erro (`outcome="blocked"`), SLIs gravados + alertas de SLO/burn rate em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na tela `/metrics` da web. Sem SLA (não há contrato) e sem Alertmanager (alertas só em `localhost:9090/alerts`) |
+| Observabilidade/SRE — índice de erros | ✅ Feito (dado de teste) | SLI de erro do SLO (`error` / total de `frigus_graph_runs_total`; bloqueio do guardrail fora do numerador), gravado e alertado no Prometheus (`rules.yml`) e reportado pelo `telemetry/evals/sre_report.py` com orçamento de erro consumido; o `sre_report` agora usa `increase()` sobre a janela e foi rodado contra o Prometheus real somando 3 processos da API. Os números atuais refletem provedores LLM fora do ar (p95 ~120s, erro ~17%) e precisam ser refeitos com os provedores estáveis para o relatório final |
+| Observabilidade/SRE — custo/ROI | ⚠️ Parcial | `telemetry/evals/sre_report.py` calcula ROI, mas `VALOR_POR_RESOLUCAO_USD` é placeholder — falta valor de negócio real pra o número fazer sentido |
+| Observabilidade/SRE — custo por resolução | ⚠️ Parcial | `telemetry/evals/sre_report.py` define resolução = `frigus_graph_runs_total{outcome="success"}` e calcula custo/resolução a partir da tabela de preços por modelo (`PRECOS_POR_1M_TOKENS` em `telemetry/metrics_callback.py`, a mesma que alimenta `frigus_llm_cost_usd_total` em runtime) |
+| Desenho de arquitetura de alto nível | ✅ Feito | README.md — seção "Arquitetura" (Mermaid: clientes, API, grafo, persistência, externos, observabilidade) + `assets/diagrama-agentes.png` (só o fluxo de agentes, sem Visão/Assessor) |
 | Extra: Redis com fila ou ranking | ✅ Feito | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados por `ZINCRBY`/`ZREVRANGE`, alimentado em `discard_product` e exposto como tool (`ranking_desperdicio`, domínio financeiro) |
-| Extra: Neo4j | ⚠️ Parcial | `neomodel` (OGM) no `pyproject.toml`, conexão lazy em `infra/neo4j/connection.py`, models `User`/`Ingredient`/`Recipe` com relações (`PREFERS`/`DISLIKES`/`ALLERGIC_TO`/`REQUIRES`/`SIMILAR_TO`). Tools de preferências (`graph/tools/preferencias/`, CRUD + traversal `sugerir_receitas_compativeis`) agora expostas ao LLM dentro do toolset de receitas (`RECEITAS_TOOLS`) — antes existiam mas não estavam ligadas a nenhum node. `definir_preferencia` cria o node do usuário no grafo na primeira preferência (não há sync automático Postgres → Neo4j de usuário). Falta: sync automático de `products`/`recipes` do Postgres pro grafo (nunca existiu script pra isso, só seed manual em `infra/neo4j/cql/`) e mapear fatos (`user_fatos`, ver memória incremental) pras relações do grafo |
-| Extra: visão computacional (foto da geladeira) | ⚠️ Parcial | `POST /stock/foto` (`api/routes/v1/stock.py`) + node `visao_node` (`graph/nodes/visao.py`, `with_structured_output` no Gemini Flash, bypassa o roteador via `imagem_b64` no estado). Só descreve o que reconheceu, em linguagem natural — não escreve no estoque; usuário confirma via `POST /stock/items` numa mensagem separada. Limite de 8MB no upload. Falta: `thread_id` da foto some depois de uso (checkpoint com a imagem em base64 fica órfão no Mongo pra sempre, ver nota abaixo) |
+| Extra: Neo4j | ❌ Bloqueado | `neomodel` (OGM) no `pyproject.toml`, conexão lazy em `infra/neo4j/connection.py`, models `Ingredient`/`Recipe` com relações (`REQUIRES`/`SIMILAR_TO`). O grafo é só de receitas: preferência/alergia mora apenas no Mongo (`user_fatos`) — a tool `sugerir_receitas_compativeis` (`graph/tools/preferencias/`, dentro de `RECEITAS_TOOLS`) lê as alergias do perfil, soma o `evitar` do LLM e filtra no Cypher. Falta: sync automático de `products`/`recipes` do Postgres pro grafo (nunca existiu script pra isso; o seed manual `.cypher` foi removido — o grafo começa vazio). **A instância Aura do `.env` não existe mais** (`fb6503cd.databases.neo4j.io` dá NXDOMAIN): criar outra instância (ou usar o Neo4j do `docker-compose.yml`) e popular antes de demonstrar |
+| Extra: visão computacional (foto da geladeira) | ✅ Feito | `POST /stock/foto` (`api/routes/v1/stock.py`) + node `visao_node` (`graph/nodes/visao.py`, `with_structured_output` no Gemini Flash, bypassa o roteador via `imagem_b64` no estado). Só descreve o que reconheceu, em linguagem natural — não escreve no estoque; usuário confirma via `POST /stock/items` numa mensagem separada. Limite de 8MB no upload. A thread da foto é apagada no fim (`chat_service.analisar_foto` → `runner.descartar_thread`), então o base64 não fica órfão no Mongo |
 | Extra: complexidade do projeto | Em andamento | 6 domínios de negócio + guardrail duplo + juiz + RAG + integrações MCP/A2A + ranking Redis + Neo4j + visão já são acima da média |
 
 ### Checklist por matéria/entrega
@@ -55,13 +56,13 @@ coisa; a nota diz o que fazer primeiro.
 | Área | Feito e comprovado | Pendente para fechar |
 |---|---|---|
 | Sistemas Multiagentes | Grafo LangGraph, 5+ especialistas, router, guardrails e juiz com retentativas | Avaliação reproduzível de qualidade e grounding |
-| API e integrações | FastAPI, health, chats, autenticação condicional, MCP e A2A manual (superfície única); ownership checado em `send_message`, `get_messages`, `/stream` e `DELETE /chats/{id}`; `GET /chats` tipado | Versionamento |
+| API e integrações | FastAPI com rotas em `/v1`, health, chats, autenticação condicional, MCP e A2A manual (superfície única); ownership checado em `send_message`, `get_messages`, `/stream` e `DELETE /chats/{id}`; `GET /chats` tipado | Teste externo do MCP |
 | Persistência | PostgreSQL, MongoDB, Redis e Qdrant lazy; histórico, fatos estruturados e checkpoint; todos os domínios (`receitas`, `financeiro`, `estoque`, `compras`) em SQLAlchemy + `@transacional`; pool `psycopg2` removido | IDs seguros contra concorrência e validação real com Docker |
 | MCP | Tools em `src/frigus_ai/mcp.py`, contexto de usuário/estoque e testes MCP | Teste externo/ponta a ponta e documentação de cliente |
 | A2A | Contrato manual único em `api/routes/a2a.py`, com autenticação real por `X-API-Key` (`api/auth/dependencies.py`); `a2a-sdk` removido do código (decisão registrada abaixo em "Estrutura") | Persistir sessão A2A além do `contextId` in-memory, se necessário |
-| Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, Prometheus e dashboard Grafana; `observability/evals/sre_report.py` calcula custo, índice de erros, custo/resolução e ROI a partir dos contadores | Validar contra scrape real acumulado (não só um processo local) e substituir os placeholders (volume de mensagens/usuário, valor por resolução) por dado real |
-| Avaliação da disciplina | Métricas de runtime movidas pra `observability/`; `observability/evals/` agora só tem `sre_report.py` (custo/erro/ROI) e o harness de cenários (`observability/evals/scenarios.py` + `run_scenarios.py`) | Rodar o harness contra infra viva (Docker + API keys) e produzir o relatório final |
-| Extras | RAG, arquitetura documentados, ranking de desperdício em Redis (`infra/redis/ranking.py`), Neo4j conectado (models + tools de preferências + traversal `sugerir_receitas_compativeis`) e visão computacional (`POST /stock/foto`, `graph/nodes/visao.py`) | Sync automático Postgres → Neo4j (produtos/receitas); limpar `imagem_b64` do checkpoint da thread de foto |
+| Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, custo em USD, fallback de modelo, memória e chamadas externas; SLO + alertas no Prometheus e dashboard Grafana; `telemetry/evals/sre_report.py` calcula custo, índice de erros, custo/resolução e ROI a partir dos contadores | Validar contra scrape real acumulado (não só um processo local) e substituir os placeholders (volume de mensagens/usuário, valor por resolução) por dado real |
+| Avaliação da disciplina | Métricas de runtime movidas pra `telemetry/`; `telemetry/evals/` agora só tem `sre_report.py` (custo/erro/ROI) e o harness de cenários (`telemetry/evals/scenarios.py` + `run_scenarios.py`) | Rodar o harness contra infra viva (Docker + API keys) e produzir o relatório final |
+| Extras | RAG, arquitetura documentados, ranking de desperdício em Redis (`infra/redis/ranking.py`), Neo4j conectado (grafo de receitas + traversal `sugerir_receitas_compativeis` filtrando pelas alergias do `user_fatos`) e visão computacional (`POST /stock/foto`, `graph/nodes/visao.py`) | Sync automático Postgres → Neo4j (produtos/receitas); limpar `imagem_b64` do checkpoint da thread de foto |
 
 **Importante:** a escola não paga API de IA generativa — por isso o projeto já usa só providers com
 tier gratuito viável (Gemini, Groq) e Claude/Anthropic como opcional (`ANTHROPIC_API_KEY` tem
@@ -85,7 +86,7 @@ default vazio em `src/frigus_ai/settings/`, então o projeto roda sem ela).
 - Qdrant para RAG do FAQ sobre `data/pdf/Frigus-Documentacao.pdf` (`graph/tools/faq/`)
 - Redis para rate limit de chat e ranking de desperdício (`src/frigus_ai/infra/redis/`)
 - Prometheus/LangSmith para observabilidade operacional; avaliações offline e relatórios da
-  disciplina devem ficar em `observability/evals/`, separados do runtime
+  disciplina devem ficar em `telemetry/evals/`, separados do runtime
 - `pytest` (`tests/`, espelhando a estrutura do pacote) + `ruff` (lint) + CI no GitHub Actions
   (`.github/workflows/ci.yml`)
 
@@ -112,7 +113,7 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 │                         neo4j, spoonacular
 ├── api/                 app.py (create_app), deps.py (Depends), routes/{v1,auth,health,metrics,a2a}, auth/, mcp.py, middleware/{request_id,metrics,security}, errors/ (handlers + ErrorResponse)
 ├── (infra/logging/)     setup.py (logger colorido + request_id) e decorators.py (log_tool/log_classe); `Logging` é a fachada
-├── observability/       métricas Prometheus de runtime (metrics.py, metrics_callback.py) e evals/ (avaliação
+├── telemetry/           métricas Prometheus de runtime (metrics.py, metrics_callback.py) e evals/ (avaliação
 │                         offline: sre_report.py custo/erro/ROI e o harness de cenários)
 ├── (domain/privacy.py)  PII: anonimizar/desanonimizar/redigir. Neutro — guardrail, repository e
 │                         service usam; por isso não mora dentro do guardrail
@@ -120,7 +121,7 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 └── tui/                 app.py (Textual) + display.py + app.tcss — interface interativa
 
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (espelho do DDL do Supabase)
-prometheus/ grafana/    scrape config, datasource e dashboard (8 painéis)
+observability/          prometheus/ e grafana/ (scrape config, datasource, dashboard) — profile `observability` do compose
 
 ```
 
@@ -146,9 +147,9 @@ já escrito em `schemas/a2a.py`. Se o card um dia precisar de streaming/tasks de
 O MCP e o A2A ainda devem ser tratados como integrações parcialmente concluídas até que seus
 contratos externos, autenticação e testes de ponta a ponta estejam fechados.
 
-`src/frigus_ai/observability/metrics.py` e `metrics_callback.py` são observabilidade de runtime
-(Prometheus, importados por todos os nós do grafo) — não devem morar em `observability/evals/`. A subpasta `observability/evals/`
-contém só avaliação offline: `sre_report.py` (custo/erro/ROI, lê os contadores do `observability/`
+`src/frigus_ai/telemetry/metrics.py` e `metrics_callback.py` são observabilidade de runtime
+(Prometheus, importados por todos os nós do grafo) — não devem morar em `telemetry/evals/`. A subpasta `telemetry/evals/`
+contém só avaliação offline: `sre_report.py` (custo/erro/ROI, lê os contadores do `telemetry/`
 via HTTP do Prometheus) e o harness de cenários (datasets, execução de casos, agregação e
 relatórios de custo, erro, latência, ROI e custo por resolução). Não misturar prompts/respostas
 reais com métricas Prometheus nem commitar segredos.
@@ -235,9 +236,11 @@ reais com métricas Prometheus nem commitar segredos.
   `pydantic-settings`) e um único enum fechado de modelos/providers
   (`settings/llm.py:Model` e `infra/llm/registry.py:PROVIDER_MAP`). Não ler `os.environ` direto em outros módulos.
 - **Ciclo de retentativa do Juiz é explícito no grafo**, não escondido em loop Python — ver
-  `decidir_apos_juiz` em `graph/builder.py`. Qualquer novo especialista que produza resposta ao
-  usuário deve passar pelo Juiz antes do Guardrail de Saída, seguindo esse mesmo padrão de edge
-  condicional.
+  `decidir_apos_juiz` em `graph/builder.py`. A retentativa volta só ao orquestrador (repetir
+  especialistas regravaria estoque e lista de compras). Novo especialista: registre-o em
+  `NO_POR_DOMINIO`, crie o nó com `@especialista` (ou `especialista_com_agente`) e ele passa pelo
+  Orquestrador e pelo Juiz antes do Guardrail de Saída. Roteador e orquestrador estão descritos em
+  `graph/prompts/router.md` e `orquestrador.md`.
 
 ## Comandos
 

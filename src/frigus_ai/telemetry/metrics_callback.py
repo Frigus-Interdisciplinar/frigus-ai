@@ -2,26 +2,53 @@
 
 import time
 from dataclasses import dataclass
-from typing import Any, get_args
+from typing import Any, NamedTuple, get_args
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import LLMResult
 
-from frigus_ai.graph.names import NodeLiteral
-from frigus_ai.observability.metrics import (
+from frigus_ai.graph.names import COMPRAS, ESTOQUE, FINANCEIRO, RECEITAS, NodeLiteral
+from frigus_ai.settings.llm import Model
+from frigus_ai.telemetry.metrics import (
+    LLM_COST,
     LLM_DURATION,
+    LLM_FALLBACKS,
     LLM_RUNS,
     LLM_TOKENS,
     TOOL_DURATION,
     TOOL_RUNS,
 )
-from frigus_ai.settings.llm import Model
 
 _ALLOWED_NODES = frozenset(get_args(NodeLiteral))
 _ALLOWED_PROVIDERS = frozenset({"google_genai", "groq", "anthropic", "openai"})
 _ALLOWED_MODELS = frozenset(m.value for m in Model)
+
+# Nodes que usam `llm_especialista` (Gemini com fallback — graph/llm.py): outro modelo
+# respondendo neles é fallback.
+_NODES_ESPECIALISTA = frozenset({ESTOQUE, COMPRAS, RECEITAS, FINANCEIRO})
+_MODELO_ESPECIALISTA = Model.GEMINI_FLASH.value
+
+
+class PrecoPor1MTokens(NamedTuple):
+    entrada: float
+    saida: float
+
+
+# USD por 1M de tokens, preço cheio. Modelo fora da tabela custa 0 (subestima, não inventa).
+# ponytail: Gemini herdado do 2.5-flash; conferir ai.google.dev/pricing e console.groq.com/docs/models.
+PRECOS_POR_1M_TOKENS: dict[str, PrecoPor1MTokens] = {
+    Model.GEMINI_FLASH: PrecoPor1MTokens(entrada=0.30, saida=2.50),
+    Model.GPT_OSS_120B: PrecoPor1MTokens(entrada=0.15, saida=0.60),
+    Model.QWEN_3_8_FREE: PrecoPor1MTokens(entrada=0.0, saida=0.0),
+    Model.GPT_5_6_LUNA: PrecoPor1MTokens(entrada=0.20, saida=1.20),
+}
+
+
+def custo_usd(modelo: str, tokens_entrada: float, tokens_saida: float) -> float:
+    preco = PRECOS_POR_1M_TOKENS.get(modelo, PrecoPor1MTokens(0.0, 0.0))
+    return (tokens_entrada * preco.entrada + tokens_saida * preco.saida) / 1_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +69,20 @@ def _bounded_label(value: object, allowed: frozenset[str]) -> str:
     if isinstance(value, str) and value in allowed:
         return value
     return "unknown"
+
+
+def _node_do_grafo(metadata: dict[str, Any]) -> str:
+    """O node do NOSSO grafo. Dentro de um especialista (`create_agent`), `langgraph_node` é o
+    node interno do agente ("model", "tools") — o nosso vem no começo do `checkpoint_ns`."""
+
+    candidatos = [
+        parte.split(":", 1)[0]
+        for parte in str(metadata.get("langgraph_checkpoint_ns") or "").split("|")
+        if parte
+    ]
+    candidatos.append(str(metadata.get("langgraph_node") or ""))
+
+    return next((c for c in candidatos if c in _ALLOWED_NODES), "unknown")
 
 
 def _tool_name(serialized: dict[str, Any]) -> str:
@@ -73,11 +114,8 @@ def _usage_tokens(response: LLMResult) -> tuple[int, int]:
 
 
 class PrometheusCallbackHandler(BaseCallbackHandler):
-    """
-    Uma instância por chamada a `runner.executar()` — os mapas de `run_id` não ficam
-    compartilhados entre turnos/usuários concorrentes. Guarda só nomes e timestamps, nunca
-    prompts, argumentos de tool ou conteúdo de resposta.
-    """
+    """Uma instância por turno (os mapas de `run_id` não vazam entre usuários). Guarda só nomes e
+    timestamps, nunca prompts nem conteúdo."""
 
     def __init__(self) -> None:
         self._tools: dict[UUID, _ToolRun] = {}
@@ -139,7 +177,7 @@ class PrometheusCallbackHandler(BaseCallbackHandler):
         self._llms[run_id] = _LLMRun(
             provider=_bounded_label(run_metadata.get("ls_provider"), _ALLOWED_PROVIDERS),
             model=_bounded_label(run_metadata.get("ls_model_name"), _ALLOWED_MODELS),
-            node=_bounded_label(run_metadata.get("langgraph_node"), _ALLOWED_NODES),
+            node=_node_do_grafo(run_metadata),
             started_at=time.perf_counter(),
         )
 
@@ -160,6 +198,11 @@ class PrometheusCallbackHandler(BaseCallbackHandler):
         LLM_DURATION.labels(**labels, outcome="success").observe(duration)
         LLM_TOKENS.labels(provider=run.provider, model=run.model, direction="input").inc(input_tokens)
         LLM_TOKENS.labels(provider=run.provider, model=run.model, direction="output").inc(output_tokens)
+        LLM_COST.labels(provider=run.provider, model=run.model).inc(
+            custo_usd(run.model, input_tokens, output_tokens)
+        )
+        if run.node in _NODES_ESPECIALISTA and run.model != _MODELO_ESPECIALISTA:
+            LLM_FALLBACKS.labels(node=run.node, model=run.model).inc()
 
     def on_llm_error(
         self,
@@ -181,4 +224,4 @@ class PrometheusCallbackHandler(BaseCallbackHandler):
         LLM_DURATION.labels(**labels, outcome="error").observe(duration)
 
 
-__all__ = ["PrometheusCallbackHandler"]
+__all__ = ["PRECOS_POR_1M_TOKENS", "PrecoPor1MTokens", "PrometheusCallbackHandler", "custo_usd"]
