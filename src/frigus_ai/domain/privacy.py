@@ -21,11 +21,11 @@ type MapaPII = dict[str, str]
 class PIIPattern(NamedTuple):
     tipo: str
     padrao: str
-    redige_na_saida: bool = True  # False = contato: só a entrada anonimiza, a saída não redige
+
+    # False = contato (email/telefone): só a entrada anonimiza.
+    redige_na_saida: bool = True
 
 
-# Fonte única — `redige_na_saida=False` marca contato (email/telefone). `PII_USUARIO` deriva
-# daqui por filtro, sem lista duplicada.
 PII: list[PIIPattern] = [
     PIIPattern("CPF",       r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}"),
     PIIPattern("CNPJ",      r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}"),
@@ -34,7 +34,6 @@ PII: list[PIIPattern] = [
     PIIPattern("TELEFONE",  r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}",                   redige_na_saida=False),
 ]
 
-# PII do usuário — redigida na entrada E na saída.
 PII_USUARIO: list[PIIPattern] = [p for p in PII if p.redige_na_saida]
 
 

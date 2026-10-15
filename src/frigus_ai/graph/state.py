@@ -86,29 +86,27 @@ class ResultadoEspecialista(TypedDict):
 
 
 class Estado(MessagesState):
-    resposta_especialista: NotRequired[str]
-    dados_especialista:    NotRequired[str]  # saída crua do especialista (JSON/RAG), preservada mesmo após o Orquestrador reformatar resposta_especialista — usada pelo Juiz para checar grounding
-    agentes_chamados:      NotRequired[Annotated[list[NodeLiteral], operator.add]]
-    # Domínios escolhidos pelo roteador no turno; vazia = o roteador respondeu direto.
-    especialistas:         NotRequired[list[RotaEspecialista]]
-    # Um item por especialista que rodou; o reducer soma os que rodam em paralelo e o
-    # guardrail de entrada zera a cada turno (`Overwrite`).
-    dados_especialistas:   NotRequired[Annotated[list[ResultadoEspecialista], operator.add]]
     pergunta_original:     NotRequired[str]
     mapa_pii:              NotRequired[MapaPII]
     mensagem_bloqueada:    NotRequired[str | None]
     stock_id:              NotRequired[int | None]
     imagem_b64:            NotRequired[str]
-    # Legado: o perfil saiu do estado (vai por `ContextoPrompt`). Ficam declarados só até
-    # confirmar que checkpoints antigos, que ainda têm essas chaves, carregam sem erro.
-    fatos:                 NotRequired[dict[str, list[str]]]
-    conversas_anteriores:  NotRequired[list[str]]
 
-    # Juiz (LLM-as-judge)
-    tentativas_juiz:    NotRequired[int]
-    veredito_juiz:      NotRequired[str]
-    justificativa_juiz: NotRequired[str]
-    feedback_juiz:      NotRequired[str]
+    # Vazia quando o roteador respondeu direto.
+    especialistas:         NotRequired[list[RotaEspecialista]]
+
+    # Um item por especialista; o reducer soma os paralelos e o guardrail de entrada zera a cada turno.
+    dados_especialistas:   NotRequired[Annotated[list[ResultadoEspecialista], operator.add]]
+
+    resposta_especialista: NotRequired[str]
+
+    # O que o Juiz confere: preservado mesmo depois que o orquestrador reescreve a resposta.
+    dados_especialista:    NotRequired[str]
+
+    reescritas_juiz:       NotRequired[int]
+    veredito_juiz:         NotRequired[str]
+    justificativa_juiz:    NotRequired[str]
+    feedback_juiz:         NotRequired[str]
 
 
 class SaidaGrafo(MessagesState):
@@ -119,9 +117,8 @@ class SaidaGrafo(MessagesState):
 
 
 class RouterUpdate(TypedDict):
-    agentes_chamados: list[NodeLiteral]
-    especialistas:    list[RotaEspecialista]
-    messages:         NotRequired[list[AnyMessage]]
+    especialistas: list[RotaEspecialista]
+    messages:      NotRequired[list[AnyMessage]]
 
 
 class ConteudoEspecialista(TypedDict):
@@ -135,48 +132,42 @@ class EspecialistaUpdate(TypedDict):
     """Montado só pelo decorator `@especialista` (`graph/nodes/especialista.py`). A lista de um
     item é somada às dos outros especialistas do turno pelo reducer."""
 
-    agentes_chamados:    list[NodeLiteral]
     dados_especialistas: list[ResultadoEspecialista]
 
 
 class OrquestradorUpdate(TypedDict):
-    agentes_chamados:      list[NodeLiteral]
     resposta_especialista: str
     dados_especialista:    str
 
 
 class JuizUpdate(TypedDict):
-    agentes_chamados:   list[NodeLiteral]
     veredito_juiz:      str
     justificativa_juiz: str
     feedback_juiz:      str
-    tentativas_juiz:    NotRequired[int]
+    reescritas_juiz:    NotRequired[int]
 
 
 class GuardrailEntradaUpdate(TypedDict):
-    agentes_chamados:   list[NodeLiteral]
-    messages:           list[AnyMessage]
-    mensagem_bloqueada: str | None
-    mapa_pii:           NotRequired[MapaPII]
-    # Estado do turno anterior que não pode vazar pro novo (o checkpoint é por thread). Vai aqui
-    # e não no roteador porque o turno com foto pula o roteador.
-    dados_especialistas: NotRequired[Overwrite]
-    tentativas_juiz:     NotRequired[int]
-    feedback_juiz:       NotRequired[str]
+    messages:            list[AnyMessage]
+    mensagem_bloqueada:  str | None
+    mapa_pii:            NotRequired[MapaPII]
     pergunta_original:   NotRequired[str]
+
+    # Zera o que o turno anterior deixou no checkpoint. Fica aqui, e não no roteador, porque o
+    # turno com foto pula o roteador.
+    dados_especialistas: NotRequired[Overwrite]
+    reescritas_juiz:     NotRequired[int]
+    feedback_juiz:       NotRequired[str]
 
 
 class GuardrailSaidaUpdate(TypedDict):
-    agentes_chamados: list[NodeLiteral]
-    messages:         list[AnyMessage]
+    messages: list[AnyMessage]
 
 
 class ItemIdentificado(BaseModel):
-    """Um item que a Visão (`graph/nodes/visao.py`) reconheceu numa foto. `category`/
-    `storage_place` reaproveitam os `Literal` de `graph/tools/estoque/schemas.py` —
-    os MESMOS valores que `POST /stock/items` aceita. Como o `with_structured_output`
-    vira function-calling/JSON-schema pro provider, o modelo fica proibido de emitir
-    um valor fora da lista (não é checagem depois, é restrição na própria geração)."""
+    """Um item que a Visão reconheceu numa foto. `category`/`storage_place` são os mesmos
+    `Literal` que `POST /stock/items` aceita: no structured output o modelo não consegue
+    emitir valor fora da lista."""
 
     product_name: str = Field(description="Nome do produto (ex.: 'Leite integral').")
     quantity: float = Field(description="Quantidade estimada (ex.: 3, 0.5, 500).")
@@ -189,9 +180,6 @@ class ItemIdentificado(BaseModel):
 class InventarioGeladeira(BaseModel):
     items: list[ItemIdentificado]
     confidence: float = Field(description="Confiança geral da identificação, de 0.0 a 1.0.")
-
-
-
 
 
 __all__ = [

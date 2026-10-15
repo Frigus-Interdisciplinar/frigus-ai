@@ -189,6 +189,24 @@ async def test_saida_fora_do_schema_aprova_sem_cachear(monkeypatch, sem_cache):
     assert sem_cache == []
 
 
+async def test_com_gateway_classifica_pelo_jev_com_a_rubrica_do_prompt(monkeypatch, sem_cache):
+    chamadas = []
+
+    async def escolher(_uso, _texto, _instrucoes, opcoes):
+        chamadas.append(opcoes)
+        return "POLITICO"
+
+    monkeypatch.setattr(mod.jev, "disponivel", lambda: True)
+    monkeypatch.setattr(mod.jev, "escolher", escolher)
+    monkeypatch.setattr(mod, "llm_classificador", _FakeClassificador(AssertionError("não devia chamar")))
+
+    resultado = await guardrail_entrada("em quem votar?")
+
+    assert resultado["motivo"] == "pergunta_politica"
+    assert set(chamadas[0]) == set(Categoria)
+    assert sem_cache == ["POLITICO"]
+
+
 async def test_categoria_desconhecida_do_llm_nao_derruba_o_turno(monkeypatch):
     """
     Falha aberta: categoria fora da lista (ex.: entrada corrompida no Redis) aprova em vez

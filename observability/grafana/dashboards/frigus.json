@@ -708,6 +708,82 @@
           "legendFormat": "tarefas"
         }
       ]
+    },
+    {
+      "id": 111,
+      "title": "JeV: respostas por uso e pergunta",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 76
+      },
+      "targets": [
+        {
+          "expr": "sum by (uso, pergunta, escolha) (rate(frigus_jev_decisions_total[5m]))",
+          "legendFormat": "{{uso}} / {{pergunta}}: {{escolha}}"
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "title": "JeV: confiança da escolha (p10 / p50)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 76
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.10, sum by (le, uso) (rate(frigus_jev_confidence_bucket[1h])))",
+          "legendFormat": "{{uso}} p10"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, uso) (rate(frigus_jev_confidence_bucket[1h])))",
+          "legendFormat": "{{uso}} p50"
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "title": "JeV: quem respondeu (JeV ou reserva)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "targets": [
+        {
+          "expr": "sum by (modelo) (rate(frigus_jev_decisions_total[5m]))",
+          "legendFormat": "{{modelo}}"
+        }
+      ]
+    },
+    {
+      "id": 114,
+      "title": "JeV: latência (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(frigus_external_call_duration_seconds_bucket{target=\"jev\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(frigus_external_call_duration_seconds_bucket{target=\"jev\"}[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
     }
   ]
 }
