@@ -1,12 +1,12 @@
 # MongoDB (pymongo + MongoDBSaver)
 
-Mongo guarda três coisas aqui: histórico de conversa (`tools/mongo/chats`), perfil de usuário
-(`tools/mongo/users`) e o checkpoint do LangGraph (`graph/builder.py`).
+Mongo guarda três coisas aqui: histórico de conversa (`repositories/chat_repository.py`), fatos
+estruturados do usuário (`repositories/fatos_repository.py`) e o checkpoint do LangGraph (`graph/builder.py`).
 
 ## `MongoClient` é lazy, `MongoDBSaver` não é — já resolvido aqui, mantenha assim
 
 `MongoClient(...)` **não** abre socket no construtor — só na primeira operação. É por isso que
-`banco = _conectar()` no escopo de módulo (`tools/mongo/connection.py`) não viola a regra de "sem
+`banco = _conectar()` no escopo de módulo (`infra/mongo/connection.py`) não viola a regra de "sem
 I/O no import" e pode ser importado à vontade.
 
 `MongoDBSaver.__init__`, ao contrário, **conecta na hora**: ele cria índices nas collections de
@@ -71,10 +71,10 @@ Quem trava o teto é o `langgraph-checkpoint-mongodb` (a versão estável exige 
 o pymongo sem subir o checkpointer quebra o grafo inteiro, não só o Mongo. Se um PR do Dependabot
 tentar passar disso, confira a versão do `langgraph-checkpoint-mongodb` antes de mergear.
 
-## Histórico curto: `$slice` na projeção — já é assim em `tools/mongo/chats/core.py:buscar`
+## Histórico curto: `$slice` na projeção — já é assim em `repositories/chat_repository.py:_buscar_documento`
 
 O documento de chat acumula todas as mensagens da sessão num array. Buscar o documento inteiro pra
-usar as últimas N traz o histórico completo pela rede a cada turno; `buscar()` já usa `$slice` pro
+usar as últimas N traz o histórico completo pela rede a cada turno; a busca já usa `$slice` pro
 servidor devolver só o final:
 
 ```python
@@ -84,14 +84,13 @@ return collection.find_one(
 )
 ```
 
-Ao adicionar uma busca nova sobre `chats`/`users`, siga o mesmo padrão em vez de trazer o array
+Ao adicionar uma busca nova sobre `agent_chats`/`user_fatos`, siga o mesmo padrão em vez de trazer o array
 inteiro e fatiar em Python.
 
-## Filtro por `user_id` na query — gap real aqui, não só teoria
+## Filtro por `user_id` na query — já é assim em `repositories/chat_repository.py`
 
-`buscar()` em `tools/mongo/chats/core.py` filtra só por `session_id`, sem `user_id` no filtro —
-diferente da regra que as tools de Postgres seguem (escopo por `user_id`/`stock_id` via
-`tools/postgres/context.py`, nunca checado depois de trazer o dado). Checar dono **depois** de
-buscar o documento é IDOR esperando acontecer; hoje `buscar()` nem faz essa checagem depois, então
-qualquer `session_id` válido devolve o histórico de qualquer usuário. Vale corrigir antes de expor
-isso via API (a exposição atual é só terminal local, onde `session_id` não vaza).
+Toda leitura e escrita de chat filtra por `session_id` **e** `user_id` (`_buscar_documento`,
+`_adicionar_mensagens`...). Checar o dono **depois** de buscar o documento é IDOR esperando acontecer:
+o filtro tem que ir na query. O único caso sem `user_id` é `buscar_dono_chat`, que existe justamente
+pra perguntar de quem é o chat, e quem o usa é `validar_ownership`. Nas rotas SSE ela roda numa
+dependência, não no corpo: num gerador a checagem rodaria depois do status HTTP já ter saído.

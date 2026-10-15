@@ -24,7 +24,7 @@ class ChatCreateResponse(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    # extra="forbid": `stock_id` saiu do corpo (vinha sem checagem de dono); cliente antigo leva 422 em vez de ser ignorado.
+    # extra="forbid": cliente que ainda manda `stock_id` leva 422 em vez de ser ignorado.
     model_config = ConfigDict(
         extra="forbid", json_schema_extra={"examples": [{"content": "Quais receitas posso fazer hoje?"}]}
     )

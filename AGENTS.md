@@ -37,8 +37,8 @@ coisa; a nota diz o que fazer primeiro.
 | MCP | ✅ Feito | `api/mcp.py` (montado em `/mcp`) expõe 20 tools com identidade por `X-API-Key`. Validado ao vivo com o cliente oficial do SDK `mcp` (`initialize`, `list_tools` e `call_tool(query_stock)` devolvendo dados reais) |
 | A2A | ✅ Feito | Superfície única e consolidada em `src/frigus_ai/api/routes/a2a.py` (contrato manual, com auth real por `X-API-Key`). A integração alternativa via `a2a-sdk` foi removida: o dispatcher da SDK sempre responde HTTP 200 e embute erro no corpo JSON-RPC, perdendo o 429/401 de transporte que o contrato manual já entrega |
 | RAG com fonte externa indicada | ✅ Feito | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
-| Agente juiz (mitigação de alucinação) | ✅ Feito | `graph/nodes/juiz.py` — audita grounding/relevância/completude contra o retorno real das tools (`responder_com_evidencias`), até 2 retentativas pelo orquestrador (sem repetir escrita); falha na avaliação vira `INDISPONIVEL`, não `APROVADO` |
-| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `domain/privacy.py`, regex de ataque, classificador com cache no Redis) e saída. Classificador, revisor e juiz têm cadeia de fallback (Gemini → Groq → Luna, `graph/llm.py:estruturado`): antes só tinham o Gemini e, sem cota, aprovavam tudo em silêncio (falha aberta). Verificado ao vivo com o Gemini sem cota: injeção bloqueada, resposta alucinada reprovada |
+| Agente juiz (mitigação de alucinação) | ✅ Feito | `graph/nodes/juiz.py` — audita grounding/relevância/completude contra o retorno real das tools (`responder_com_evidencias`), até 2 retentativas pelo orquestrador (sem repetir escrita); falha na avaliação vira `INDISPONIVEL`, não `APROVADO`. Com o gateway configurado o avaliador é o JeV (grounding/relevância/completude como decisões tipadas), com o LLM de reserva |
+| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `domain/privacy.py`, regex de ataque, classificador com cache no Redis; com `LLM__GATEWAY__API_KEY` o classificador é o JeV pela Decisions API do Vercel AI Gateway, `infra/jev.py`, com a mesma rubrica do `guardrail.md`) e saída. Classificador, revisor e juiz têm cadeia de fallback (Gemini → Groq → Luna, `graph/llm.py:estruturado`): antes só tinham o Gemini e, sem cota, aprovavam tudo em silêncio (falha aberta). Verificado ao vivo com o Gemini sem cota: injeção bloqueada, resposta alucinada reprovada |
 | Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ✅ Feito | `telemetry/evals/sre_report.py` contra o Prometheus real: US$ 7/semana (100 usuários) e US$ 70/semana (1000), com a premissa de 20 mensagens/usuário/semana explícita. Ver `observability/RELATORIO.md` |
 | Observabilidade/SRE — latência interagentes e tempo total de resposta | ✅ Feito | Prometheus mede HTTP, grafo, nodes, tools e LLM; LangSmith complementa os traces individuais |
 | Observabilidade/SRE — SLO/SLI e alertas | ✅ Feito | SLO do turno em `telemetry/metrics.py` (p95 ≤ 8s, erro ≤ 5%; exportado como `frigus_slo_target`), bloqueio do guardrail separado de erro (`outcome="blocked"`), SLIs gravados + alertas de SLO/burn rate em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na tela `/metrics` da web. Sem SLA (não há contrato) e sem Alertmanager (alertas só em `localhost:9090/alerts`) |
@@ -72,10 +72,17 @@ default vazio em `src/frigus_ai/settings/`, então o projeto roda sem ela).
 
 - Python 3.13+, gerenciado com `uv` (`uv venv`, `uv sync`, `uv add <pkg>`)
 - LangChain 1.2 / LangGraph 1.1 para orquestração de agentes
-- LLMs: Gemini (`gemini-3.6-flash`), Groq (`openai/gpt-oss-120b`), Claude
-  (`claude-haiku-4-5`, `claude-sonnet-4-6`) e OpenRouter (`qwen/qwen3.8-27b:free`) mapeados em
-  `src/frigus_ai/settings/llm.py` (enum `Model`) e `infra/llm/` (providers/builders). Provider sem API key configurada faz `build_llm` devolver `None` e fica
-  fora da cadeia de fallback — só Gemini e Groq são obrigatórios
+- LLMs: Gemini (`gemini-3.6-flash`, principal), Groq (`openai/gpt-oss-120b`), Claude
+  (`claude-haiku-4-5`, `claude-sonnet-4-6`), OpenRouter (`qwen/qwen3.8-27b:free`) e, pelo Vercel AI
+  Gateway, GPT-6 Luna (`openai/gpt-6-luna`). O enum `Model` fica em `settings/llm.py`, cada provider
+  tem seu bloco em `LLMSettings` (`gemini`, `groq`, `claude`, `gateway`, `openrouter`: chave, URL,
+  timeout e tentativas) e `infra/llm/` (`registry.py`, `builder.py`) constrói o modelo. Provider sem
+  API key faz `build_llm` devolver `None` e fica fora das cadeias de fallback — só Gemini e Groq são
+  obrigatórios.
+- JeV (TypeSafe), pela Decisions API do Vercel AI Gateway (`infra/llm/jev/`): decide sem gerar texto
+  (predicado, escolha e nota, com probabilidade). Com `LLM__GATEWAY__API_KEY`, é ele quem classifica
+  o guardrail de entrada, escolhe os especialistas no roteador e avalia a resposta no juiz; se
+  falhar, o LLM assume. Ver `.agents/skills/jev.md`.
 - PostgreSQL (via Docker) para estoque/compras/receitas/financeiro, acessado via SQLAlchemy
   (`infra/postgres/connection.py`, `@transacional`; banco real no Supabase, schema
   `public` — enums gravados como código em inglês e traduzidos por `models/base.py:Rotulo`;
@@ -101,16 +108,16 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 │   ├── builder.py       monta e compila o grafo (+ checkpointer Mongo)
 │   ├── llm.py           builders de LLM   |   agents.py  agentes compilados (create_agent)
 │   ├── prompts/         só .md + __init__.py — load_prompt()/load_sections() montam o system_prompt
-│   │                     a partir de frontmatter (metadados) + seções `## NOME` do corpo
-│   ├── nodes/           um arquivo por nó + contexto.py (responder/perguntar/poda do histórico)
+│   │                     a partir das seções `## NOME` dos .md (blocos comuns em sistema.md)
+│   ├── nodes/           um arquivo por nó + contexto.py (responder/responder_com_evidencias/perguntar/poda do histórico)
 │   ├── guardrail/       subsistema próprio: entrada/saida (nós), padroes, schemas, cache
 │   └── tools/           tools do LLM por domínio: estoque, compras, receitas, financeiro, faq,
 │                         spoonacular — cada uma com schemas.py + repo.py
 ├── domain/              modelos de domínio (models.py: Role/ChatMessage/Fatos/Resumo), tipos de ID e novo_chat_id
 ├── repositories/        persistência: Postgres via SQLAlchemy (@transacional) e Mongo
 ├── services/            casos de uso (chat_service, user_service, auth_service, runner); stock/shopping/recipe_service atrás das rotas v1
-├── infra/               conexões lazy: postgres (pool + engine + models), mongo, redis, qdrant,
-│                         neo4j, spoonacular
+├── infra/               conexões lazy: postgres (engine + models), mongo, redis, qdrant, neo4j,
+│                         firebase, spoonacular, assessor (A2A) e llm/ (builder, registry e jev/)
 ├── api/                 app.py (create_app), deps.py (Depends), routes/{v1,auth,health,metrics,a2a}, auth/, mcp.py, middleware/{request_id,metrics,security}, errors/ (handlers + ErrorResponse)
 ├── (infra/logging/)     setup.py (logger colorido + request_id) e decorators.py (log_tool/log_classe); `Logging` é a fachada
 ├── telemetry/           métricas Prometheus de runtime (metrics.py, metrics_callback.py) e evals/ (avaliação
@@ -121,7 +128,10 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 └── tui/                 app.py (Textual) + display.py + app.tcss — interface interativa
 
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (espelho do DDL do Supabase)
-observability/          prometheus/ e grafana/ (scrape config, datasource, dashboard) — profile `observability` do compose
+observability/          prometheus/ e grafana/ (scrape config, regras de SLO, dashboard) — profile `observability` do compose (`just obs`);
+                        RELATORIO.md (cenários, SRE e sessões contra a infra real)
+scripts/                run.sh (sobe o Docker e a app) e prometheus_token.py (token do /metrics → Prometheus)
+web/                    painel React (Vite): chat com timeline de execução, perfil e /metrics
 
 ```
 
@@ -133,8 +143,9 @@ Nenhuma interface (`api/`, `tui/`) deve chamar `frigus_ai.graph.builder` ou `fri
 diretamente — sempre via `frigus_ai.services.chat_service`. É esse limite que permite API/TUI
 existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir histórico.
 `src/frigus_ai/api/routes/v1/chats.py` segue essa regra. Identidade real já não depende de
-`DEMO_USER_ID` fixo — `api/auth.py:resolver_usuario` resolve por `X-API-Key` ou cria/reaproveita o
-usuário local único quando `API__KEY_AUTH_ENABLED=false` (modo local/demo).
+`DEMO_USER_ID` fixo — `api/auth/dependencies.py:resolver_usuario` resolve pelo Bearer do Firebase (login
+do app Frigus) ou por `X-API-Key`, ou cria/reaproveita o usuário local único quando
+`API__KEY_AUTH_ENABLED=false` (modo local/demo).
 
 `interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa agora.
 `src/frigus_ai/mcp.py` existe; o A2A vive só em `api/routes/a2a.py` (ver docstring do arquivo).
@@ -176,7 +187,7 @@ reais com métricas Prometheus nem commitar segredos.
 
 - **Entenda o que o código faz de verdade, não o que o nome sugere.** Rode, grepe os callers, leia o
   arquivo de teste. Achados que só apareceram por leitura real: a API não subia (`Role` do domínio
-  shadowando o `Role` do schema em `interfaces/api/schemas/chat.py`); o rate limit funcionava mas a
+  shadowando o `Role` do schema em `schemas/chat.py`); o rate limit funcionava mas a
   rota devolvia 500 em vez de 429; `.agents/skills/fastapi.md` documentava como decisão deliberada
   um padrão (`rotas são def`) que a Fase 2 do async já tinha invertido. Nenhum apareceria lendo só
   o nome das funções.
@@ -203,6 +214,10 @@ reais com métricas Prometheus nem commitar segredos.
   chamado em `services/runner.py:executar`) e lido dentro da tool. Ver uso em
   `graph/tools/{estoque,compras,receitas,financeiro}/repo.py`.
 - Não commitar `.env`; usar `.env.example` como referência de variáveis novas.
+- **Comentário só explica um porquê que o código não mostra** (pegadinha, restrição externa). Nada
+  que repita o código, conte histórico ("antes era X") ou narre a mudança. O que sobrar vai em
+  linha própria acima do item, separado por linha em branco do bloco anterior — nunca longo no fim
+  da linha nem colado em várias linhas de código. Vale pra campo de classe, função e dict.
 - **Simplicidade acima de tudo.** Projeto de disciplina em estágio inicial — prefira a solução direta
   à abstração "flexível para o futuro". Sem camada genérica, sem config plugável, sem interface para
   uma única implementação. Isso vale tanto para código de domínio quanto para infra.
@@ -235,12 +250,15 @@ reais com métricas Prometheus nem commitar segredos.
 - **Config centralizada.** Uma única fonte de env vars (`src/frigus_ai/settings/`,
   `pydantic-settings`) e um único enum fechado de modelos/providers
   (`settings/llm.py:Model` e `infra/llm/registry.py:PROVIDER_MAP`). Não ler `os.environ` direto em outros módulos.
+  Variáveis de provider são aninhadas: `LLM__GROQ__API_KEY`, `LLM__GATEWAY__TIMEOUT_S`. Renomear uma
+  variável exige atualizar o ambiente de deploy: com `extra="ignore"`, o nome antigo é descartado sem erro.
 - **Ciclo de retentativa do Juiz é explícito no grafo**, não escondido em loop Python — ver
   `decidir_apos_juiz` em `graph/builder.py`. A retentativa volta só ao orquestrador (repetir
   especialistas regravaria estoque e lista de compras). Novo especialista: registre-o em
   `NO_POR_DOMINIO`, crie o nó com `@especialista` (ou `especialista_com_agente`) e ele passa pelo
   Orquestrador e pelo Juiz antes do Guardrail de Saída. Roteador e orquestrador estão descritos em
-  `graph/prompts/router.md` e `orquestrador.md`.
+  `graph/prompts/router.md` e `orquestrador.md`. Novo especialista também entra como pergunta do
+  roteador JeV (`DESCRICAO_ESPECIALISTA` em `graph/nodes/router.py`).
 
 ## Comandos
 
@@ -250,6 +268,7 @@ just run             # sobe a TUI (sobe Postgres/Mongo/Redis/Qdrant via Docker a
 just run api          # sobe a API (FastAPI/uvicorn, localhost:8000)
 just test            # suíte de testes (não precisa de .env nem banco)
 just check           # lint (roda no CI em push/PR pra main); `just fix` aplica o que dá
+just obs             # Prometheus (9090) + Grafana (3000), já com o token do /metrics do .env
 ```
 
 `just run` chama o console script `frigus-ai` (`[project.scripts]`), que é o mesmo
@@ -269,7 +288,7 @@ just check           # lint (roda no CI em push/PR pra main); `just fix` aplica 
 ## Skills por biblioteca
 
 `.agents/skills/` guarda convenções e pegadinhas específicas de cada lib/serviço externo usada no
-projeto (pydantic, fastapi, mongo, langchain, spoonacular — um arquivo por lib, regra + exemplo do
+projeto (pydantic, fastapi, mongo, langchain, jev, spoonacular — um arquivo por lib, regra + exemplo do
 que fazer e do que não fazer).
 `dependencies.md`, `responses.md`, `streaming.md`, `path-operations.md` e `other-tools.md` são
 material de referência do skill oficial do FastAPI, linkados a partir de `fastapi.md`. São achados

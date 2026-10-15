@@ -70,7 +70,7 @@ async def perguntar(pergunta: str, session_id: str) -> str:
         
     except httpx.HTTPError as e:
         raise AssessorIndisponivel(f"Falha ao chamar o Assessor: {e}") from e
-    except ValidationError as e:  # corpo que não é JSON ou não é uma resposta de SendMessage
+    except ValidationError as e:
         raise AssessorIndisponivel(f"Resposta inesperada do Assessor: {e}") from e
 
     if corpo.error:

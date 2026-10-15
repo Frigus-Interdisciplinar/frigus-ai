@@ -62,7 +62,7 @@ from langgraph.graph import MessagesState
 
 
 class Estado(MessagesState):  # messages já vem com add_messages embutido
-    agentes_chamados: Annotated[list[str], operator.add]
+    dados_especialistas: Annotated[list[ResultadoEspecialista], operator.add]
 ```
 
 Instead of:
@@ -70,7 +70,7 @@ Instead of:
 ```python
 # DO NOT DO THIS
 class Estado(MessagesState):
-    agentes_chamados: list[str]  # cada nó que retorna isso PISA no valor anterior, não acumula
+    dados_especialistas: list[ResultadoEspecialista]  # cada nó que retorna isso PISA no valor anterior, não acumula
 ```
 
 Ao adicionar campo novo que acumula entre nós, use o mesmo `Annotated[..., operator.add]`.
@@ -115,14 +115,14 @@ modelo.
 
 ## Nó de grafo `async def` não exige que as tools também sejam async
 
-Migração pra async (ver TODO.md "Async") converteu os 10 nós de `agents/nodes/` pra `async def` +
+A migração pra async converteu os nós de `graph/nodes/` pra `async def` +
 `.ainvoke()` (no `*_app` de `graph/agents.py` e nos `llm_*.invoke` diretos de `juiz.py`/
 `guardrail/*.py`). As tools chamadas pelos agentes (`ESTOQUE_TOOLS` etc., psycopg2/pymongo por
 baixo) **continuam `def` sync sem nenhuma mudança** — `create_agent`/`ToolNode` do LangChain já faz
 offload automático pra thread quando a tool é sync e o agente roda via `.ainvoke()`, propagando
-`contextvars` corretamente (`tools/postgres/context.py:session_context`) sem precisar de
+`contextvars` corretamente (`infra/postgres/context.py:session_context`) sem precisar de
 `asyncio.to_thread` explícito nesse nível. Só vale reescrever uma tool pra `async def` se ela mesma
-ganhar um client async de verdade (ex. Redis/Qdrant, ver TODO.md) — nada obrigatório aqui.
+ganhar um client async de verdade (ex. Redis/Qdrant) — nada obrigatório aqui.
 
 ## Timeout e retries dos LLMs: o default é "esperar pra sempre"
 
@@ -130,7 +130,7 @@ Nenhuma classe (`ChatGoogleGenerativeAI`, `ChatGroq`, `ChatOpenAI`) vem com time
 `max_retries` do Gemini tem default **6**. Medido contra um 503 lento: sem timeout a chamada dura
 o tempo que o servidor quiser (o 503 "high demand" real leva 9-17s), 3 tentativas = 12s, e um
 `timeout` de 1s derruba a tentativa em 1,0s. Hoje isso vem da política por provider em
-`settings/llm.py` (`LLM__GEMINI_TIMEOUT_S`, `LLM__GEMINI_RETRIES`, ...), aplicada em
+`settings/llm.py` (`LLM__GEMINI__TIMEOUT_S`, `LLM__GEMINI__RETRIES`, ...), aplicada em
 `infra/llm/builder.py`. Armadilhas:
 
 - `max_retries` NÃO significa a mesma coisa em todo provider: no Gemini são tentativas **totais**
@@ -138,8 +138,9 @@ o tempo que o servidor quiser (o 503 "high demand" real leva 9-17s), 3 tentativa
   builder converte.
 - `timeout` é por tentativa, em segundos (o wrapper do Gemini converte pra ms). Pior caso de um
   provider caído = `(retries + 1) * timeout`.
-- Sobrescrever uma chave de `dict` por env (`LLM__X__GEMINI=...`) SUBSTITUI o dict inteiro e os
-  outros itens somem (`KeyError`). Por isso a política são campos planos, não um dict.
+- Sobrescrever uma chave de `dict` por env SUBSTITUI o dict inteiro e os outros itens somem
+  (`KeyError`). Por isso cada provider é um submodelo de `LLMSettings` (`LLM__GROQ__RETRIES=2`
+  mexe só nesse campo), não um dict.
 - Groq no plano gratuito tem TPM de 8000 tokens/min pro gpt-oss-120b: uma rajada de turnos dá 429
   e, no roteador (sem fallback, `llm_rapido`), vira "Não consegui entender o pedido".
 - Cota **diária** do Gemini (429 `PerDayPerProjectPerModel`) falha em ~0,4s e só volta no dia
@@ -152,3 +153,14 @@ chame `with_structured_output` em cada modelo e só depois monte a cadeia (`grap
 Isso importa porque um papel com um provider só (guardrail, juiz) falha aberta e aprova tudo quando
 ele cai. `create_agent` aceita a cadeia direto (`com_reserva`). Groq usa `method="json_schema"`;
 `gpt-5*` descarta `temperature` ≠ 1 sozinho (a lib remove).
+
+## O Juiz precisa do retorno das tools, não do texto do agente
+
+`agente.ainvoke(...)` devolve `{"messages": [...]}` com todas as mensagens do passo a passo: as
+`ToolMessage` são o que as tools retornaram. Se o Juiz compara a resposta com o texto final do
+próprio agente, ele compara a resposta com ela mesma e nunca pega alucinação.
+`graph/nodes/contexto.py:responder_com_evidencias` separa as duas coisas: devolve o texto final e
+as `ToolMessage` juntas (`name:
+conteúdo`, vazio se o agente não chamou tool). Isso só vale porque
+`messages` do estado guarda apenas Human/AI de texto, então toda `ToolMessage` na saída é do turno.
+Sem tool chamada, `dados` cai na própria resposta (não há o que conferir além dela).

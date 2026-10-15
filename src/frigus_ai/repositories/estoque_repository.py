@@ -105,7 +105,8 @@ def _registrar_movimento(
         movement_type=movement_type,
         quantity=quantidade,
     )
-    if quando is not None:  # sem data: omite a coluna e vale o DEFAULT do banco (None viraria NULL)
+    # Sem data, a coluna fica de fora e vale o DEFAULT do banco (None gravaria NULL).
+    if quando is not None:
         movimento.date = quando
     s.add(movimento)
 
@@ -176,7 +177,7 @@ class _EstoquePostgresRepo(PostgresRepo):
             .where(StockProduct.stock_id == stock_id)
         )
 
-        # Cada filtro é opcional e se acumula — equivalente ao `query += " AND ..."` do SQL cru.
+        # Cada filtro é opcional e se acumula.
         iguais = {
             Product.storage_place:       filtros.get("storage_place"),
             StockProduct.category:       filtros.get("category"),
