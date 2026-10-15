@@ -37,5 +37,11 @@ def test_local_sem_auth_ok():
 
 
 def test_env_aninhado_com_duplo_underscore(monkeypatch):
-    monkeypatch.setenv("LLM__MAX_TENTATIVAS_JUIZ", "5")
-    assert _settings().llm.max_tentativas_juiz == 5
+    monkeypatch.setenv("LLM__MAX_REESCRITAS_JUIZ", "5")
+    assert _settings().llm.max_reescritas_juiz == 5
+
+
+def test_provider_aninhado_por_duplo_underscore(monkeypatch):
+    monkeypatch.setenv("LLM__GATEWAY__TIMEOUT_S", "12")
+    assert _settings().llm.gateway.timeout_s == 12
+
