@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
 
 /**
- * No assessor-ai original, isso escolhia um usuário aleatório via `X-User-Id` (modo dev sem
- * auth). O Frigus não tem essa troca de usuário: com `API__KEY_AUTH_ENABLED=false`
- * (`api/auth.py`), toda request já resolve pro único usuário local automaticamente, sem
- * header nenhum — não tem o que "entrar" aqui. Fica só como ponto único caso um dia o Frigus
- * ganhe login de verdade (`X-API-Key`).
+ * O painel web roda com `API__KEY_AUTH_ENABLED=false`: toda request resolve pro usuário local,
+ * sem header. O login de usuário (Firebase, `Authorization: Bearer`) é feito pelo app Frigus.
  */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;

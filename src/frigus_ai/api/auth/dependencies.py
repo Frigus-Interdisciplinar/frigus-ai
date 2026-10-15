@@ -1,6 +1,7 @@
 """
-Auth por `X-API-Key`, mesmo desenho do assessor-ai: a key em claro nunca é
-persistida — o Redis guarda `sha256(key) -> user_id` (`tools/redis/api_key.py`).
+Quem faz a requisição: o login do app Frigus (ID token do Firebase em `Authorization: Bearer`) ou a
+`X-API-Key`, para integrações. A key em claro nunca é persistida: o Redis guarda
+`sha256(key) -> user_id` (`infra/redis/keys.py`).
 """
 
 import asyncio
@@ -29,7 +30,7 @@ def _usuario_do_firebase(id_token: str) -> str | None:
 
     try:
         claims = firebase_auth.verify_id_token(id_token, app=get_firebase_app())
-    except (ValueError, firebase_auth.AuthError):
+    except (ValueError, firebase_auth.InvalidIdTokenError):
         return None
 
     if not claims.get("email") or not claims.get("email_verified"):
@@ -44,14 +45,12 @@ async def resolver_usuario(
     api_key: str | None, id_token: str | None = None
 ) -> str | None:
     """
-    Quem é o dono da requisição, sem nada de FastAPI — o servidor MCP
-    (`mcp/server.py`) monta como ASGI puro e chama isto direto. `id_token` (Firebase,
-    `Authorization: Bearer`) tem prioridade; a API key segue valendo (MCP/A2A/máquinas).
+    Quem é o dono da requisição, sem nada de FastAPI — o servidor MCP (`api/mcp.py`) monta como
+    ASGI puro e chama isto direto, só com a API key. `id_token` (Firebase) tem prioridade sobre a key.
     """
 
     if not settings.api.key_auth_enabled:
-        # Auth desligada (modo local/demo): reaproveita ou cria o usuário local único,
-        # sem depender de um id fixo. Ligue a flag pra exigir API key de verdade.
+        # Auth desligada (modo local/demo): reaproveita ou cria o usuário local único.
         return await user_service.obter_ou_criar_padrao()
 
     if id_token:
@@ -78,8 +77,7 @@ async def get_current_user(
 def verify_signup_secret(
     secret: Annotated[str | None, Security(_signup_secret_header)] = None,
 ) -> None:
-    # Sem SIGNUP_SECRET configurado ninguém emite key — senão a rota de signup
-    # ficaria aberta com secret vazio.
+    # Sem SIGNUP_SECRET configurado ninguém emite key, senão a rota ficaria aberta com secret vazio.
     esperado = settings.api_keys.signup_secret.get_secret_value()
     if not esperado or not secrets.compare_digest(secret or "", esperado):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Signup secret inválido.")
