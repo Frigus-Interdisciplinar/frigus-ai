@@ -7,7 +7,7 @@ ver `_talvez_atualizar_memoria`).
 
 import asyncio
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import TypedDict
 
