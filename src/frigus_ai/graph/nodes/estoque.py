@@ -7,17 +7,9 @@ from frigus_ai.graph.nodes.contexto import (
 )
 from frigus_ai.graph.state import EspecialistaUpdate, Estado
 from frigus_ai.telemetry import medir_node
+from frigus_ai.graph.nodes.especialista import especialista_com_agente
 
-
-@medir_node(ESTOQUE)
-async def no_estoque(estado: Estado) -> EspecialistaUpdate:
-    resposta = await responder(estoque_app, mensagens_do_turno(estado), contexto_do_estado(estado))
-
-    return EspecialistaUpdate(
-        agentes_chamados=[ESTOQUE],
-        resposta_especialista=resposta,
-        dados_especialista=resposta,
-    )
+no_estoque = especialista_com_agente(ESTOQUE, estoque_app)
 
 
 __all__ = ["no_estoque"]

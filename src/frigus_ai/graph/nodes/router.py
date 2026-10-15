@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage
+from langgraph.runtime import Runtime
 
 from frigus_ai.graph.agents import router_app
 from frigus_ai.graph.names import ROTEADOR
-from frigus_ai.graph.nodes.contexto import contexto_do_estado
 from frigus_ai.graph.state import (
     ContextoPrompt,
     Estado,
@@ -14,6 +14,8 @@ from frigus_ai.graph.state import (
 )
 from frigus_ai.infra.logging import Logging
 from frigus_ai.telemetry.metrics import ROUTER_DECISIONS, medir_node
+from frigus_ai.telemetry import medir_node
+from frigus_ai.telemetry.metrics import ROUTER_DECISIONS
 
 log = Logging.get_logger(__name__)
 
@@ -24,7 +26,7 @@ _NAO_ENTENDI = (
 
 
 async def _rotear(mensagens: Sequence[AnyMessage], contexto: ContextoPrompt) -> Roteamento:
-    """Falha de chamada ou saída fora do schema vira `fim` com resposta genérica — o turno
+    """Falha de chamada ou saída fora do schema vira resposta genérica sem especialista — o turno
     nunca cai por causa do roteador."""
 
     try:
@@ -32,46 +34,32 @@ async def _rotear(mensagens: Sequence[AnyMessage], contexto: ContextoPrompt) -> 
         roteamento = saida["structured_response"]
     except Exception as e:
         log.warning("Roteador falhou, respondendo sem especialista: %s", e)
-        return Roteamento(rota=Route.FIM, resposta=_NAO_ENTENDI)
+        return Roteamento(resposta=_NAO_ENTENDI)
 
     if not isinstance(roteamento, Roteamento):
         raise TypeError(f"esperava Roteamento, veio {type(roteamento).__name__}")
     return roteamento
 
 
-def _ultima_pergunta(mensagens: Sequence[AnyMessage]) -> str:
-    """A mensagem do usuário como chegou (já anonimizada pelo guardrail) — em vez de pedir
-    pro LLM repeti-la "sem edições" e torcer."""
-
-    for msg in reversed(mensagens):
-        if isinstance(msg, HumanMessage):
-            return msg.text
-    return ""
-
-
 @medir_node(ROTEADOR)
-async def no_roteador(estado: Estado) -> RouterUpdate:
+async def no_roteador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> RouterUpdate:
+    roteamento = await _rotear(estado["messages"], runtime.context)
 
-    roteamento = await _rotear(estado["messages"], contexto_do_estado(estado))
-    pergunta   = _ultima_pergunta(estado["messages"])
+    # Sem repetição (o LLM pode listar o mesmo domínio duas vezes), mantendo a ordem.
+    especialistas = list(dict.fromkeys(roteamento.especialistas))
 
-    log.debug("Rota escolhida: %s | pergunta: '%s'", roteamento.rota, pergunta)
-    ROUTER_DECISIONS.labels(route=roteamento.rota).inc()
+    log.debug("Especialistas escolhidos: %s", especialistas or "nenhum (resposta direta)")
+    for dominio in especialistas or [Route.FIM]:
+        ROUTER_DECISIONS.labels(route=dominio).inc()
 
-    if roteamento.rota == Route.FIM:
+    if not especialistas:
         return RouterUpdate(
             agentes_chamados=[ROTEADOR],
-            rota=Route.FIM,
-            pergunta_original=pergunta,
+            especialistas=[],
             messages=[AIMessage(content=roteamento.resposta or _NAO_ENTENDI)],
         )
 
-    return RouterUpdate(
-        agentes_chamados=[ROTEADOR],
-        rota=roteamento.rota,
-        pergunta_original=pergunta,
-        tentativas_juiz=0,
-    )
+    return RouterUpdate(agentes_chamados=[ROTEADOR], especialistas=especialistas)
 
 
 __all__ = ["no_roteador"]

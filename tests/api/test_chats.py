@@ -106,6 +106,7 @@ def test_request_id_invalido_e_substituido(cliente, monkeypatch):
 
 def test_send_message_ok(cliente, monkeypatch):
     async def _ok(conteudo, chat_id, user_id, stock_id):
+        assert stock_id == 1  # vem de `resolver_stock_id` (identidade), nunca do corpo
         return f"eco: {conteudo}"
 
     monkeypatch.setattr(chat_service, "send_message", _ok)
@@ -114,6 +115,15 @@ def test_send_message_ok(cliente, monkeypatch):
 
     assert r.status_code == 200
     assert r.json() == {"chat_id": CHAT_ID, "content": "eco: oi"}
+
+
+@pytest.mark.parametrize("rota", ["messages", "messages/stream"])
+def test_stock_id_no_corpo_vira_422(cliente, rota):
+    """`stock_id` no corpo vinha sem checagem de dono — escolher estoque alheio. Agora é rejeitado."""
+
+    r = cliente.post(f"/v1/chats/{CHAT_ID}/{rota}", json={"content": "oi", "stock_id": 999})
+
+    assert r.status_code == 422
 
 
 def test_delete_chat_devolve_202_e_agenda_encerramento(cliente, monkeypatch):
@@ -185,6 +195,7 @@ def test_list_chats_devolve_schema_tipado(cliente, monkeypatch):
 
 def test_stream_devolve_eventos_por_no_e_resposta(cliente, monkeypatch):
     async def _stream(conteudo, chat_id, user_id, stock_id):
+        assert stock_id == 1
         yield NodeStarted(node="roteador_node")
         yield NodeStarted(node="estoque_node")
         yield AnswerReady(content=f"eco: {conteudo}")
@@ -241,6 +252,8 @@ def test_historico_repassa_limit_e_barra_fora_da_faixa(cliente, monkeypatch):
 
     monkeypatch.setattr(chat_service, "get_history", _get_history)
 
+    assert cliente.get(f"/v1/chats/{CHAT_ID}/messages").status_code == 200
+    assert _get_history.limit is None  # sem `limit` = conversa completa
     assert cliente.get(f"/v1/chats/{CHAT_ID}/messages?limit=20").status_code == 200
     assert _get_history.limit == 20
     assert cliente.get(f"/v1/chats/{CHAT_ID}/messages?limit=500").status_code == 422

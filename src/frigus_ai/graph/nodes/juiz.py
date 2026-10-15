@@ -81,8 +81,8 @@ async def no_juiz(estado: Estado) -> JuizUpdate:
         agentes_chamados=[JUIZ],
         veredito_juiz=veredito,
         justificativa_juiz=justificativa,
-        # feedback_juiz preenchido é o sinal que `decidir_apos_juiz` lê pra devolver
-        # a resposta ao especialista de origem; vazio segue pro guardrail de saída.
+        # feedback_juiz preenchido é o sinal que `decidir_apos_juiz` lê pra devolver a resposta
+        # ao orquestrador; vazio segue pro guardrail de saída.
         feedback_juiz=justificativa if repetir else "",
         tentativas_juiz=tentativas + 1 if repetir else tentativas,
     )

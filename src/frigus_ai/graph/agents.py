@@ -15,6 +15,8 @@ from frigus_ai.graph.tools import (
     RECEITAS_TOOLS,
 )
 
+_AGENTES_COM_PERFIL = frozenset({"compras", "receitas"})
+
 
 def _montar(nome: str, model, tools: list | None = None, response_format=None):
     """
@@ -29,7 +31,8 @@ def _montar(nome: str, model, tools: list | None = None, response_format=None):
         # Fatos e conversas chegam pré-carregados (runner) pelo `context=` do ainvoke; sem
         # contexto (agente chamado solto), o prompt sai sem essas seções.
         contexto = request.runtime.context or ContextoPrompt()
-        return load_prompt(nome, fatos=contexto.fatos, conversas=contexto.conversas)
+        fatos = contexto.fatos if nome in _AGENTES_COM_PERFIL else None
+        return load_prompt(nome, fatos=fatos, conversas=contexto.conversas)
 
     return create_agent(
         model=model,

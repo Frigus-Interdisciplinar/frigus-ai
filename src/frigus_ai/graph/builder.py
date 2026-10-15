@@ -1,5 +1,6 @@
 import asyncio
-from typing import get_args
+from collections.abc import Mapping
+from typing import Final
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
@@ -22,6 +23,7 @@ from frigus_ai.graph.names import (
     RECEITAS,
     ROTEADOR,
     VISAO,
+    NodeLiteral,
 )
 from frigus_ai.graph.nodes import (
     no_assessor,
@@ -36,12 +38,12 @@ from frigus_ai.graph.nodes import (
     no_visao,
 )
 from frigus_ai.graph.state import (
-    AssessorUpdate,
     AsyncNode,
+    AsyncNodeComContexto,
+    ContextoPrompt,
     EntradaGrafo,
     EspecialistaUpdate,
     Estado,
-    FaqUpdate,
     GuardrailEntradaUpdate,
     GuardrailSaidaUpdate,
     JuizUpdate,
@@ -50,7 +52,6 @@ from frigus_ai.graph.state import (
     Route,
     RouterUpdate,
     SaidaGrafo,
-    VisaoUpdate,
 )
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.mongo import mongo
@@ -60,7 +61,7 @@ logger = Logging.get_logger(__name__)
 
 _PING_TIMEOUT_S = 5
 
-type GrafoFrigus = CompiledStateGraph[Estado, None, EntradaGrafo, SaidaGrafo]
+type GrafoFrigus = CompiledStateGraph[Estado, ContextoPrompt, EntradaGrafo, SaidaGrafo]
 
 
 def decidir_apos_guardrail_entrada(estado: Estado) -> str:
@@ -73,50 +74,56 @@ def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     return ROTEADOR
 
 
-_ESPECIALISTAS = frozenset(get_args(RotaEspecialista))
+# Domínio que o roteador escolhe -> nó registrado no grafo.
+NO_POR_DOMINIO: Final[Mapping[RotaEspecialista, NodeLiteral]] = {
+    "estoque":    ESTOQUE,
+    "compras":    COMPRAS,
+    "receitas":   RECEITAS,
+    "faq":        FAQ,
+    "financeiro": FINANCEIRO,
+    "assessor":   A2A_ASSESSOR,
+}
 
 
-def decidir_especialista(estado: Estado) -> str:
-    rota = estado.get("rota", Route.FIM)
-    if rota not in _ESPECIALISTAS:
-        return Route.FIM
-    return rota
+def decidir_especialistas(estado: Estado) -> list[str] | str:
+    """Os nós dos domínios escolhidos, que rodam em paralelo; nenhum = o roteador já respondeu."""
+
+    nos = [NO_POR_DOMINIO[dominio] for dominio in estado.get("especialistas", [])]
+    return nos or END
+
+
+def decidir_apos_orquestrador(estado: Estado) -> str:
+    """Sem nenhum especialista com dado (ex.: Assessor fora do ar) não há o que o Juiz conferir:
+    ele só reprovaria o aviso de erro, e cada retry pagaria de novo o timeout de rede."""
+
+    tem_dados = any(r["dados"] for r in estado["dados_especialistas"])
+    return JUIZ if tem_dados else GUARDRAIL_SAIDA
 
 
 def decidir_apos_juiz(estado: Estado) -> str:
-    """
-    Se o Juiz reprovou e ainda há tentativas disponíveis (feedback_juiz preenchido
-    por no_juiz), volta para o MESMO especialista que originou a rota. Caso
-    contrário (aprovado, ou tentativas esgotadas), segue para o Guardrail de Saída.
-    """
+    """Juiz reprovou e ainda há tentativas: o orquestrador reescreve com o feedback (repetir os
+    especialistas regravaria estoque e lista de compras); senão segue pro guardrail de saída."""
 
-    if estado.get("feedback_juiz"):
-        return estado.get("rota", GUARDRAIL_SAIDA)
-    return GUARDRAIL_SAIDA
-
-
-def decidir_apos_assessor(estado: Estado) -> str:
-    """Assessor fora do ar devolve `dados_especialista` vazio: sem dado pra checar, o Juiz só
-    reprovaria a mensagem de erro e cada retry pagaria de novo o timeout de rede."""
-
-    return JUIZ if estado.get("dados_especialista") else GUARDRAIL_SAIDA
+    return ORQUESTRADOR if estado.get("feedback_juiz") else GUARDRAIL_SAIDA
 
 
 def _construir_grafo() -> StateGraph:
-    guardrail_entrada: AsyncNode[GuardrailEntradaUpdate] = no_guardrail_entrada
-    roteador:          AsyncNode[RouterUpdate]           = no_roteador
-    estoque:           AsyncNode[EspecialistaUpdate]     = no_estoque
-    compras:           AsyncNode[EspecialistaUpdate]     = no_compras
-    financeiro:        AsyncNode[EspecialistaUpdate]     = no_financeiro
-    receitas:          AsyncNode[FaqUpdate]              = no_receitas
-    faq:               AsyncNode[FaqUpdate]              = no_faq
-    assessor:          AsyncNode[AssessorUpdate]         = no_assessor
-    visao:             AsyncNode[VisaoUpdate]            = no_visao
-    orquestrador:      AsyncNode[OrquestradorUpdate]     = no_orquestrador
-    juiz:              AsyncNode[JuizUpdate]             = no_juiz
-    guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]   = no_guardrail_saida
+    guardrail_entrada: AsyncNode[GuardrailEntradaUpdate]    = no_guardrail_entrada
+    roteador:          AsyncNodeComContexto[RouterUpdate]       = no_roteador
+    estoque:           AsyncNodeComContexto[EspecialistaUpdate] = no_estoque
+    compras:           AsyncNodeComContexto[EspecialistaUpdate] = no_compras
+    financeiro:        AsyncNodeComContexto[EspecialistaUpdate] = no_financeiro
+    receitas:          AsyncNodeComContexto[EspecialistaUpdate] = no_receitas
+    faq:               AsyncNodeComContexto[EspecialistaUpdate] = no_faq
+    assessor:          AsyncNodeComContexto[EspecialistaUpdate] = no_assessor
+    visao:             AsyncNodeComContexto[EspecialistaUpdate] = no_visao
+    orquestrador:      AsyncNodeComContexto[OrquestradorUpdate] = no_orquestrador
+    juiz:              AsyncNode[JuizUpdate]                    = no_juiz
+    guardrail_saida:   AsyncNode[GuardrailSaidaUpdate]          = no_guardrail_saida
 
-    grafo = StateGraph(Estado, input_schema=EntradaGrafo, output_schema=SaidaGrafo)
+    grafo = StateGraph(
+        Estado, context_schema=ContextoPrompt, input_schema=EntradaGrafo, output_schema=SaidaGrafo
+    )
 
     grafo.add_node(GUARDRAIL_ENTRADA, guardrail_entrada)
     grafo.add_node(ROTEADOR,          roteador)
@@ -143,52 +150,26 @@ def _construir_grafo() -> StateGraph:
         },
     )
 
+    # Vários domínios -> vários nós na mesma etapa; o orquestrador roda uma vez, depois de todos.
     grafo.add_conditional_edges(
         source   = ROTEADOR,
-        path     = decidir_especialista,
-        path_map = {
-            Route.ESTOQUE:    ESTOQUE,
-            Route.COMPRAS:    COMPRAS,
-            Route.RECEITAS:   RECEITAS,
-            Route.FAQ:        FAQ,
-            Route.FINANCEIRO: FINANCEIRO,
-            Route.ASSESSOR:   A2A_ASSESSOR,
-            Route.FIM:        END,
-        },
+        path     = decidir_especialistas,
+        path_map = {**{no: no for no in NO_POR_DOMINIO.values()}, END: END},
     )
 
-    # Estoque/Compras/Financeiro/Visão produzem JSON estruturado -> Orquestrador formata em linguagem natural
-    grafo.add_edge(ESTOQUE,      ORQUESTRADOR)
-    grafo.add_edge(COMPRAS,      ORQUESTRADOR)
-    grafo.add_edge(FINANCEIRO,   ORQUESTRADOR)
-    grafo.add_edge(VISAO,        ORQUESTRADOR)
-    grafo.add_edge(ORQUESTRADOR, JUIZ)
+    for especialista in (*NO_POR_DOMINIO.values(), VISAO):
+        grafo.add_edge(especialista, ORQUESTRADOR)
 
-    # Receitas/FAQ já respondem em linguagem natural -> vão direto para o Juiz
-    grafo.add_edge(RECEITAS, JUIZ)
-    grafo.add_edge(FAQ,      JUIZ)
-
-    # Assessor (A2A) também responde em linguagem natural; fora do ar, pula o Juiz
     grafo.add_conditional_edges(
-        source   = A2A_ASSESSOR,
-        path     = decidir_apos_assessor,
+        source   = ORQUESTRADOR,
+        path     = decidir_apos_orquestrador,
         path_map = {JUIZ: JUIZ, GUARDRAIL_SAIDA: GUARDRAIL_SAIDA},
     )
 
-    # Juiz: reprovado + tentativas disponíveis -> volta pro especialista de origem; caso contrário -> Guardrail de Saída
     grafo.add_conditional_edges(
         source   = JUIZ,
         path     = decidir_apos_juiz,
-        path_map = {
-            Route.ESTOQUE:    ESTOQUE,
-            Route.COMPRAS:    COMPRAS,
-            Route.RECEITAS:   RECEITAS,
-            Route.FAQ:        FAQ,
-            Route.FINANCEIRO: FINANCEIRO,
-            Route.ASSESSOR:   A2A_ASSESSOR,
-            Route.VISAO:      VISAO,
-            GUARDRAIL_SAIDA:  GUARDRAIL_SAIDA,
-        },
+        path_map = {ORQUESTRADOR: ORQUESTRADOR, GUARDRAIL_SAIDA: GUARDRAIL_SAIDA},
     )
 
     grafo.add_edge(GUARDRAIL_SAIDA, END)
@@ -198,10 +179,8 @@ def _construir_grafo() -> StateGraph:
 
 async def _criar_checkpointer() -> BaseCheckpointSaver:
     """
-    O cliente do Mongo conecta de forma preguiçosa: sem o `ping`, o construtor do
-    `MongoDBSaver` passa com o banco fora do ar e o erro só estoura na primeira invocação.
-    Fallback pra `MemorySaver` só em `local`; em production uma queda silenciosa perderia os
-    checkpoints a cada restart sem ninguém saber — lá o boot falha alto.
+    Faz `ping` porque o cliente do Mongo conecta de forma preguiçosa. `MemorySaver` só em `local`;
+    em production o boot falha alto (cair em silêncio perderia os checkpoints a cada restart).
     """
 
     try:
@@ -220,13 +199,7 @@ async def _criar_checkpointer() -> BaseCheckpointSaver:
 
 
 class FluxoAgentes:
-    """
-    Compila o grafo + prepara o checkpointer uma vez por processo e reusa nas requests.
-
-    O `lock` cobre os pontos de entrada que chamam `get()` concorrentemente no primeiro uso
-    (lifespan, e qualquer chamada direta antes dele) — sem ele, duas chamadas concorrentes
-    abririam dois checkpointers MongoDB e compilariam o grafo duas vezes.
-    """
+    """Compila o grafo e prepara o checkpointer uma vez por processo; o `lock` evita duplicar no 1º uso concorrente."""
 
     def __init__(self) -> None:
         self._compilado: GrafoFrigus | None = None

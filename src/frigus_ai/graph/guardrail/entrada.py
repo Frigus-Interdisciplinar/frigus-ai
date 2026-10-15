@@ -1,4 +1,5 @@
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.types import Overwrite
 
 from frigus_ai.domain.privacy import anonimizar_entrada
 from frigus_ai.graph.guardrail.cache import (
@@ -131,6 +132,10 @@ async def no_guardrail_entrada(estado: Estado) -> GuardrailEntradaUpdate:
         mapa_pii=mapa_pii,
         messages=[*poda, HumanMessage(id=ultima_msg.id, content=texto_anonimizado)],
         mensagem_bloqueada=None, # limpa mensagem bloqueada de turnos anteriores
+        dados_especialistas=Overwrite([]),
+        tentativas_juiz=0,
+        feedback_juiz="",
+        pergunta_original=texto_anonimizado,
     )
 
 

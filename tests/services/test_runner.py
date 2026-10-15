@@ -10,8 +10,14 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from frigus_ai.domain.models import Fatos
+from frigus_ai.graph.state import ContextoPrompt
 from frigus_ai.repositories import chat_embeddings_repository
-from frigus_ai.schemas.execution import AnswerReady, NodeStarted, RunFinished
+from frigus_ai.schemas.execution import (
+    AnswerReady,
+    NodeStarted,
+    RouteSelected,
+    RunFinished,
+)
 from frigus_ai.services import runner
 from frigus_ai.services.user_service import user_service
 
@@ -32,13 +38,12 @@ async def test_contexto_traz_fatos_e_conversas_anteriores(monkeypatch):
 
     monkeypatch.setattr(user_service, "buscar_fatos", _buscar_fatos)
 
-    fatos, conversas = await runner._carregar_contexto("e o leite?", "chat-1", "u1", imagem_b64=None)
-    assert fatos == Fatos(alergias=["lactose"])
-    assert conversas == ["comprou leite semana passada"]
+    contexto = await runner._carregar_contexto("e o leite?", "chat-1", "u1", imagem_b64=None)
+    assert contexto == ContextoPrompt(fatos=Fatos(alergias=["lactose"]), conversas=("comprou leite semana passada",))
 
     # Turno com foto não busca conversas.
-    _, conversas = await runner._carregar_contexto("foto", "chat-1", "u1", imagem_b64="abc")
-    assert conversas == []
+    contexto = await runner._carregar_contexto("foto", "chat-1", "u1", imagem_b64="abc")
+    assert contexto.conversas == ()
 
 
 async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
@@ -47,17 +52,16 @@ async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
 
     monkeypatch.setattr(user_service, "buscar_fatos", _quebra)
 
-    fatos, conversas = await runner._carregar_contexto("oi", "chat-1", "u1", imagem_b64=None)
+    contexto = await runner._carregar_contexto("oi", "chat-1", "u1", imagem_b64=None)
 
-    assert fatos is None
-    assert conversas == ["comprou leite semana passada"]
+    assert contexto.fatos is None
+    assert contexto.conversas == ("comprou leite semana passada",)
 
 
-def test_estado_inicial_leva_fatos_como_dict_e_conversas_como_lista():
-    estado = runner._estado_inicial("oi", 1, fatos=Fatos(alergias=["lactose"]), conversas=("a",))
+def test_perfil_nao_vai_pro_estado_checkpointado():
+    """Perfil no estado sobrevivia no checkpoint: turno com a busca falhando reaproveitava o antigo."""
 
-    assert estado["fatos"]["alergias"] == ["lactose"]
-    assert estado["conversas_anteriores"] == ["a"]
+    assert set(runner._estado_inicial("oi", 1)) == {"messages", "stock_id"}
 
 
 class _FakeGrafo:
@@ -70,7 +74,7 @@ class _FakeGrafo:
     def __init__(self, updates):
         self._updates = updates
 
-    async def astream_events(self, estado, config, version):
+    async def astream_events(self, estado, config, version, context=None):
         for update in self._updates:
             for nome, output in update.items():
                 yield {"event": "on_chain_start", "name": nome, "data": {}}
@@ -120,7 +124,7 @@ def test_estado_inicial_com_imagem_inclui_a_chave():
 async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):
     _usar_grafo(monkeypatch, [
         {"guardrail_entrada_node": {"messages": [HumanMessage(content="oi")]}},
-        {"roteador_node": {"rota": "estoque"}},
+        {"roteador_node": {"especialistas": ["estoque"]}},
         {"estoque_node": {"resposta_especialista": "cru"}},
         {"guardrail_saida_node": {"messages": [AIMessage(content="resposta final")]}},
     ])
@@ -133,6 +137,17 @@ async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):
     ]
     assert AnswerReady(content="resposta final") in eventos
     assert isinstance(eventos[-1], RunFinished)
+
+
+async def test_stream_emite_uma_rota_por_dominio_escolhido(monkeypatch):
+    _usar_grafo(monkeypatch, [
+        {"roteador_node": {"especialistas": ["estoque", "receitas"]}},
+        {"guardrail_saida_node": {"messages": [AIMessage(content="ok")]}},
+    ])
+
+    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
+
+    assert [e.route for e in eventos if isinstance(e, RouteSelected)] == ["estoque", "receitas"]
 
 
 async def test_stream_usa_a_ultima_resposta_quando_o_grafo_para_antes_do_fim(monkeypatch):
@@ -149,7 +164,7 @@ async def test_stream_usa_a_ultima_resposta_quando_o_grafo_para_antes_do_fim(mon
 
 
 async def test_stream_sem_nenhuma_resposta_nao_devolve_answer_ready(monkeypatch):
-    _usar_grafo(monkeypatch, [{"roteador_node": {"rota": "fim"}}])
+    _usar_grafo(monkeypatch, [{"roteador_node": {"especialistas": []}}])
 
     eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
 

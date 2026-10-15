@@ -17,9 +17,8 @@ RECEITAS_TOOLS = [
         estoque_repo.query_stock, name="query_stock", args_schema=QueryStockArgs
     ),
     *spoonacular_repo.as_tools(),
-    # Preferências (Neo4j) moram no mesmo especialista de receitas: é quem já responde
-    # "o que eu posso comer" e "sou alérgico a X" é a mesma conversa de comida, não uma
-    # rota própria — ver .agents/notes/pending/memoria-fatos/arquivos.md.
+    # Traversal do grafo de receitas (Neo4j) filtrando pelas alergias do perfil (Mongo) —
+    # ver .agents/notes/pending/neo4j/arquivos.md.
     *preferencias_repo.as_tools(),
 ]
 FAQ_TOOLS = faq_repo.as_tools()

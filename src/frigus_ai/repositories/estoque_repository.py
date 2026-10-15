@@ -1,12 +1,8 @@
-"""
-Persistência crua do estoque: catálogo de produtos, itens no estoque do usuário,
-movimentações e descartes. Sem decisão de negócio nem tradução pra `Response` — isso
-fica em `graph/tools/estoque/repo.py` (a tool que o LLM chama).
+"""Persistência crua do estoque (catálogo, itens, movimentações, descartes), sem regra de negócio.
 
-Ao contrário de `financeiro`, aqui há escrita: cada método público é uma unidade de
-trabalho inteira sob um `@transacional`. Localizar o item e alterá-lo moram na MESMA
-transação de propósito — separar em duas chamadas abriria uma janela entre ler a
-quantidade atual e gravar a nova.
+Cada método público é uma unidade de trabalho sob `@transacional`: localizar e alterar o item
+ficam na mesma transação pra não abrir janela entre ler a quantidade e gravar a nova.
+A tool que o LLM chama é `graph/tools/estoque/repo.py`.
 """
 
 from datetime import date, datetime
@@ -73,11 +69,7 @@ class FiltrosEstoque(TypedDict):
 def _localizar(
     s: Session, stock_id: int, stock_product_id: int | None, product_name: str | None
 ) -> StockProduct:
-    """
-    Item por ID direto ou pelo nome do produto — no segundo caso, o mais próximo do
-    vencimento entre as ocorrências. Sempre preso ao `stock_id` do usuário, inclusive no
-    caminho por ID: sem isso um ID de outro estoque seria alcançável.
-    """
+    """Item por ID ou pelo nome do produto (o mais próximo do vencimento), sempre preso ao `stock_id`."""
 
     stmt = select(StockProduct).where(StockProduct.stock_id == stock_id)
 
@@ -144,11 +136,7 @@ def _produto_do_catalogo(s: Session, dados: ProdutoNovo) -> int:
 class _EstoquePostgresRepo(PostgresRepo):
     @transacional
     def adicionar_produto(self, s: Session, stock_id: int, dados: ProdutoNovo) -> tuple[int, int]:
-        """
-        Cria o produto no catálogo se ainda não existir e insere o item no estoque.
-        Item do mesmo produto com a MESMA validade soma quantidade em vez de duplicar
-        (ON CONFLICT ... DO UPDATE) — daí o RETURNING devolver id e quantidade finais.
-        """
+        """Cria o produto se não existir e insere o item; mesma validade soma quantidade (ON CONFLICT)."""
 
         product_id = _produto_do_catalogo(s, dados)
 
@@ -234,11 +222,9 @@ class _EstoquePostgresRepo(PostgresRepo):
         novo_valor: int | None,
     ) -> tuple[int, int]:
         """
-        Localiza, recalcula e grava o movimento correspondente numa transação só — quem
-        aplica a variação em `stock_products.quantity` é a trigger `trg_stock_movements_apply`
-        do Supabase, então o app NÃO mexe na quantidade (senão aplicaria duas vezes).
-        `novo_valor` vira `Ajuste` (com sinal, como a trigger espera); `delta` vira
-        `Entrada`/`Saída` conforme o sinal. Devolve (id do item, quantidade final).
+        Localiza, recalcula e grava o movimento numa transação só. A trigger
+        `trg_stock_movements_apply` do Supabase aplica a variação em `quantity` (o app NÃO mexe).
+        `novo_valor` vira `Ajuste`; `delta` vira `Entrada`/`Saída`. Devolve (id do item, quantidade final).
         """
 
         item = _localizar(s, stock_id, stock_product_id, product_name)
@@ -273,13 +259,9 @@ class _EstoquePostgresRepo(PostgresRepo):
         reason: str,
     ) -> DescarteInfo:
         """
-        Grava o descarte e uma `Saída` do volume inteiro — a trigger de movimento zera o item. `discard` não tem coluna de quantidade, então o
-        volume perdido vai em `stock_movements` com a MESMA data do descarte — é por
-        (stock_product_id, date) que `repositories/financeiro_repository.py` casa os dois
-        pra calcular o valor desperdiçado. Mudar essa data quebra o financeiro.
-
-        Devolve também nome do produto e quantidade perdida — `graph/tools/estoque/repo.py`
-        usa isso pra alimentar `infra/redis/ranking.py` (produto mais desperdiçado).
+        Grava o descarte e uma `Saída` do volume inteiro (a trigger zera o item), com a MESMA data:
+        o financeiro casa descarte e movimento por (stock_product_id, date). Devolve também nome e
+        quantidade perdidos, que alimentam o ranking de desperdício no Redis.
         """
 
         item = _localizar(s, stock_id, stock_product_id, product_name)

@@ -1,5 +1,3 @@
-from langchain_core.messages import AIMessage
-
 from frigus_ai.graph.agents import faq_app
 from frigus_ai.graph.names import FAQ
 from frigus_ai.graph.nodes.contexto import (
@@ -16,13 +14,9 @@ async def no_faq(estado: Estado) -> FaqUpdate:
     resposta = await responder(
         faq_app, mensagens_do_turno(estado, apenas_pergunta=True), contexto_do_estado(estado)
     )
+from frigus_ai.graph.nodes.especialista import especialista_com_agente
 
-    return FaqUpdate(
-        agentes_chamados=[FAQ],
-        messages=[AIMessage(content=resposta)],
-        resposta_especialista=resposta,
-        dados_especialista=resposta,
-    )
+no_faq = especialista_com_agente(FAQ, faq_app)
 
 
 __all__ = ["no_faq"]
