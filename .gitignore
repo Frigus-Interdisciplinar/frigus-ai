@@ -38,3 +38,10 @@ htmlcov/
 # web (Vite/React)
 node_modules/
 *.tsbuildinfo
+
+# Credenciais do Firebase (service account) — nunca commitar
+*firebase-adminsdk*.json
+*service-account*.json
+serviceAccount*.json
+google-services.json
+GoogleService-Info.plist
