@@ -42,7 +42,6 @@ diretamente ao usuário.
 
 ---
 
-=======
 ## Arquitetura
 
 Visão de alto nível: quem chama, o que a API expõe, o grafo de agentes e onde cada dado mora.
@@ -66,14 +65,13 @@ flowchart TB
 
     subgraph GRAFO["Grafo LangGraph"]
         GE["Guardrail de entrada"] --> RT["Roteador"]
-        RT --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro"]
-        RT --> ASS["Assessor (agente remoto)"]
+        RT -- "1 ou mais, em paralelo" --> ESP["Especialistas: estoque, compras,<br/>receitas, faq, financeiro, assessor"]
+        RT -. "resposta direta" .-> FIM(["fim"])
         GE -. "foto" .-> VIS["Visão"]
-        ESP --> ORQ["Orquestrador"]
-        ORQ --> JZ["Juiz (até 2 retentativas)"]
-        ESP --> JZ
+        ESP --> ORQ["Orquestrador<br/>(junta os resultados)"]
         VIS --> ORQ
-        ASS --> JZ
+        ORQ --> JZ["Juiz"]
+        JZ -- "reprovou: até 2 retentativas" --> ORQ
         JZ --> GS["Guardrail de saída"]
     end
 
@@ -109,7 +107,6 @@ flowchart TB
     OPS -. "scrape" .-> PROM
     GRAFO -. "traces" .-> LS
 ```
-
 
 ## Grafo de agentes
 
