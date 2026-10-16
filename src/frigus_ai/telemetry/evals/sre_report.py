@@ -14,10 +14,12 @@ Definições assumidas (documentar aqui, não espalhar pelo código):
   ela parada; o p95 de `frigus_graph_duration_seconds` ≤ `SLO_LATENCIA_P95_S` é `histogram_quantile`.
 - **Preço por token**: `PRECOS_POR_1M_TOKENS` em `telemetry/metrics_callback.py` — a mesma
   tabela que alimenta `frigus_llm_cost_usd_total` em runtime.
-- **Volume dos cenários**: sem dado real de uso, a estimativa multiplica
-  `MENSAGENS_POR_USUARIO_SEMANA` (placeholder) pelo custo médio por turno observado.
-- **Valor por resolução** (ROI): `VALOR_POR_RESOLUCAO_USD` é placeholder — não há dado
-  de negócio real (ex.: valor do desperdício evitado por resposta) ainda.
+- **Volume por usuário**: sem dado real de uso, `MENSAGENS_POR_USUARIO_SEMANA` = 20 (~3 por
+  dia: uma consulta e uma ação), multiplicado pelo custo médio por turno observado.
+- **Valor por resolução** (ROI): desperdício evitado por resposta. Uma família brasileira
+  desperdiça ~R$ 1.002/ano em alimentos (Embrapa/FGV, 2018, sem correção pela inflação, ou
+  seja, conservador); supõe-se que o Frigus evite 20% disso, rateado pelas 20 mensagens da
+  semana, convertido a R$ 5,50/US$. As três premissas (20%, câmbio e volume) são estimativas.
 
 Rodar: `python -m frigus_ai.telemetry.evals.sre_report` (usa `settings.observability.prometheus_url`; só
 funciona com o Prometheus do `docker-compose.yml` no ar). `--demo` roda o self-check
@@ -35,8 +37,9 @@ from frigus_ai.settings.llm import Model
 from frigus_ai.telemetry.metrics import SLO_LATENCIA_P95_S, SLO_TAXA_ERRO
 from frigus_ai.telemetry.metrics_callback import custo_usd
 
-MENSAGENS_POR_USUARIO_SEMANA = 20  # placeholder — sem dado real de uso ainda
-VALOR_POR_RESOLUCAO_USD = 0.0  # placeholder — sem dado de negócio real ainda
+MENSAGENS_POR_USUARIO_SEMANA = 20  # estimativa, ver docstring
+# R$ 1.002/ano de desperdício por família (Embrapa/FGV) x 20% evitado / 52 semanas / mensagens / câmbio
+VALOR_POR_RESOLUCAO_USD = 1002 * 0.20 / 52 / MENSAGENS_POR_USUARIO_SEMANA / 5.50  # ≈ US$ 0,035
 JANELA = "7d"
 
 

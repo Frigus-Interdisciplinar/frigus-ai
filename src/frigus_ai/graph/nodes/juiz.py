@@ -13,13 +13,14 @@ from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 
-# Quantas vezes o Juiz manda o especialista tentar de novo antes de deixar passar
+# Quantas vezes o Juiz manda o orquestrador reescrever antes de deixar passar
 # mesmo reprovado (mesmo princípio do guardrail de saída: nunca trava o usuário). Falha na
-# chamada ou saída fora do schema também aprova.
+# chamada ou saída fora do schema também deixa passar, mas como INDISPONIVEL: não é aprovação.
 MAX_TENTATIVAS = settings.llm.max_tentativas_juiz
 
 APROVADO = "APROVADO"
 REPROVADO = "REPROVADO"
+INDISPONIVEL = "INDISPONIVEL"
 
 
 class VereditoJuiz(BaseModel):
@@ -56,7 +57,7 @@ def _logar(veredito: str, justificativa: str, tentativas: int, repetir: bool) ->
         logger.warning(
             "Juiz REPROVOU mas as tentativas se esgotaram — seguindo mesmo assim: %s", justificativa
         )
-    else:
+    elif veredito == APROVADO:
         logger.info("Juiz APROVOU: %s", justificativa)
 
 
@@ -70,8 +71,8 @@ async def no_juiz(estado: Estado) -> JuizUpdate:
             raise TypeError(f"esperava VereditoJuiz, veio {type(avaliacao).__name__}")
         veredito, justificativa = avaliacao.veredito, avaliacao.justificativa.strip()
     except Exception as e:
-        logger.warning("Falha ao invocar Juiz (%s) — aprovando por segurança: %s", type(e).__name__, e)
-        veredito, justificativa = APROVADO, "Aprovado por fallback após falha na avaliação"
+        logger.warning("Falha ao invocar Juiz (%s) — resposta segue sem avaliação: %s", type(e).__name__, e)
+        veredito, justificativa = INDISPONIVEL, "Juiz indisponível: resposta entregue sem avaliação"
 
     repetir = veredito == REPROVADO and tentativas < MAX_TENTATIVAS
 

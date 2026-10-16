@@ -94,9 +94,25 @@ async def responder(
 ) -> str:
     """Roda um agente compilado e devolve o texto da última mensagem que ele produziu."""
 
-    saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
+    resposta, _ = await responder_com_evidencias(app, mensagens, contexto)
 
-    return _texto(saida["messages"][-1].content)
+    return resposta
+
+
+async def responder_com_evidencias(
+    app: Runnable[Any, Any], mensagens: Sequence[AnyMessage], contexto: ContextoPrompt | None = None
+) -> tuple[str, str]:
+    """
+    Como `responder`, mais o retorno das tools desta execução (vazio se não chamou nenhuma) — é o
+    que o Juiz confere. `messages` do estado só tem Human/AI, então todo `ToolMessage` é do turno.
+    """
+
+    saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
+    evidencias = "\n\n".join(
+        f"{m.name or 'tool'}:\n{m.content}" for m in saida["messages"] if isinstance(m, ToolMessage)
+    )
+
+    return _texto(saida["messages"][-1].content), evidencias
 
 
 async def perguntar(llm: BaseChatModel, entrada: str | Sequence[AnyMessage]) -> str:
@@ -114,5 +130,6 @@ __all__ = [
     "perguntar",
     "podar_historico",
     "responder",
+    "responder_com_evidencias",
     "revisao_do_juiz",
 ]
