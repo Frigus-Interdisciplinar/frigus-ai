@@ -15,7 +15,7 @@ receita) estoura a cota rápido. Por isso a tabela de lookup Spoonacular↔estoq
 de novo pro mesmo ingrediente.
 
 Antes de subir `SPOONACULAR_API_KEY` real: confirmar se o tier gratuito cobre o uso do time (mesma
-cautela já aplicada em Observabilidade/Infisical no TODO.md — a disciplina não paga API paga).
+cautela já aplicada nas APIs de LLM — a disciplina não paga API paga).
 
 ## Endpoints que vamos usar
 
@@ -106,7 +106,7 @@ Resposta: array com `id, title, imageType, readyInMinutes, servings, sourceUrl`.
 Ainda não existe (`tools/spoonacular/` não foi criado). Usar `httpx` (ver
 [other-tools.md](other-tools.md) — ainda não é dependência do projeto, adicionar com `uv add httpx`
 junto da primeira tool que fizer a chamada real). Mesmo padrão de `connection.py` lazy que
-`tools/mongo/` e `tools/postgres/` já seguem — client HTTP configurado uma vez, não por chamada.
+`infra/mongo/` e `infra/postgres/` já seguem — client HTTP configurado uma vez, não por chamada.
 
 ---
 

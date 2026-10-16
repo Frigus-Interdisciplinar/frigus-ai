@@ -2,7 +2,25 @@
 
 > 2026-10-11: cenários, SRE e sessões rodados contra a infra real — resultados em `observability/RELATORIO.md`.
 
-Conferido contra o código em `docs/campos-mensagem` (suíte: 311 passed; a única falha, `test_metrics_aberto_sem_token`, vem de `API_KEYS__METRICS_TOKEN` preenchido no `.env` local) em 2026-10-08.
+## Pendências de configuração (não são código)
+
+- **Firebase:** o backend só precisa do ID do projeto (`API_KEYS__FIREBASE_PROJECT_ID`, que sai do
+  `google-services.json`), sem service account. Já configurado no `.env` local; falta cadastrar a
+  variável no deploy. Token inválido, vazio ou com assinatura falsa já dá 401 (testado pela API); o
+  caminho feliz (token real do app Frigus, com email verificado) ainda não foi exercitado. O painel
+  `web/` roda sem auth.
+- **Vercel AI Gateway:** a chave está no `.env`, mas toda chamada volta 403 até haver cartão
+  cadastrado na conta Vercel (exigido até pros créditos gratuitos). Sem isso, Luna e JeV ficam inativos.
+- **SLOs:** falham no plano gratuito dos LLMs (429); revalidar com o gateway ativo ou plano pago.
+- **OpenRouter:** o modelo gratuito `qwen3.8-27b:free` saiu do ar (404); trocar ou tirar da cadeia.
+- **Neo4j (extra):** a instância Aura do `.env` não existe mais.
+- **Dependência sem uso:** `a2a-sdk[fastapi]` segue no `pyproject.toml`, mas o A2A é o contrato manual
+  (`api/routes/a2a.py`); candidata a remoção.
+- **Deploy:** renomear no Infisical/FastAPI Cloud as variáveis de provider (`LLM__GEMINI__API_KEY`,
+  `LLM__GROQ__API_KEY`, `LLM__OPENROUTER__API_KEY`, `LLM__GATEWAY__API_KEY`, `LLM__CLAUDE__API_KEY`;
+  timeouts e tentativas no mesmo padrão `LLM__<PROVIDER>__TIMEOUT_S`). Nome antigo é ignorado sem erro.
+
+Conferido contra o código em `docs/campos-mensagem` (suíte: 311 passed) em 2026-10-08; suíte atual: 351 passed (2026-10-12).
 Antes de reportar item como pendente, confira o código: este checklist envelhece.
 
 ## Placar
@@ -20,7 +38,7 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding contra o retorno das tools, até 2 retentativas; falha vira `INDISPONIVEL` |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
-| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 16 painéis (inclui memória, chamadas externas, bloqueios do guard) |
+| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 30 painéis (inclui memória, chamadas externas, bloqueios do guard e o JeV) |
 | SRE: custo 100 e 1000 usuários/semana | ✅ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
 | SRE: SLO/SLI e alertas | ✅ | SLO p95 ≤ 8s e erro ≤ 5% (`telemetry/metrics.py`, exportado em `frigus_slo_target`), `outcome="blocked"` separado de erro, regras/alertas em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na web. Sem SLA nem Alertmanager (decisão: não há contrato nem plantão) |
 | SRE: índice de erros | ✅ | SLI de erro gravado/alertado no Prometheus e no `sre_report.py` (com orçamento de erro); falta validar contra scrape real |

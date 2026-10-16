@@ -63,7 +63,7 @@ def get_embeddings(task_type: str) -> GoogleGenerativeAIEmbeddings:
 
     return GoogleGenerativeAIEmbeddings(
         model=settings.llm.embedding_model,
-        google_api_key=settings.llm.gemini_api_key,
+        google_api_key=settings.llm.gemini.api_key,
         task_type=task_type,
     )
 

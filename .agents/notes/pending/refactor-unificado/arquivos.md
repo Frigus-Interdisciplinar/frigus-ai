@@ -16,8 +16,8 @@ Branch de trabalho: `fix/hardening-api-fase1`.
 | 36 settings agrupado | feito | `settings/` |
 | 3.1 código morto (`graph/llm.py`, `Repository`, `ServiceError`) | feito | — |
 | 3.2 / 3.3 `domain/models.py`, `domain/types.py`, `domain/identifiers.py` | feito | `domain/` |
-| 2.1–2.4 `models.py` dividido | feito (sem `LLMSettings` aninhada, `build_llm` lê o settings global) | `settings/llm.py`, `infra/llm/` |
-| 2.2 limites do grafo no settings | feito, variáveis planas `MAX_HISTORICO_MENSAGENS` e `MAX_TENTATIVAS_JUIZ` | `settings.py` |
+| 2.1–2.4 `models.py` dividido | feito; cada provider é um bloco aninhado em `LLMSettings` (`GeminiSettings`, `GroqSettings`...) e `build_llm` lê o bloco do provider | `settings/llm.py`, `infra/llm/` |
+| 2.2 limites do grafo no settings | feito: `LLM__MAX_HISTORICO_MENSAGENS` e `LLM__MAX_REESCRITAS_JUIZ` | `settings.py` |
 | 2.5 LLMs lazy | descartado por ora (criar cliente não faz rede; 6 consumidores mudariam) | — |
 | Fase 4, Fase 5, restante da Fase 3 | pendente | — |
 
@@ -48,7 +48,7 @@ outras mudanças. Substitui a `LLMSettings` solta do item 2.2 (vira o grupo `llm
 | `api` | CORS, reload, host/port, prefixo, limites de payload, rate limit | `API_RELOAD`, `API_CORS_ORIGINS`, `API_KEY_AUTH_ENABLED` |
 | `database` | Postgres, Mongo, Redis, Neo4j, Qdrant (URLs, pool, timeout) | `POSTGRES_URI`, `MONGODB_URI`, `REDIS_URL`, `NEO4J_URI`, `QDRANT_*` |
 | `api_keys` | tokens/segredos de autenticação e keys de serviços externos | `SIGNUP_SECRET`, `METRICS_TOKEN`, keys de provider |
-| `llm` | keys de provider, modelo padrão, temperaturas, limites do grafo | `*_API_KEY`, `MAX_HISTORICO_MENSAGENS`, `MAX_TENTATIVAS_JUIZ` |
+| `llm` | keys de provider, modelo padrão, temperaturas, limites do grafo | `GROQ__API_KEY`, `MAX_HISTORICO_MENSAGENS`, `MAX_REESCRITAS_JUIZ` |
 | `observability` | LangSmith, Prometheus, nível de log | `LANGSMITH_*`, `PROMETHEUS_URL` |
 | `runtime` | `environment` (`local`/`production`), debug | `ENVIRONMENT` |
 
@@ -63,7 +63,7 @@ DATABASE__POSTGRES_URI=postgresql+psycopg2://...
 DATABASE__REDIS_URL=redis://...
 API_KEYS__SIGNUP_SECRET=...
 API__CORS_ORIGINS=["https://app.exemplo.com"]
-LLM__GEMINI_API_KEY=...
+LLM__GEMINI__API_KEY=...
 LLM__MAX_HISTORICO_MENSAGENS=21
 ```
 

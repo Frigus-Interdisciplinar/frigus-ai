@@ -90,6 +90,7 @@ services:
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - ./observability/prometheus/metrics_token:/etc/prometheus/metrics_token:ro
       - frigus_prometheus_data:/prometheus
 
   grafana:

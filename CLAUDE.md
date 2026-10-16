@@ -18,5 +18,5 @@ Claude Code; não duplique conteúdo do AGENTS.md aqui.
   o client do Spoonacular, confira `.agents/skills/<lib>.md` — são pegadinhas reais já encontradas
   neste repo ou no assessor-ai (ver seção "Skills por biblioteca" do AGENTS.md).
 - **API (FastAPI/Flask) fica neste mesmo repositório** — decidido, sem repo separado.
-- Não rodar `docker stop`/`docker start` fora do fluxo de `config/docker.py` sem avisar o usuário —
+- Não rodar `docker stop`/`docker start` fora do fluxo de `scripts/run.sh` sem avisar o usuário —
   os containers Postgres/Mongo podem estar compartilhados com outras execuções locais.

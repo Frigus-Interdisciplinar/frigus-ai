@@ -4,10 +4,8 @@ from frigus_ai.infra.base import Connector
 from frigus_ai.settings import settings
 from redis import Redis
 
-# decode_responses=True faz o client devolver str, não bytes — `Redis[str]` nas
-# anotações deixa isso explícito pro type checker (senão .get() aparece como
-# bytes | str | None). `from __future__ import annotations` porque a classe `Redis`
-# instalada não é subscritável em runtime — só nas anotações, que ficam como string.
+# `Redis[str]` porque `decode_responses=True` devolve str; o `__future__` existe porque `Redis`
+# não é subscritável em runtime.
 
 
 class RedisConn(Connector[Redis]):
@@ -16,10 +14,8 @@ class RedisConn(Connector[Redis]):
 
     def connect(self) -> Redis[str]:
         if self._client is None:
-            # Timeouts explícitos: o default do redis-py é esperar o TCP do SO e ainda
-            # repetir com backoff — medido em ~4s POR chamada com o Redis fora do ar.
-            # Redis aqui só serve cache e rate limit, nada que justifique segurar o
-            # request: melhor falhar rápido e seguir sem cache.
+            # Sem timeout, o redis-py espera o TCP do SO e repete com backoff (~4s por chamada com
+            # o Redis fora). Ele só serve cache e rate limit: melhor falhar rápido.
             self._client = Redis.from_url(
                 settings.database.redis_url,
                 decode_responses=True,

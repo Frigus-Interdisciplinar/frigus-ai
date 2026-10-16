@@ -1,6 +1,6 @@
 """
 Ponto de entrada da configuração: um único `Settings` com os grupos de `settings/*.py`. No .env o
-grupo vira prefixo com `__`: `DATABASE__POSTGRES_URI`, `LLM__GROQ_API_KEY`, `API_KEYS__SIGNUP_SECRET`.
+grupo vira prefixo com `__`: `DATABASE__POSTGRES_URI`, `LLM__GROQ__API_KEY`, `API_KEYS__SIGNUP_SECRET`.
 """
 
 import os

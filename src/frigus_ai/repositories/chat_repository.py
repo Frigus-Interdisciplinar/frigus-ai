@@ -31,9 +31,16 @@ class ChatDocument(TypedDict):
     user_id: str
     messages: list[dict]
     resume: str
-    resumido_ate: int  # nº de mensagens já cobertas pelo `resume`; ausente em doc antigo = 0
-    resume_relevante: bool  # decide se o `resume` vai pro Qdrant; ausente em doc antigo
-    indexado_ate: int  # `resumido_ate` que já está no Qdrant; < resumido_ate = embedding pendente
+
+    # Quantas mensagens o `resume` já cobre (ausente em doc antigo = 0).
+    resumido_ate: int
+
+    # Se o `resume` vai pro Qdrant.
+    resume_relevante: bool
+
+    # `resumido_ate` que já está no Qdrant; menor que ele = embedding pendente.
+    indexado_ate: int
+
     created_at: datetime
     updated_at: datetime
 
@@ -284,7 +291,6 @@ def _buscar_documento_completo(session_id: str, user_id: str) -> ChatDocument | 
     return _chat_repository._buscar_documento_completo(session_id, user_id)
 
 
-# --- API pública ------------------------------------------------------------
 # Só `buscar_historico`/`salvar_mensagens` levam @traceable + redação de PII (carregam conversa).
 
 async def criar_chat(session_id: str, user_id: str) -> None:

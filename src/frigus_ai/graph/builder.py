@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Mapping
-from typing import Final
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
@@ -74,8 +73,7 @@ def decidir_apos_guardrail_entrada(estado: Estado) -> str:
     return ROTEADOR
 
 
-# Domínio que o roteador escolhe -> nó registrado no grafo.
-NO_POR_DOMINIO: Final[Mapping[RotaEspecialista, NodeLiteral]] = {
+NO_POR_DOMINIO: Mapping[RotaEspecialista, NodeLiteral] = {
     "estoque":    ESTOQUE,
     "compras":    COMPRAS,
     "receitas":   RECEITAS,
@@ -101,7 +99,7 @@ def decidir_apos_orquestrador(estado: Estado) -> str:
 
 
 def decidir_apos_juiz(estado: Estado) -> str:
-    """Juiz reprovou e ainda há tentativas: o orquestrador reescreve com o feedback (repetir os
+    """Juiz reprovou e ainda pode pedir reescrita: o orquestrador reescreve com o feedback (repetir os
     especialistas regravaria estoque e lista de compras); senão segue pro guardrail de saída."""
 
     return ORQUESTRADOR if estado.get("feedback_juiz") else GUARDRAIL_SAIDA
