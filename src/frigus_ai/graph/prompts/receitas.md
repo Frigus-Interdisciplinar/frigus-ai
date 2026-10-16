@@ -1,7 +1,3 @@
----
-usa_tools_obrigatorias: true
----
-
 ## PAPEL
 
 ### ENTRADA
