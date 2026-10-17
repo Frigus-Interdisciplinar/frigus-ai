@@ -1,6 +1,6 @@
 # Requisitos da disciplina — o que falta
 
-> 2026-10-11: cenários, SRE e sessões rodados contra a infra real — resultados em `observability/RELATORIO.md`.
+> 2026-10-16: cenários (7/7) e SRE refeitos com o gateway pago — resultados em `observability/RELATORIO.md`. Sessões validadas em 2026-10-11.
 
 ## Pendências de configuração (não são código)
 
@@ -9,9 +9,10 @@
   variável no deploy. Token inválido, vazio ou com assinatura falsa já dá 401 (testado pela API); o
   caminho feliz (token real do app Frigus, com email verificado) ainda não foi exercitado. O painel
   `web/` roda sem auth.
-- **Vercel AI Gateway:** a chave está no `.env`, mas toda chamada volta 403 até haver cartão
-  cadastrado na conta Vercel (exigido até pros créditos gratuitos). Sem isso, Luna e JeV ficam inativos.
-- **SLOs:** falham no plano gratuito dos LLMs (429); revalidar com o gateway ativo ou plano pago.
+- **Vercel AI Gateway:** ativo desde 2026-10-16 (US$ 15 de créditos comprados); `/decisions` responde 200.
+  Sem créditos volta 403 e Luna/JeV ficam inativos (o código cai nos LLMs normais).
+- **SLO de latência:** erro 0%, mas p95 ≈ 52s contra 8s; o turno de receitas leva ~58s. Falta medir onde
+  o tempo vai (histograma por node) e cortar chamadas ou paralelizar.
 - **OpenRouter:** o modelo gratuito `qwen3.8-27b:free` saiu do ar (404); trocar ou tirar da cadeia.
 - **Neo4j (extra):** a instância Aura do `.env` não existe mais.
 - **Dependência sem uso:** `a2a-sdk[fastapi]` segue no `pyproject.toml`, mas o A2A é o contrato manual
