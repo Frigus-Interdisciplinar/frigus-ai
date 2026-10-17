@@ -102,6 +102,11 @@ nome da pergunta.
 plano gratuito; só **comprar** créditos tira. Enquanto isso, JeV e Luna ficam inativos e o código cai
 nos LLMs normais.
 
+Com o cartão já cadastrado o erro muda para `RestrictedModelsError` ("Free tier users do not have
+access to this model"): é o mesmo bloqueio de plano. Confirmado em 2026-10-16: após comprar US$ 15 de
+créditos, `/decisions` passou a responder 200 (`typesafe-ai/jev`) e o grafo parou de logar
+"JeV falhou, usando o LLM". Pra testar a conta sem gastar, uma pergunta mínima de `choice` basta.
+
 ## Três tipos de pergunta, e nome único por requisição
 
 `predicate` (sim/não, devolve `probability`), `choice` (de 1 a 255 opções, devolve `choice`,

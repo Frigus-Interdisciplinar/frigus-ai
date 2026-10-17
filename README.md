@@ -253,6 +253,19 @@ Rotas de domínio (`chats`, `keys`, `stock`, `shopping-list`, `recipes`, `profil
 Erro não previsto devolve **500** com mensagem genérica; o traceback vai pro log, nunca pro corpo da
 resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
 
+### Usando o MCP de um cliente
+
+Transporte Streamable HTTP em `http://localhost:8000/mcp/` (barra final obrigatória), com a API key no
+header `X-API-Key` (emitida em `POST /keys`). Exemplo com o SDK oficial em
+[scripts/mcp_client.py](scripts/mcp_client.py):
+
+```bash
+FRIGUS_API_KEY=<sua-key> python scripts/mcp_client.py [url] [tool]
+```
+
+Em clientes como o Claude Desktop/Code, cadastre o servidor como HTTP com esse header
+(`claude mcp add --transport http frigus http://localhost:8000/mcp/ --header "X-API-Key: <sua-key>"`).
+
 ---
 
 ## Guardrails e Juiz
@@ -274,8 +287,8 @@ resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
 O que ainda falta, e por quê, está em `.agents/notes/pending/` (comece por `requisitos-disciplina/`).
 Em resumo:
 
-- **Configuração externa:** credencial do Firebase, cartão na conta Vercel (para o Luna e o JeV
-  responderem) e uma instância de Neo4j.
+- **Configuração externa:** credencial do Firebase e uma instância de Neo4j. O Luna e o JeV só
+  respondem com créditos comprados na Vercel (plano gratuito dá 403); já ativo na conta atual.
 - **JeV:** triagem do guardrail de saída, categoria e resolução de nome de produto
   (`.agents/notes/pending/jev/`).
 - **Neo4j:** sincronização automática Postgres → grafo de receitas.
