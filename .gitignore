@@ -41,7 +41,10 @@ node_modules/
 
 # Credenciais do Firebase (service account) — nunca commitar
 *firebase-adminsdk*.json
-*service-account*.json
-serviceAccount*.json
 google-services.json
 GoogleService-Info.plist
+*service-account*.json
+serviceAccount*.json
+
+# Token do /metrics pro Prometheus local (just obs)
+observability/prometheus/metrics_token

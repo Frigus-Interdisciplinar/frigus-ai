@@ -12,18 +12,20 @@ roda sem `.env` (local ou CI).
 
 import os
 
-os.environ.setdefault("LLM__GEMINI_API_KEY", "test-key")
-os.environ.setdefault("LLM__GROQ_API_KEY", "test-key")
+os.environ.setdefault("LLM__GEMINI__API_KEY", "test-key")
+os.environ.setdefault("LLM__GROQ__API_KEY", "test-key")
 
 # Vazio, não "test-key": código de produção trata provider/feature sem key como
 # opcional (`if not settings.X_API_KEY`) — um dummy não-vazio mudaria esse caminho
 # nos testes (ver test_build_llm_sem_api_key_devolve_none).
-os.environ.setdefault("LLM__ANTHROPIC_API_KEY", "")
-os.environ.setdefault("LLM__OPENROUTER_API_KEY", "")
+os.environ.setdefault("LLM__CLAUDE__API_KEY", "")
+os.environ.setdefault("LLM__OPENROUTER__API_KEY", "")
+os.environ.setdefault("LLM__GATEWAY__API_KEY", "")
 os.environ.setdefault("OBSERVABILITY__LANGSMITH_API_KEY", "")
 os.environ.setdefault("API_KEYS__SPOONACULAR_API_KEY", "")
 os.environ.setdefault("DATABASE__QDRANT_API_KEY", "")
 os.environ.setdefault("API_KEYS__SIGNUP_SECRET", "")
+os.environ.setdefault("API_KEYS__METRICS_TOKEN", "")
 
 os.environ.setdefault("DATABASE__POSTGRES_URI", "postgresql://test:test@localhost:5432/test")
 os.environ.setdefault("DATABASE__MONGODB_URI", "mongodb://localhost:27017")

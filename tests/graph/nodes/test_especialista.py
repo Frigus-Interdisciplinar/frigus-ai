@@ -16,7 +16,6 @@ async def test_texto_vira_resposta_e_dados_iguais():
     update = await no({}, None)
 
     assert update == {
-        "agentes_chamados": [ESTOQUE],
         "dados_especialistas": [{"agente": ESTOQUE, "resposta": "tem leite", "dados": "tem leite"}],
     }
     assert "messages" not in update

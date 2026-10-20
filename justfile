@@ -20,7 +20,8 @@ web:
 
 obs:
     @echo "Subindo Prometheus (9090) e Grafana (3000)"
-    docker compose --profile observability up -d prometheus grafana
+    {{python}} scripts/prometheus_token.py
+    docker compose --profile observability up -d --force-recreate prometheus grafana
 
 check:
     @echo "Running pre-commit checks"

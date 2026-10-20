@@ -47,7 +47,7 @@ llm_rapido       = build_llm(Model.GPT_OSS_120B, _cfg.guardrail_temperature, _cf
 llm_guardrail    = build_llm(Model.GEMINI_FLASH, _cfg.guardrail_temperature, _cfg, timeout_s=_cfg.timeout_curto_s)
 llm_juiz         = build_llm(Model.GEMINI_FLASH, _cfg.guardrail_temperature, _cfg, timeout_s=_cfg.timeout_curto_s)
 llm_openrouter   = build_llm(Model.QWEN_3_8_FREE, _cfg.default_temperature, _cfg)
-llm_luna         = build_llm(Model.GPT_5_6_LUNA, _cfg.default_temperature, _cfg)
+llm_luna         = build_llm(Model.GPT_6_LUNA, _cfg.default_temperature, _cfg)
 
 llm_visao        = estruturado(InventarioGeladeira, _llm_visao_base, llm_luna)  
 llm_especialista = com_reserva(llm_gemini, llm_groq, llm_luna, llm_openrouter)

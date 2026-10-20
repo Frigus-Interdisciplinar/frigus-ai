@@ -1,7 +1,7 @@
 # FastAPI
 
 Duas partes: **práticas oficiais** (do skill oficial do FastAPI) e **pegadinhas deste repo**
-(achados reais, conforme forem aparecendo). Consulte antes de mexer em `interfaces/api/`.
+(achados reais, conforme forem aparecendo). Consulte antes de mexer em `api/`.
 
 ## Referências
 
@@ -47,7 +47,7 @@ reaproveitar a dependência como alias.
 Do this — alias de tipo reaproveitável, declarado uma vez ao lado da dependência:
 
 ```python
-# interfaces/api/auth.py (exemplo — mecanismo de auth ainda não decidido aqui)
+# api/auth/dependencies.py (exemplo — mecanismo de auth ainda não decidido aqui)
 from typing import Annotated
 
 from fastapi import Depends, Security
@@ -64,7 +64,7 @@ CurrentUserDep = Annotated[str, Depends(get_current_user)]
 ```
 
 ```python
-# interfaces/api/routes/chats.py
+# api/routes/v1/chats.py
 @router.post("/{chat_id}/messages")
 def send_message(chat_id: str, payload: MessageCreate, user_id: CurrentUserDep):
     ...
@@ -135,7 +135,7 @@ Mesma regra pra `Query()`/`Path()`/`Body()`. E não use `RootModel`: pra body qu
 router = APIRouter(prefix="/v1/chats", tags=["chats"])
 ```
 
-`interfaces/api/main.py` então só faz `app.include_router(chats_router)`, sem repetir configuração.
+`api/routes/__init__.py` então só faz `app.include_router(chats_router)`, sem repetir configuração.
 Uma operação HTTP por função — não misture `GET` e `POST` no mesmo handler.
 
 ## Serialização: sem `ORJSONResponse`/`UJSONResponse`
@@ -208,7 +208,7 @@ DomainRole`, e montava `_ROLE_MAP = {DomainRole.HUMAN: Role.USER, ...}` **acima*
 subia de jeito nenhum.
 
 Passou despercebido porque **não havia nenhum teste que importasse `interfaces.api.main`**. Hoje há
-(`tests/interfaces/api/test_chats.py`). Ao criar schema que traduz enum de domínio pra enum público:
+(`tests/api/test_chats.py`). Ao criar schema que traduz enum de domínio pra enum público:
 importe o de domínio só com alias, declare o público primeiro, monte o mapa depois.
 
 ## fastapi-guard: limites por rota ignorados e 429 por IP em tudo
