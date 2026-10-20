@@ -21,7 +21,6 @@
   timeouts e tentativas no mesmo padrão `LLM__<PROVIDER>__TIMEOUT_S`). Nome antigo é ignorado sem erro.
 
 Conferido contra o código em `docs/campos-mensagem` (suíte: 311 passed) em 2026-10-08; suíte atual: 351 passed (2026-10-12).
-Conferido contra o código em `docs/campos-mensagem` (suíte: 311 passed; a única falha, `test_metrics_aberto_sem_token`, vem de `API_KEYS__METRICS_TOKEN` preenchido no `.env` local) em 2026-10-08.
 Antes de reportar item como pendente, confira o código: este checklist envelhece.
 
 ## Placar
@@ -39,7 +38,7 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding contra o retorno das tools, até 2 retentativas; falha vira `INDISPONIVEL` |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
-| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 16 painéis (inclui memória, chamadas externas, bloqueios do guard) |
+| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 30 painéis (inclui memória, chamadas externas, bloqueios do guard e o JeV) |
 | SRE: custo 100 e 1000 usuários/semana | ✅ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
 | SRE: SLO/SLI e alertas | ✅ | SLO p95 ≤ 8s e erro ≤ 5% (`telemetry/metrics.py`, exportado em `frigus_slo_target`), `outcome="blocked"` separado de erro, regras/alertas em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na web. Sem SLA nem Alertmanager (decisão: não há contrato nem plantão) |
 | SRE: índice de erros | ✅ | SLI de erro gravado/alertado no Prometheus e no `sre_report.py` (com orçamento de erro); falta validar contra scrape real |

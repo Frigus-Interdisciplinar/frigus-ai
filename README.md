@@ -126,7 +126,10 @@ tools), relevância e completude, ANTES do guardrail de saída. Se reprovar, a r
 **orquestrador** (com o motivo da reprovação), até 2 tentativas — os especialistas não rodam de novo, para
 não regravar estoque nem lista de compras. Depois disso, segue mesmo reprovado (loga um aviso), para nunca
 travar o usuário. O que ele confere é o retorno das tools (não o texto do especialista), e falha na
-avaliação vira `INDISPONIVEL`, não aprovação.
+avaliação vira `INDISPONIVEL`, não aprovação. O avaliador é o JeV (grounding como escolha entre
+sustentada/contradiz/sem evidência, relevância e completude como sim/não, veredito calculado em
+Python e feedback de uma frase fixa por critério) ou, sem gateway ou se ele falhar, um LLM com
+justificativa livre.
 
 ---
 
@@ -255,8 +258,10 @@ resposta (evita vazar mensagem crua de psycopg2/pymongo pro cliente).
 ## Guardrails e Juiz
 
 - **Guardrail de Entrada**: detecção determinística de prompt injection/acesso a dados internos →
-  anonimização de PII → classificação por LLM (aprova, ou bloqueia por conteúdo ofensivo, perigoso,
-  ilícito, político ou pedido de conselho médico).
+  anonimização de PII → classificação (aprova, ou bloqueia por conteúdo ofensivo, perigoso, ilícito,
+  político ou pedido de conselho médico). Com `LLM__GATEWAY__API_KEY`, quem classifica é o JeV
+  (decisão tipada, sem gerar texto, `infra/llm/jev/`); sem ela, a cadeia de LLMs. O JeV também
+  escolhe os especialistas no roteador e avalia a resposta no juiz, sempre com o LLM de reserva.
 - **Juiz**: audita grounding (contra o retorno das tools), relevância e completude da resposta antes
   dela sair; pode mandar o orquestrador reescrever (até 2 vezes).
 - **Guardrail de Saída**: nunca bloqueia — redige PII remanescente e corrige afirmações de segurança

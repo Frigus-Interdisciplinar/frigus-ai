@@ -54,6 +54,38 @@ async def test_falha_ou_saida_fora_do_schema_fica_indisponivel(monkeypatch, falh
     assert update["feedback_juiz"] == ""
 
 
+# --------------------- JeV como avaliador ---------------------
+
+def _jev_avalia(monkeypatch, grounding: mod.Grounding, relevante: bool = True, completa: bool = True):
+    from frigus_ai.infra.llm.jev import Decisoes
+    from frigus_ai.infra.llm.jev.schemas import Escolha, Predicado
+
+    async def decidir(uso, _entrada, _perguntas):
+        assert uso == "juiz"
+        return Decisoes({
+            mod.Criterio.GROUNDING: Escolha(type="choice", name=mod.Criterio.GROUNDING, choice=grounding),
+            mod.Criterio.RELEVANCIA: Predicado(
+                type="predicate", name=mod.Criterio.RELEVANCIA, probability=0.9 if relevante else 0.1
+            ),
+            mod.Criterio.COMPLETUDE: Predicado(
+                type="predicate", name=mod.Criterio.COMPLETUDE, probability=0.9 if completa else 0.1
+            ),
+        })
+
+    monkeypatch.setattr(mod.jev, "disponivel", lambda: True)
+    monkeypatch.setattr(mod.jev, "decidir", decidir)
+    monkeypatch.setattr(mod, "llm_avaliador", _FakeLLM(AssertionError("não devia chamar o LLM")))
+
+
+async def test_jev_aprova_sustentada_relevante_e_completa(monkeypatch):
+    _jev_avalia(monkeypatch, mod.Grounding.SUSTENTADA)
+
+    update = await no_juiz(_estado())
+
+    assert update["veredito_juiz"] == "APROVADO"
+    assert update["feedback_juiz"] == ""
+
+
 async def test_jev_reprova_com_feedback_de_cada_criterio(monkeypatch):
     _jev_avalia(monkeypatch, mod.Grounding.SEM_EVIDENCIA, completa=False)
 
