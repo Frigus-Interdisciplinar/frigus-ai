@@ -45,6 +45,5 @@ google-services.json
 GoogleService-Info.plist
 *service-account*.json
 serviceAccount*.json
-
-# Token do /metrics pro Prometheus local (just obs)
-observability/prometheus/metrics_token
+google-services.json
+GoogleService-Info.plist

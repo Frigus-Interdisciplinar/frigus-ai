@@ -16,17 +16,14 @@ from frigus_ai.telemetry import medir_node
 
 logger = Logging.get_logger(__name__)
 
-# Quantas reescritas o Juiz pode pedir ao orquestrador antes de deixar passar mesmo reprovado
-# (mesmo princípio do guardrail de saída: nunca trava o usuário).
-MAX_REESCRITAS = settings.llm.max_reescritas_juiz
+# Quantas vezes o Juiz manda o orquestrador reescrever antes de deixar passar
+# mesmo reprovado (mesmo princípio do guardrail de saída: nunca trava o usuário). Falha na
+# chamada ou saída fora do schema também deixa passar, mas como INDISPONIVEL: não é aprovação.
+MAX_TENTATIVAS = settings.llm.max_tentativas_juiz
 
-
-class Veredito(StrEnum):
-    APROVADO     = "APROVADO"
-    REPROVADO    = "REPROVADO"
-
-    # A avaliação falhou: a resposta segue, mas sem aval.
-    INDISPONIVEL = "INDISPONIVEL"
+APROVADO = "APROVADO"
+REPROVADO = "REPROVADO"
+INDISPONIVEL = "INDISPONIVEL"
 
 
 class VereditoJuiz(BaseModel):
@@ -87,9 +84,17 @@ async def _avaliar_com_jev(estado: Estado) -> tuple[Veredito, str]:
         *(PerguntaPredicado(name=criterio, instructions=_PROMPTS[f"{criterio}_jev"]) for criterio in _PREDICADOS),
     ])
 
-    falhas: list[Grounding | Criterio] = [c for c in _PREDICADOS if not decisoes.sim(c)]
-    if (grounding := Grounding(decisoes.escolha(Criterio.GROUNDING))) != Grounding.SUSTENTADA:
-        falhas.insert(0, grounding)
+def _logar(veredito: str, justificativa: str, tentativas: int, repetir: bool) -> None:
+    if repetir:
+        logger.warning(
+            "Juiz REPROVOU (tentativa %s/%s): %s", tentativas + 1, MAX_TENTATIVAS, justificativa
+        )
+    elif veredito == REPROVADO:
+        logger.warning(
+            "Juiz REPROVOU mas as tentativas se esgotaram — seguindo mesmo assim: %s", justificativa
+        )
+    elif veredito == APROVADO:
+        logger.info("Juiz APROVOU: %s", justificativa)
 
     if falhas:
         return Veredito.REPROVADO, " ".join(_FEEDBACK[falha] for falha in falhas)
@@ -120,26 +125,7 @@ async def _avaliar(estado: Estado) -> tuple[Veredito, str]:
         return await _avaliar_com_llm(estado)
     except Exception as e:
         logger.warning("Falha ao invocar Juiz (%s) — resposta segue sem avaliação: %s", type(e).__name__, e)
-        return Veredito.INDISPONIVEL, "Juiz indisponível: resposta entregue sem avaliação"
-
-
-def _logar(veredito: Veredito, justificativa: str, reescrita: int | None) -> None:
-    match veredito, reescrita:
-        case _, int():
-            logger.warning("Juiz REPROVOU, reescrita %s/%s: %s", reescrita, MAX_REESCRITAS, justificativa)
-
-        case Veredito.REPROVADO, None:
-            logger.warning("Juiz REPROVOU sem reescritas sobrando — seguindo mesmo assim: %s", justificativa)
-
-        case Veredito.APROVADO, _:
-            logger.info("Juiz APROVOU: %s", justificativa)
-
-
-@medir_node(JUIZ)
-async def no_juiz(estado: Estado) -> JuizUpdate:
-    """Reprovado com reescrita sobrando: `feedback_juiz` preenchido manda o grafo de volta ao orquestrador."""
-
-    veredito, justificativa = await _avaliar(estado)
+        veredito, justificativa = INDISPONIVEL, "Juiz indisponível: resposta entregue sem avaliação"
 
     reescritas = estado.get("reescritas_juiz", 0)
     reescrever = veredito == Veredito.REPROVADO and reescritas < MAX_REESCRITAS

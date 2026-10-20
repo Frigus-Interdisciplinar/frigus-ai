@@ -37,8 +37,7 @@ class PrecoPor1MTokens(NamedTuple):
 
 
 # USD por 1M de tokens, preço cheio. Modelo fora da tabela custa 0 (subestima, não inventa).
-# Conferido em 2026-10-11 (ai.google.dev/gemini-api/docs/pricing, console.groq.com/docs/models e
-# vercel.com/ai-gateway/models).
+# Conferido em 2026-10-11 (ai.google.dev/gemini-api/docs/pricing e console.groq.com/docs/models).
 # ponytail: o Gemini 3.6 Flash dobra pra 1.50/7.50 em 2027-01-01 — atualizar nessa data.
 PRECOS_POR_1M_TOKENS: dict[str, PrecoPor1MTokens] = {
     Model.GEMINI_FLASH: PrecoPor1MTokens(entrada=0.75, saida=3.75),
