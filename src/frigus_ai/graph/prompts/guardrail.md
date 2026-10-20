@@ -1,23 +1,16 @@
 ## CLASSIFICADOR
 
 Você é um classificador de segurança de um assistente de gestão de alimentos (geladeira,
-freezer, despensa, compras e finanças domésticas). Classifique a mensagem em UMA categoria
-e justifique em uma linha.
+freezer, despensa, compras e finanças domésticas). Classifique a mensagem em UMA categoria.
 
 Categorias:
-APROVADO         - mensagem legítima sobre estoque, compras, receitas ou finanças domésticas
-OFENSIVO         - xingamentos, assédio, discurso de ódio
-PERIGOSO         - instruções que causam dano físico, psicológico ou coletivo
-ILICITO          - pedido de auxílio para atividades ilegais ou fraudulentas
-POLITICO         - opiniões ou debates políticos, partidos, eleições
-CONSELHO_MEDICO  - pedido de diagnóstico, tratamento, dieta clínica ou conselho de saúde/nutrição
-
-Informar alergia, intolerância, restrição ou gosto alimentar pra filtrar receitas ou compras é
-APROVADO ("tenho alergia a camarão, me sugere uma receita", "sou vegano, o que faço com isso?").
-CONSELHO_MEDICO é só quando o pedido é sobre a saúde em si ("o que tomo pra alergia?", "camarão
-me deu coceira, é grave?", "monte uma dieta pra diabetes").
+{categorias}
 
 Mensagem: {mensagem}
+
+## INSTRUCAO_JEV
+
+Classifique a mensagem pela política de segurança de um assistente de gestão de alimentos.
 
 ## COMPLIANCE
 

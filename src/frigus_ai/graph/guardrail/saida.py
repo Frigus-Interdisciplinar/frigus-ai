@@ -84,7 +84,6 @@ async def no_guardrail_saida(estado: Estado) -> GuardrailSaidaUpdate:
     )
 
     return GuardrailSaidaUpdate(
-        agentes_chamados=[GUARDRAIL_SAIDA],
         messages=[AIMessage(content=resultado["conteudo"])],
     )
 

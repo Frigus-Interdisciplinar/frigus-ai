@@ -43,7 +43,6 @@ async def no_orquestrador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> O
     if len(resultados) == 1 and resultados[0]["agente"] in _RESPONDEM_EM_TEXTO and not revisao:
         unico = resultados[0]
         return OrquestradorUpdate(
-            agentes_chamados=[ORQUESTRADOR],
             resposta_especialista=unico["resposta"],
             dados_especialista=unico["dados"],
         )
@@ -59,7 +58,6 @@ async def no_orquestrador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> O
     resposta = await responder(orquestrador_app, [HumanMessage(content=pedido)], runtime.context)
 
     return OrquestradorUpdate(
-        agentes_chamados=[ORQUESTRADOR],
         resposta_especialista=resposta,
         dados_especialista=_dados_para_o_juiz(resultados),
     )

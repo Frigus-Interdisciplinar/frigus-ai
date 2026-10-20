@@ -91,3 +91,12 @@ async def create_items(items: ItemList):
 ```
 
 FastAPI supports these type annotations and will create a Pydantic `TypeAdapter` for them, so types work normally without custom wrapper models.
+
+## pydantic-settings: aninhamento por `__` e `extra="ignore"` engolem erro de nome
+
+`Settings` usa `env_nested_delimiter="__"` e `"extra": "ignore"` (`settings/base.py`). `LLM__GROQ__RETRIES=2`
+vira `llm.groq.retries` e só mexe nesse campo; os outros do submodelo ficam no padrão. Mas uma variável
+com nome que não bate com nenhum campo (ex.: `LLM__GROQ_RETRIES`, o formato antigo) é **descartada sem
+erro**. Para um provider obrigatório (Gemini, Groq) a API nem sobe; para um opcional (gateway,
+OpenRouter, Claude), ele some da cadeia de fallback sem aviso. Ao renomear uma variável, atualize o
+`.env`, o `.env.example` e o ambiente de deploy juntos.

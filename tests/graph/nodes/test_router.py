@@ -74,3 +74,85 @@ async def test_falha_do_llm_responde_generico_sem_derrubar_o_turno(monkeypatch):
 
     assert update["especialistas"] == []
     assert update["messages"][0].content == mod._NAO_ENTENDI
+
+
+# --------------------- JeV decide quem atende ---------------------
+
+def _jev_responde(monkeypatch, sim: set[str]):
+    """Liga o JeV e responde `sim` pros predicados listados, `não` pro resto."""
+
+    from frigus_ai.infra.llm.jev import Decisoes
+    from frigus_ai.infra.llm.jev.schemas import Predicado
+
+    chamada = SimpleNamespace(entrada=None, perguntas=[])
+
+    async def decidir(uso, entrada, perguntas):
+        chamada.entrada = entrada
+        chamada.perguntas = [p.name for p in perguntas]
+        return Decisoes({
+            p.name: Predicado(type="predicate", name=p.name, probability=0.9 if p.name in sim else 0.1)
+            for p in perguntas
+        })
+
+    monkeypatch.setattr(mod.jev, "disponivel", lambda: True)
+    monkeypatch.setattr(mod.jev, "decidir", decidir)
+    return chamada
+
+
+async def test_jev_escolhe_os_especialistas_sem_chamar_o_llm(monkeypatch):
+    perguntas = _jev_responde(monkeypatch, {"estoque", "receitas"})
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(AssertionError("não devia chamar o LLM")))
+
+    update = await mod.no_roteador(_estado("o que vence e que receitas faço?"), _RUNTIME)
+
+    assert update["especialistas"] == ["estoque", "receitas"]
+    assert set(perguntas.perguntas) == {*mod.DESCRICAO_ESPECIALISTA, "etapas"}
+
+
+async def test_sem_especialista_ou_com_etapas_o_llm_responde(monkeypatch):
+    llm = _FakeRoteador(Roteamento(resposta="Vamos em duas etapas."))
+    monkeypatch.setattr(mod, "router_app", llm)
+
+    for sim in (set(), {"estoque", "etapas"}):
+        _jev_responde(monkeypatch, sim)
+        update = await mod.no_roteador(_estado("adicione leite e sugira receitas"), _RUNTIME)
+        assert update["messages"] == [AIMessage(content="Vamos em duas etapas.")]
+
+
+async def test_jev_falhando_cai_no_llm(monkeypatch):
+    async def falha(*_args):
+        raise RuntimeError("gateway fora")
+
+    monkeypatch.setattr(mod.jev, "disponivel", lambda: True)
+    monkeypatch.setattr(mod.jev, "decidir", falha)
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(Roteamento(especialistas=["compras"])))
+
+    update = await mod.no_roteador(_estado("o que falta comprar?"), _RUNTIME)
+
+    assert update["especialistas"] == ["compras"]
+
+
+async def test_jev_recebe_so_a_ultima_pergunta_do_usuario(monkeypatch):
+    perguntas = _jev_responde(monkeypatch, {"estoque"})
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(AssertionError("não devia chamar o LLM")))
+    estado = {"messages": [
+        HumanMessage(content="quero receitas"),
+        AIMessage(content="Aqui estão 5 receitas bem compridas..."),
+        HumanMessage(content="o que vence essa semana?"),
+    ]}
+
+    await mod.no_roteador(estado, _RUNTIME)
+
+    assert perguntas.entrada == "o que vence essa semana?"
+
+
+async def test_pedido_com_duas_consultas_independentes_roteia_pros_dois(monkeypatch):
+    _jev_responde(monkeypatch, {"receitas", "compras"})
+    monkeypatch.setattr(mod, "router_app", _FakeRoteador(AssertionError("não devia chamar o LLM")))
+
+    update = await mod.no_roteador(
+        _estado("me sugira uma receita com batata frita e já veja o que está na minha lista de compras"),
+        _RUNTIME,
+    )
+
+    assert update["especialistas"] == ["compras", "receitas"]

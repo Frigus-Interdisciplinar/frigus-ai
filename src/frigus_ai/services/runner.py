@@ -135,8 +135,7 @@ async def executar(
 
     GRAPH_IN_PROGRESS.inc()
     try:
-        # stock_id/user_id ficam disponíveis via contextvars para as tools de
-        # Postgres (tools/postgres/context.py) durante toda a invocação do grafo.
+        # As tools leem stock_id/user_id desses ContextVars durante todo o grafo.
         with session_context(user_id=user_id, stock_id=stock_id):
             grafo = await fluxo_agentes.get()
             estado_final = await grafo.ainvoke(

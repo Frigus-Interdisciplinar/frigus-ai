@@ -14,7 +14,6 @@ def register_routes(app: FastAPI) -> None:
     for router in (health_router, metrics_router, auth_router, a2a_router, v1_router):
         app.include_router(router)
 
-    # Servidor MCP das tools de domínio, no mesmo processo da API (POST /mcp).
     app.mount("/mcp", montar_app_mcp())
 
 
