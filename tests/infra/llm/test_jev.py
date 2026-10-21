@@ -94,3 +94,78 @@ async def test_corpo_fora_do_contrato_levanta(gateway):
 
     with pytest.raises(ValidationError):
         await jev.escolher("teste", "oi", "escolha a cor", _OPCOES)
+
+
+async def test_com_imagem_vai_direto_na_luna_com_a_foto_no_pedido(gateway):
+    pedidos, corpo = gateway
+    corpo["answers"] = [{"type": "predicate", "name": "leite", "probability": 0.9}]
+
+    decisoes = await jev.decidir(
+        "teste", "foto de geladeira", [PerguntaPredicado(name="leite", instructions="tem leite?")],
+        imagem_b64="ZmFrZQ==",
+    )
+
+    assert decisoes.sim("leite")
+    assert pedidos[0]["model"] == "openai/gpt-6-luna-decisions"
+    assert "providerOptions" not in pedidos[0]
+    assert pedidos[0]["input"] == [{
+        "role": "user",
+        "content": [
+            {"type": "input_text", "text": "foto de geladeira"},
+            {"type": "input_image", "image_url": "data:image/jpeg;base64,ZmFrZQ=="},
+        ],
+    }]
+
+
+async def test_probabilidade_de_predicado_e_de_opcao_da_escolha(gateway):
+    _, corpo = gateway
+    corpo["answers"] = [
+        {"type": "predicate", "name": "p", "probability": 0.3},
+        {"type": "choice", "name": "c", "choice": "VERDE", "confidence": 0.8,
+         "probabilities": [{"value": "AZUL", "probability": 0.2}, {"value": "VERDE", "probability": 0.8}]},
+    ]
+
+    decisoes = await jev.decidir("teste", "x", [
+        PerguntaPredicado(name="p", instructions="?"),
+        PerguntaEscolha(name="c", instructions="?", choices=_OPCOES),
+    ])
+
+    assert decisoes.probabilidade("p") == 0.3
+    assert decisoes.probabilidade_da_opcao("c", "AZUL") == 0.2
+    with pytest.raises(TypeError):
+        decisoes.probabilidade("c")
+
+
+async def test_escolha_sem_probabilidades_do_gateway_devolve_none(gateway):
+    _, corpo = gateway
+    corpo["answers"] = [{"type": "choice", "name": "c", "choice": "AZUL", "confidence": 0.8}]
+
+    decisoes = await jev.decidir("teste", "x", [PerguntaEscolha(name="c", instructions="?", choices=_OPCOES)])
+
+    assert decisoes.probabilidade_da_opcao("c", "AZUL") is None
+
+
+async def test_custo_vem_do_gateway_quando_ele_informa(gateway):
+    _, corpo = gateway
+    corpo["answers"] = [{"type": "predicate", "name": "p", "probability": 0.5}]
+    corpo["provider_metadata"] = {"gateway": {"cost": "0.5"}}
+    custo = client.LLM_COST.labels(provider="gateway", model="typesafe-ai/jev")
+    antes = custo._value.get()
+
+    await jev.decidir("teste", "x", [PerguntaPredicado(name="p", instructions="?")])
+
+    assert custo._value.get() == antes + 0.5
+
+
+async def test_escolha_dinamica_conta_na_metrica_com_rotulo_generico(gateway):
+    pedidos, corpo = gateway
+    corpo["answers"] = [{"type": "choice", "name": "item", "choice": "4821", "confidence": 0.9}]
+    generico = JEV_DECISIONS.labels(uso="teste_dinamico", pergunta="item", escolha="opcao", modelo="typesafe-ai/jev")
+    antes = generico._value.get()
+
+    await jev.decidir("teste_dinamico", "x", [
+        PerguntaEscolha(name="item", instructions="qual?", choices={"4821": "Leite", "9": "Ovo"}, dinamica=True)
+    ])
+
+    assert generico._value.get() == antes + 1  # o id do item não vira rótulo (explodiria a cardinalidade)
+    assert "dinamica" not in pedidos[0]["questions"][0]

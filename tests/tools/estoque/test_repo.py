@@ -6,12 +6,23 @@ responsabilidade de repositories/estoque_repository.py.
 
 from datetime import date, timedelta
 
+import pytest
+
 from frigus_ai.domain.errors import ItemDeEstoqueNaoEncontrado, QuantidadeNegativa
+from frigus_ai.graph.tools.estoque import repo as repo_mod
 from frigus_ai.graph.tools.estoque.repo import EstoqueRepo
+from frigus_ai.graph.tools.estoque.resolver import NomeAmbiguo
 from frigus_ai.infra.postgres.context import session_context
 from frigus_ai.repositories import estoque_repository
 
 CONTEXTO = {"user_id": 7, "stock_id": 42}
+
+
+@pytest.fixture(autouse=True)
+def _sem_resolucao_de_nome(monkeypatch):
+    """O resolvedor tem teste próprio; aqui o nome segue direto pro repository, como antes."""
+
+    monkeypatch.setattr(repo_mod, "resolver_item", lambda stock_id, nome: None)
 
 
 def _fingir(monkeypatch, nome, retorno=None, erro=None, captura=None):
@@ -220,9 +231,86 @@ def test_discard_falha_no_ranking_nao_derruba_o_descarte(monkeypatch):
     assert resultado["status"] == "ok"
 
 
-def test_as_tools_expoe_as_quatro_tools():
+def test_as_tools_expoe_as_cinco_tools():
     nomes = {t.name for t in EstoqueRepo().as_tools()}
 
     assert nomes == {
-        "add_stock_product", "query_stock", "update_stock_quantity", "discard_product"
+        "add_stock_product", "add_stock_products", "query_stock", "update_stock_quantity", "discard_product"
     }
+
+
+def test_add_stock_products_grava_o_lote_numa_chamada_e_devolve_cada_item(monkeypatch):
+    captura: dict = {}
+    _fingir(monkeypatch, "adicionar_produtos", retorno=[(10, 2), (11, 1)], captura=captura)
+    validade = (date.today() + timedelta(days=30)).isoformat()
+
+    with session_context(**CONTEXTO):
+        resultado = EstoqueRepo().add_stock_products([
+            {"product_name": "Leite", "category": "Laticínio", "storage_place": "Geladeira",
+             "quantity": 2, "expire_date": validade},
+            {"product_name": "Arroz", "category": "Grão", "storage_place": "Despensa",
+             "quantity": 1, "expire_date": validade},
+        ])
+
+    stock_id, dados = captura["args"]
+    assert stock_id == 42
+    assert [d["product_name"] for d in dados] == ["Leite", "Arroz"]
+    assert resultado["status"] == "ok"
+    assert resultado["total_adicionados"] == 2
+    assert [i["stock_product_id"] for i in resultado["itens"]] == [10, 11]
+
+
+def test_add_stock_products_com_item_invalido_nao_chega_no_banco(monkeypatch):
+    chamado = []
+    monkeypatch.setattr(estoque_repository, "adicionar_produtos", lambda *a, **kw: chamado.append(1))
+
+    with session_context(**CONTEXTO):
+        resultado = EstoqueRepo().add_stock_products([
+            {"product_name": "Leite", "category": "Laticínio", "storage_place": "Geladeira",
+             "quantity": 2, "expire_date": "ontem"},
+        ])
+
+    assert resultado["status"] == "error"
+    assert chamado == []
+
+
+def test_update_com_nome_resolvido_manda_o_id_e_nao_o_nome(monkeypatch):
+    captura: dict = {}
+    monkeypatch.setattr(repo_mod, "resolver_item", lambda stock_id, nome: 77)
+    _fingir(monkeypatch, "atualizar_quantidade", retorno=(77, 3), captura=captura)
+
+    with session_context(**CONTEXTO):
+        resultado = EstoqueRepo().update_stock_quantity(product_name="leite", delta=-1)
+
+    assert captura["args"] == (42, 7, 77, None, -1, None)
+    assert resultado["status"] == "ok"
+
+
+def test_nome_ambiguo_vira_pergunta_e_nao_toca_no_banco(monkeypatch):
+    chamado = []
+
+    def _ambiguo(stock_id, nome):
+        raise NomeAmbiguo("Não sei qual item é 'leite'. Opções: A; B.")
+
+    monkeypatch.setattr(repo_mod, "resolver_item", _ambiguo)
+    monkeypatch.setattr(estoque_repository, "atualizar_quantidade", lambda *a, **kw: chamado.append(1))
+    monkeypatch.setattr(estoque_repository, "descartar", lambda *a, **kw: chamado.append(1))
+
+    with session_context(**CONTEXTO):
+        atualizar = EstoqueRepo().update_stock_quantity(product_name="leite", delta=-1)
+        descartar = EstoqueRepo().discard_product(product_name="leite")
+
+    assert atualizar["status"] == descartar["status"] == "error"
+    assert "Não sei qual item" in atualizar["message"]
+    assert chamado == []
+
+
+def test_com_id_o_resolvedor_nem_roda(monkeypatch):
+    def _nao_devia(stock_id, nome):
+        raise AssertionError("resolvedor chamado com id direto")
+
+    monkeypatch.setattr(repo_mod, "resolver_item", _nao_devia)
+    _fingir(monkeypatch, "descartar", retorno={"stock_product_id": 5, "product_name": "Leite", "quantidade_perdida": 0})
+
+    with session_context(**CONTEXTO):
+        assert EstoqueRepo().discard_product(stock_product_id=5)["status"] == "ok"

@@ -56,14 +56,23 @@ async def test_falha_ou_saida_fora_do_schema_fica_indisponivel(monkeypatch, falh
 
 # --------------------- JeV como avaliador ---------------------
 
-def _jev_avalia(monkeypatch, grounding: mod.Grounding, relevante: bool = True, completa: bool = True):
+def _jev_avalia(
+    monkeypatch, grounding: mod.Grounding, relevante: bool = True, completa: bool = True,
+    chance_sustentada: float | None = None,
+):
     from frigus_ai.infra.llm.jev import Decisoes
     from frigus_ai.infra.llm.jev.schemas import Escolha, Predicado
 
     async def decidir(uso, _entrada, _perguntas):
         assert uso == "juiz"
         return Decisoes({
-            mod.Criterio.GROUNDING: Escolha(type="choice", name=mod.Criterio.GROUNDING, choice=grounding),
+            mod.Criterio.GROUNDING: Escolha(
+                type="choice", name=mod.Criterio.GROUNDING, choice=grounding,
+                probabilities=[] if chance_sustentada is None else [
+                    {"value": mod.Grounding.SUSTENTADA, "probability": chance_sustentada},
+                    {"value": mod.Grounding.SEM_EVIDENCIA, "probability": 1 - chance_sustentada},
+                ],
+            ),
             mod.Criterio.RELEVANCIA: Predicado(
                 type="predicate", name=mod.Criterio.RELEVANCIA, probability=0.9 if relevante else 0.1
             ),
@@ -84,6 +93,22 @@ async def test_jev_aprova_sustentada_relevante_e_completa(monkeypatch):
 
     assert update["veredito_juiz"] == "APROVADO"
     assert update["feedback_juiz"] == ""
+
+
+async def test_jev_sustentada_sem_convicao_reprova_como_sem_evidencia(monkeypatch):
+    _jev_avalia(monkeypatch, mod.Grounding.SUSTENTADA, chance_sustentada=0.55)
+
+    update = await no_juiz(_estado())
+
+    assert update["veredito_juiz"] == "REPROVADO"
+    assert update["feedback_juiz"] == mod._FEEDBACK[mod.Grounding.SEM_EVIDENCIA]
+
+
+async def test_jev_sustentada_com_convicao_ou_sem_probabilidades_aprova(monkeypatch):
+    for chance in (0.95, None):
+        _jev_avalia(monkeypatch, mod.Grounding.SUSTENTADA, chance_sustentada=chance)
+
+        assert (await no_juiz(_estado()))["veredito_juiz"] == "APROVADO"
 
 
 async def test_jev_reprova_com_feedback_de_cada_criterio(monkeypatch):

@@ -7,8 +7,10 @@ from frigus_ai.graph.tools.estoque.helpers import (
     compute_product_status,
     expiring_date_threshold,
 )
+from frigus_ai.graph.tools.estoque.resolver import NomeAmbiguo, resolver_item
 from frigus_ai.graph.tools.estoque.schemas import (
     AddStockProductArgs,
+    AddStockProductsArgs,
     DiscardProductArgs,
     QueryStockArgs,
     UpdateStockQuantityArgs,
@@ -21,6 +23,31 @@ from frigus_ai.repositories import estoque_repository
 from frigus_ai.repositories.estoque_repository import FiltrosEstoque, ProdutoNovo
 
 logger = Logging.get_logger("pg_estoque")
+
+
+def _produto_novo(args: AddStockProductArgs) -> ProdutoNovo:
+    validade = date.fromisoformat(args.expire_date)
+
+    return ProdutoNovo(
+        product_name=args.product_name,
+        category=args.category,
+        storage_place=args.storage_place,
+        quantity=args.quantity,
+        minimal_quantity=args.minimal_quantity,
+        expire_date=validade,
+        product_status=compute_product_status(validade),
+        unit_price=args.unit_price,
+    )
+
+
+def _item_pelo_nome(stock_product_id: int | None, product_name: str | None) -> tuple[int | None, str | None]:
+    """Com só o nome, resolve pro id (ver `resolver.py`); None no id deixa o repository procurar pelo nome."""
+
+    if stock_product_id is not None or not product_name:
+        return stock_product_id, product_name
+
+    resolvido = resolver_item(current_stock_id(), product_name)
+    return (resolvido, None) if resolvido is not None else (None, product_name)
 
 
 class EstoqueRepo(ToolSet):
@@ -42,23 +69,40 @@ class EstoqueRepo(ToolSet):
         em vez de criar um novo registro (evita duplicidade).
         """
 
-        validade = date.fromisoformat(expire_date)
-        dados = ProdutoNovo(
-            product_name=product_name,
-            category=category,
-            storage_place=storage_place,
-            quantity=quantity,
-            minimal_quantity=minimal_quantity,
-            expire_date=validade,
-            product_status=compute_product_status(validade),
-            unit_price=unit_price,
-        )
+        dados = _produto_novo(AddStockProductArgs(
+            product_name=product_name, category=category, storage_place=storage_place, quantity=quantity,
+            expire_date=expire_date, unit_price=unit_price, minimal_quantity=minimal_quantity,
+        ))
         item_id, quantidade = estoque_repository.adicionar_produto(current_stock_id(), dados)
 
         return Response.ok(
             stock_product_id=item_id,
             quantity=quantidade,
             product_status=dados["product_status"],
+        )
+
+    def add_stock_products(self, items: list[AddStockProductArgs]) -> dict:
+        """
+        Adiciona vários produtos ao estoque de uma vez (ex.: os itens reconhecidos numa foto, depois
+        que o usuário confirmou). Cada item tem a própria validade. Tudo ou nada: se um item for
+        inválido, nenhum é gravado. Mesmo produto com a mesma validade soma quantidade.
+        """
+
+        dados = [_produto_novo(AddStockProductArgs.model_validate(item)) for item in items]
+        resultados = estoque_repository.adicionar_produtos(current_stock_id(), dados)
+
+        return Response.ok(
+            total_adicionados=len(resultados),
+            itens=[
+                {
+                    "stock_product_id": item_id,
+                    "product_name": d["product_name"],
+                    "quantity": quantidade,
+                    "expire_date": str(d["expire_date"]),
+                    "product_status": d["product_status"],
+                }
+                for d, (item_id, quantidade) in zip(dados, resultados, strict=True)
+            ],
         )
 
     def query_stock(
@@ -99,14 +143,19 @@ class EstoqueRepo(ToolSet):
         """
         Atualiza a quantidade de um item do estoque (consumo parcial/total ou reposição).
 
-        Localização por ID direto ou por nome do produto (usa o item mais próximo do
-        vencimento em caso de múltiplas ocorrências). Informe `delta` (variação,
+        Localização por ID direto ou por nome do produto (várias validades do mesmo produto: o item
+        mais próximo do vencimento; produtos diferentes parecidos: pergunta qual). Informe `delta` (variação,
         negativo para consumo) OU `novo_valor` (quantidade final), nunca os dois.
         Registra o movimento em stock_movements (Entrada/Saída/Ajuste).
         """
 
         if delta is None and novo_valor is None:
             return Response.error("Informe 'delta' ou 'novo_valor'.")
+
+        try:
+            stock_product_id, product_name = _item_pelo_nome(stock_product_id, product_name)
+        except NomeAmbiguo as e:
+            return Response.error(str(e))
 
         item_id, nova_quantidade = estoque_repository.atualizar_quantidade(
             current_stock_id(), current_user_id(),
@@ -126,6 +175,11 @@ class EstoqueRepo(ToolSet):
         Zera a quantidade do item e grava o descarte em `discard`, usado depois
         pelo agente financeiro para calcular o valor de alimentos desperdiçados.
         """
+
+        try:
+            stock_product_id, product_name = _item_pelo_nome(stock_product_id, product_name)
+        except NomeAmbiguo as e:
+            return Response.error(str(e))
 
         descarte = estoque_repository.descartar(
             current_stock_id(), current_user_id(), stock_product_id, product_name, reason
@@ -147,6 +201,9 @@ class EstoqueRepo(ToolSet):
         return [
             StructuredTool.from_function(
                 self.add_stock_product, name="add_stock_product", args_schema=AddStockProductArgs
+            ),
+            StructuredTool.from_function(
+                self.add_stock_products, name="add_stock_products", args_schema=AddStockProductsArgs
             ),
             StructuredTool.from_function(
                 self.query_stock, name="query_stock", args_schema=QueryStockArgs

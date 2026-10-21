@@ -10,10 +10,16 @@ from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    RemoveMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import Runnable
 
-from frigus_ai.graph.state import ContextoPrompt, Estado
+from frigus_ai.graph.state import ContextoPrompt, Estado, Evidencia
 from frigus_ai.infra.logging import Logging
 from frigus_ai.settings import settings
 
@@ -101,18 +107,35 @@ async def responder(
 
 async def responder_com_evidencias(
     app: Runnable[Any, Any], mensagens: Sequence[AnyMessage], contexto: ContextoPrompt | None = None
-) -> tuple[str, str]:
+) -> tuple[str, list[Evidencia]]:
     """
     Como `responder`, mais o retorno das tools desta execução (vazio se não chamou nenhuma) — é o
     que o Juiz confere. `messages` do estado só tem Human/AI, então todo `ToolMessage` é do turno.
     """
 
     saida = await app.ainvoke({"messages": list(mensagens)}, context=contexto)
-    evidencias = "\n\n".join(
-        f"{m.name or 'tool'}:\n{m.content}" for m in saida["messages"] if isinstance(m, ToolMessage)
-    )
+    mensagens_saida = saida["messages"]
+    args_por_chamada = {
+        chamada["id"]: chamada["args"]
+        for m in mensagens_saida if isinstance(m, AIMessage)
+        for chamada in m.tool_calls
+    }
+    evidencias = [
+        Evidencia(
+            tool=m.name or "tool",
+            args=args_por_chamada.get(m.tool_call_id, {}),
+            conteudo=str(m.content),
+        )
+        for m in mensagens_saida if isinstance(m, ToolMessage)
+    ]
 
-    return _texto(saida["messages"][-1].content), evidencias
+    return _texto(mensagens_saida[-1].content), evidencias
+
+
+def formatar_evidencias(evidencias: Sequence[Evidencia]) -> str:
+    """O texto que o Juiz lê: uma seção `tool:` por retorno de tool."""
+
+    return "\n\n".join(f"{e['tool']}:\n{e['conteudo']}" for e in evidencias)
 
 
 async def perguntar(llm: BaseChatModel, entrada: str | Sequence[AnyMessage]) -> str:
@@ -126,6 +149,7 @@ async def perguntar(llm: BaseChatModel, entrada: str | Sequence[AnyMessage]) -> 
 __all__ = [
     "MAX_MENSAGENS",
     "RespostaAgenteInvalida",
+    "formatar_evidencias",
     "mensagens_do_turno",
     "perguntar",
     "podar_historico",

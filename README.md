@@ -241,6 +241,7 @@ Rotas de domínio (`chats`, `keys`, `stock`, `shopping-list`, `recipes`, `profil
 | `DELETE` | `/v1/chats/{chat_id}` | Encerra a sessão. **202** — o resumo da conversa (chamada de LLM) vai pra `BackgroundTasks`, fora do caminho da resposta |
 | `GET` / `POST` / `PUT` / `DELETE` | `/v1/stock/items`, `/v1/stock/items/{item_id}` | Lista, adiciona, atualiza a quantidade e descarta itens do estoque |
 | `POST` | `/v1/stock/foto` | Analisa a foto da geladeira (nó de visão) |
+| `POST` | `/v1/chats/{chat_id}/messages/photo` | Foto dentro da conversa (multipart, `content` opcional): a Visão lista os itens e o usuário pode pedir pra cadastrar (`add_stock_products`) |
 | `GET` / `POST` / `PUT` | `/v1/shopping-list/items`, `/v1/shopping-list/items/{item_id}/bought` | Lista de compras |
 | `GET` | `/v1/recipes`, `/v1/recipes/suggestions` | Receitas e sugestões com o que há no estoque |
 | `GET` / `PUT` | `/v1/profile` | Perfil alimentar (alergias, preferências, restrições, hábitos) |

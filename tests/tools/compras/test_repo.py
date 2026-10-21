@@ -134,3 +134,35 @@ def test_generate_shopping_list_from_low_stock_sem_itens_baixos(monkeypatch):
 
     assert resultado["status"] == "ok"
     assert resultado["total_adicionados"] == 0
+
+
+def test_register_purchase_calcula_o_status_da_validade_e_usa_o_stock_id_do_contexto(monkeypatch):
+    recebido = {}
+
+    def _registrar(stock_id, item_id, nome, validade, status, quantidade, preco):
+        recebido["args"] = (stock_id, item_id, nome, str(validade), status, quantidade, preco)
+        return (99, 5)
+
+    monkeypatch.setattr(compras_repository, "registrar_compra", _registrar)
+
+    with session_context(user_id=1, stock_id=42):
+        resultado = ComprasRepo().register_purchase(expire_date="2099-01-01", product_name="Leite", quantity=5)
+
+    assert recebido["args"] == (42, None, "Leite", "2099-01-01", "Fresco", 5, None)
+    assert resultado["status"] == "ok"
+    assert (resultado["stock_product_id"], resultado["quantity"]) == (99, 5)
+
+
+def test_register_purchase_sem_identificador_nao_chama_repositorio(monkeypatch):
+    chamado = []
+    monkeypatch.setattr(compras_repository, "registrar_compra", lambda *a, **kw: chamado.append(1))
+
+    with session_context(user_id=1, stock_id=42):
+        resultado = ComprasRepo().register_purchase(expire_date="2099-01-01")
+
+    assert resultado["status"] == "error"
+    assert chamado == []
+
+
+def test_register_purchase_esta_entre_as_tools():
+    assert "register_purchase" in [t.name for t in ComprasRepo().as_tools()]

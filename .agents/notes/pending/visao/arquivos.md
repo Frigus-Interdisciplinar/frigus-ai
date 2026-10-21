@@ -37,8 +37,11 @@
 
 ## Falta fazer
 
-- Só Gemini Flash — sem fallback pra Claude (que também tem visão) se o Gemini cair ou
-  não tiver `GEMINI_API_KEY` configurada (hoje: levanta `FalhaNoAgente`, vira 502).
+- O fallback do Gemini é a Luna (`llm_visao` em `graph/llm.py`). Nunca foi exercitado contra o
+  gateway real: falta confirmar que o chat da Luna aceita `image_url`.
+- Verificação por item (`_itens_incertos` em `visao.py`): pergunta ao JeV/Luna, com a foto, se cada
+  item aparece nela; os abaixo de `confianca_minima_item_visao` (0,7, chute) vão em `esclarecer`.
+  Calibrar o limiar com fotos reais e comparar as listas do Gemini e da Luna.
 
 ## Arquivos
 

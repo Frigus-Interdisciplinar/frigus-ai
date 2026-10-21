@@ -55,14 +55,13 @@ def _estado_inicial(
 
     mensagens: list[AnyMessage] = [HumanMessage(content=conteudo)]
 
-    entrada = EntradaGrafo(
+    # Sempre explícito: o estado persiste no checkpoint, e um `True` esquecido mandaria o turno
+    # seguinte de texto de volta pra Visão. A foto em si vai por `context=` (ver `ContextoPrompt`).
+    return EntradaGrafo(
         messages=mensagens,
         stock_id=stock_id,
+        tem_imagem=bool(imagem_b64),
     )
-    if imagem_b64:
-        entrada["imagem_b64"] = imagem_b64
-
-    return entrada
 
 
 async def _carregar_contexto(
@@ -86,7 +85,7 @@ async def _carregar_contexto(
         except Exception as e:
             logger.warning("Busca de conversas anteriores falhou, seguindo sem: %s", e)
 
-    return ContextoPrompt(fatos=fatos, conversas=tuple(resumos))
+    return ContextoPrompt(fatos=fatos, conversas=tuple(resumos), imagem_b64=imagem_b64)
 
 
 def _outcome(estado: Mapping[str, Any]) -> str:
@@ -109,8 +108,8 @@ def _config(session_id: str, user_id: str) -> RunnableConfig:
 
 async def descartar_thread(thread_id: str) -> None:
     """
-    Apaga todos os checkpoints de uma thread descartável (foto): cada passo do grafo grava o
-    `imagem_b64` inteiro. Falha só loga, a resposta já foi dada.
+    Apaga todos os checkpoints de uma thread descartável (a análise de foto do estoque não é uma
+    conversa e não deixa histórico). Falha só loga, a resposta já foi dada.
     """
 
     try:

@@ -8,6 +8,7 @@ Cada estoque tem no máximo uma lista `Aberta` por vez — `_lista_aberta` garan
 """
 
 from datetime import date
+from decimal import Decimal
 from typing import TypedDict
 
 from sqlalchemy import func, select
@@ -158,6 +159,49 @@ class _ComprasPostgresRepo(PostgresRepo):
         return item.id
 
     @transacional
+    def registrar_compra(
+        self, s: Session, stock_id: int, shopping_list_product_id: int | None, product_name: str | None,
+        expire_date: date, product_status: str, quantity: int | None, unit_price: float | None,
+    ) -> tuple[int, int]:
+        """
+        Dá entrada no estoque e marca o item da lista como `Comprado` na mesma transação: sem isso o
+        item some da lista mas não aparece no estoque. Mesma validade soma quantidade (igual a
+        `estoque_repository.adicionar_produto`). Devolve (id do item do estoque, quantidade final).
+        """
+
+        item = _localizar_item(s, stock_id, shopping_list_product_id, product_name)
+        if item.status == "Comprado":
+            raise ValueError("Esse item da lista já foi marcado como comprado; a entrada no estoque já foi feita.")
+
+        produto = s.get(Product, item.product_id)
+        comprada = quantity or item.quantity
+
+        # Produto criado pela lista nasce com preço 0 no catálogo; o preço pago preenche, nunca sobrescreve.
+        if unit_price and not produto.unit_price:
+            produto.unit_price = Decimal(str(unit_price))
+
+        stmt = (
+            insert(StockProduct)
+            .values(
+                product_id=produto.id,
+                stock_id=stock_id,
+                quantity=comprada,
+                expire_date=expire_date,
+                product_status=product_status,
+                category=produto.category,
+            )
+            .on_conflict_do_update(
+                index_elements=["product_id", "stock_id", "expire_date"],
+                set_={"quantity": StockProduct.quantity + comprada},
+            )
+            .returning(StockProduct.id, StockProduct.quantity)
+        )
+        stock_product_id, quantidade = s.execute(stmt).one()
+        item.status = "Comprado"
+
+        return stock_product_id, quantidade
+
+    @transacional
     def gerar_por_estoque_baixo(self, s: Session, stock_id: int) -> list[ItemCompra]:
         baixos = s.execute(
             select(
@@ -229,6 +273,15 @@ def marcar_status(
     return _compras.marcar_status(stock_id, shopping_list_product_id, product_name, status)
 
 
+def registrar_compra(
+    stock_id: int, shopping_list_product_id: int | None, product_name: str | None,
+    expire_date: date, product_status: str, quantity: int | None, unit_price: float | None,
+) -> tuple[int, int]:
+    return _compras.registrar_compra(
+        stock_id, shopping_list_product_id, product_name, expire_date, product_status, quantity, unit_price
+    )
+
+
 def gerar_por_estoque_baixo(stock_id: int) -> list[ItemCompra]:
     return _compras.gerar_por_estoque_baixo(stock_id)
 
@@ -240,4 +293,5 @@ __all__ = [
     "criar_lista_aberta",
     "gerar_por_estoque_baixo",
     "marcar_status",
+    "registrar_compra",
 ]

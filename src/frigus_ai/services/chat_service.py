@@ -140,11 +140,13 @@ class ChatService:
             )
 
     async def send_message(
-        self, conteudo: str, session_id: str, user_id: str, stock_id: int | None
+        self, conteudo: str, session_id: str, user_id: str, stock_id: int | None, imagem: bytes | None = None
     ) -> str:
         await self.garantir_limite(user_id)
 
-        resposta = await runner.executar(conteudo, session_id, user_id, stock_id)
+        # `imagem_b64` só vai com foto: a foto viaja pelo contexto do grafo, nunca pelo histórico.
+        extras = {"imagem_b64": b64encode(imagem).decode()} if imagem else {}
+        resposta = await runner.executar(conteudo, session_id, user_id, stock_id, **extras)
         if not resposta:
             return "Sem resposta."
 
@@ -339,9 +341,8 @@ class ChatService:
 
     async def analisar_foto(self, user_id: str, stock_id: int | None, imagem: bytes) -> str:
         """
-        Foto da geladeira: não é conversa (sem histórico, sem rate limit de chat). O
-        `thread_id` é único e apagado no fim, porque o checkpoint guarda o `imagem_b64`
-        (MBs) e reaproveitar a thread mandaria o próximo turno de texto de novo pra Visão.
+        Foto da geladeira: não é conversa (sem histórico, sem rate limit de chat). O `thread_id` é
+        único e apagado no fim, pra não deixar checkpoint de uma análise avulsa.
         """
 
         thread_id = f"visao-{user_id}-{uuid4()}"

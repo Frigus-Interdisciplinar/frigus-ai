@@ -15,7 +15,10 @@ gerar lista automática a partir de itens em baixa no estoque, registrar compra 
 ### TAREFAS
 - Responder o que está pendente na lista de compras.
 - Adicionar itens à lista quando o usuário pedir.
-- Marcar itens como comprados ou removê-los quando o usuário informar.
+- Quando o usuário disser que comprou um item da lista, use `register_purchase`: ela dá entrada no
+  estoque e marca como Comprado de uma vez (`mark_purchased` sozinha não coloca nada no estoque, use-a
+  só para Removido). A validade é obrigatória: se faltar, pergunte em "esclarecer".
+- Remover itens da lista quando o usuário pedir.
 - Gerar a lista automaticamente a partir de itens com estoque baixo, quando solicitado.
 - Se o usuário mencionar NF-e/nota fiscal, diga que a leitura de nota ainda não existe e
   ofereça o cadastro manual — não há tool para isso.

@@ -128,10 +128,22 @@ e as outras são respondidas normalmente (e a requisição é cobrada). `Recusa`
 
 ## O modelo é só texto: imagem dá 400
 
-`typesafe-ai/jev` não aceita imagem. A reserva `openai/gpt-6-luna-decisions` aceita, mas nenhum uso
-atual manda imagem. A reserva vai em `providerOptions.gateway.models`, e o gateway a usa sozinho se o
-JeV falhar. A resposta traz o modelo que respondeu de fato (`model`), e é isso que a métrica
-`modelo` mostra.
+`typesafe-ai/jev` não aceita imagem. A reserva `openai/gpt-6-luna-decisions` aceita. A reserva vai em
+`providerOptions.gateway.models`, e o gateway a usa sozinho se o JeV falhar. A resposta traz o modelo
+que respondeu de fato (`model`), e é isso que a métrica `modelo` mostra.
+
+Com foto, `decidir(..., imagem_b64=...)` vai **direto na Luna, sem reserva**, e `input` vira
+`[{"role": "user", "content": [{"type": "input_text", ...}, {"type": "input_image", "image_url":
+"data:image/jpeg;base64,..."}]}]`. O gateway só aceita data URL em base64 (nada de URL externa nem
+`file_id`) e até 128 imagens por pedido. Quem usa: a verificação por item da Visão. Ainda sem teste
+contra o gateway real.
+
+## Probabilidades e custo vêm na resposta
+
+`choice` e `score` trazem `probabilities` (uma por opção) quando o modelo as devolve;
+`Decisoes.probabilidade_da_opcao` devolve `None` se não vierem, e o Juiz só aplica o limiar de
+grounding quando há número. `provider_metadata.gateway.cost` é o custo real e tem prioridade sobre a
+tabela `PRECOS_POR_1M_TOKENS`.
 
 ## O SDK `openai` (3.5.0) não tem `decisions`
 

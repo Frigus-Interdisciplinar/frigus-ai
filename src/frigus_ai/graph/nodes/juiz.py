@@ -88,7 +88,15 @@ async def _avaliar_com_jev(estado: Estado) -> tuple[Veredito, str]:
     ])
 
     falhas: list[Grounding | Criterio] = [c for c in _PREDICADOS if not decisoes.sim(c)]
-    if (grounding := Grounding(decisoes.escolha(Criterio.GROUNDING))) != Grounding.SUSTENTADA:
+    grounding = Grounding(decisoes.escolha(Criterio.GROUNDING))
+
+    # "Sustentada" sem convicção não basta: é por aí que a alucinação passa.
+    chance = decisoes.probabilidade_da_opcao(Criterio.GROUNDING, Grounding.SUSTENTADA)
+    if grounding == Grounding.SUSTENTADA and chance is not None and chance < settings.llm.confianca_minima_grounding:
+        logger.info("Juiz JeV: grounding sustentado com só %.2f de chance, tratando como sem evidência", chance)
+        grounding = Grounding.SEM_EVIDENCIA
+
+    if grounding != Grounding.SUSTENTADA:
         falhas.insert(0, grounding)
 
     if falhas:
@@ -123,13 +131,17 @@ async def _avaliar(estado: Estado) -> tuple[Veredito, str]:
         return Veredito.INDISPONIVEL, "Juiz indisponível: resposta entregue sem avaliação"
 
 
-def _logar(veredito: Veredito, justificativa: str, reescrita: int | None) -> None:
+def _logar(veredito: Veredito, justificativa: str, reescrita: int | None, tools: list[str]) -> None:
     match veredito, reescrita:
         case _, int():
-            logger.warning("Juiz REPROVOU, reescrita %s/%s: %s", reescrita, MAX_REESCRITAS, justificativa)
+            logger.warning(
+                "Juiz REPROVOU, reescrita %s/%s (tools: %s): %s", reescrita, MAX_REESCRITAS, tools, justificativa
+            )
 
         case Veredito.REPROVADO, None:
-            logger.warning("Juiz REPROVOU sem reescritas sobrando — seguindo mesmo assim: %s", justificativa)
+            logger.warning(
+                "Juiz REPROVOU sem reescritas sobrando (tools: %s) — seguindo mesmo assim: %s", tools, justificativa
+            )
 
         case Veredito.APROVADO, _:
             logger.info("Juiz APROVOU: %s", justificativa)
@@ -146,7 +158,7 @@ async def no_juiz(estado: Estado) -> JuizUpdate:
     if reescrever:
         reescritas += 1
 
-    _logar(veredito, justificativa, reescritas if reescrever else None)
+    _logar(veredito, justificativa, reescritas if reescrever else None, [e["tool"] for e in estado.get("evidencias", [])])
 
     return JuizUpdate(
         veredito_juiz=veredito,

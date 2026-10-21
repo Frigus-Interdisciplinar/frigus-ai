@@ -38,6 +38,7 @@ async def no_orquestrador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> O
     # Ordem estável: especialistas em paralelo terminam em ordem qualquer.
     resultados = sorted(estado["dados_especialistas"], key=lambda r: r["agente"])
     revisao = revisao_do_juiz(estado)
+    evidencias = [e for r in resultados for e in r["evidencias"]]
 
     # Na retentativa o Juiz mandou reescrever, então o LLM roda mesmo com um especialista só.
     if len(resultados) == 1 and resultados[0]["agente"] in _RESPONDEM_EM_TEXTO and not revisao:
@@ -45,6 +46,7 @@ async def no_orquestrador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> O
         return OrquestradorUpdate(
             resposta_especialista=unico["resposta"],
             dados_especialista=unico["dados"],
+            evidencias=evidencias,
         )
 
     respostas = "\n\n".join(f"{_nome(r)}:\n{r['resposta']}" for r in resultados)
@@ -60,6 +62,7 @@ async def no_orquestrador(estado: Estado, runtime: Runtime[ContextoPrompt]) -> O
     return OrquestradorUpdate(
         resposta_especialista=resposta,
         dados_especialista=_dados_para_o_juiz(resultados),
+        evidencias=evidencias,
     )
 
 

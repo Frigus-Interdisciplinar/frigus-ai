@@ -38,6 +38,9 @@ class PerguntaEscolha(BaseModel):
     instructions: str
     choices:      list[Opcao] = Field(min_length=1, max_length=255)
 
+    # Opções que só existem em runtime (ids, nomes de produto): a métrica não pode usá-las como rótulo.
+    dinamica:     bool = Field(default=False, exclude=True)
+
     @field_validator("choices", mode="before")
     @classmethod
     def _de_mapa(cls, choices: Any) -> Any:
@@ -58,11 +61,28 @@ class PerguntaNota(BaseModel):
 type Pergunta = Annotated[PerguntaPredicado | PerguntaEscolha | PerguntaNota, Field(discriminator="type")]
 
 
+class ParteTexto(BaseModel):
+    type: Literal["input_text"] = "input_text"
+    text: str
+
+
+class ParteImagem(BaseModel):
+    """O gateway só aceita data URL em base64 (nada de URL externa nem file_id), até 128 por pedido."""
+
+    type:      Literal["input_image"] = "input_image"
+    image_url: str
+
+
+class MensagemUsuario(BaseModel):
+    role:    Literal["user"] = "user"
+    content: list[ParteTexto | ParteImagem]
+
+
 class PedidoDecisao(BaseModel):
     model:            str
-    input:            str
+    input:            str | list[MensagemUsuario]
     questions:        list[Pergunta]
-    provider_options: dict[str, Any] = Field(serialization_alias="providerOptions")
+    provider_options: dict[str, Any] | None = Field(default=None, serialization_alias="providerOptions")
 
 
 class Predicado(BaseModel):
@@ -75,11 +95,17 @@ class Predicado(BaseModel):
         return self.probability >= 0.5
 
 
+class ProbabilidadeOpcao(BaseModel):
+    value:       str
+    probability: float
+
+
 class Escolha(BaseModel):
-    type:       Literal[TipoPergunta.ESCOLHA]
-    name:       str
-    choice:     str
-    confidence: float | None = None
+    type:          Literal[TipoPergunta.ESCOLHA]
+    name:          str
+    choice:        str
+    confidence:    float | None = None
+    probabilities: list[ProbabilidadeOpcao] = []
 
 
 class Nota(BaseModel):
@@ -98,22 +124,27 @@ type Resposta = Annotated[Predicado | Escolha | Nota | Recusa, Field(discriminat
 
 
 class RespostaDecisao(BaseModel):
-    model:   str
-    answers: list[Resposta]
-    usage:   dict[str, int]
+    model:             str
+    answers:           list[Resposta]
+    usage:             dict[str, int]
+    provider_metadata: dict[str, Any] = {}
 
 
 __all__ = [
     "Escolha",
+    "MensagemUsuario",
     "Nivel",
     "Nota",
     "Opcao",
+    "ParteImagem",
+    "ParteTexto",
     "PedidoDecisao",
     "Pergunta",
     "PerguntaEscolha",
     "PerguntaNota",
     "PerguntaPredicado",
     "Predicado",
+    "ProbabilidadeOpcao",
     "Recusa",
     "Resposta",
     "RespostaDecisao",
