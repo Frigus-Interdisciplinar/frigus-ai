@@ -9,6 +9,7 @@ from langgraph.graph.message import add_messages
 
 from frigus_ai.graph.nodes.contexto import (
     MAX_MENSAGENS,
+    formatar_evidencias,
     mensagens_do_turno,
     podar_historico,
     responder_com_evidencias,
@@ -104,6 +105,7 @@ class _AgenteFake:
 async def test_responder_com_evidencias_separa_retorno_das_tools_da_resposta():
     agente = _AgenteFake(
         [
+            AIMessage(content="", tool_calls=[{"id": "1", "name": "listar_estoque", "args": {"lugar": "geladeira"}}]),
             ToolMessage(content='[{"nome": "leite"}]', name="listar_estoque", tool_call_id="1"),
             AIMessage(content="Você tem leite."),
         ]
@@ -112,5 +114,8 @@ async def test_responder_com_evidencias_separa_retorno_das_tools_da_resposta():
     resposta, evidencias = await responder_com_evidencias(agente, [])
 
     assert resposta == "Você tem leite."
-    assert evidencias == 'listar_estoque:\n[{"nome": "leite"}]'
-    assert await responder_com_evidencias(_AgenteFake([AIMessage(content="oi")]), []) == ("oi", "")
+    assert evidencias == [
+        {"tool": "listar_estoque", "args": {"lugar": "geladeira"}, "conteudo": '[{"nome": "leite"}]'}
+    ]
+    assert formatar_evidencias(evidencias) == 'listar_estoque:\n[{"nome": "leite"}]'
+    assert await responder_com_evidencias(_AgenteFake([AIMessage(content="oi")]), []) == ("oi", [])

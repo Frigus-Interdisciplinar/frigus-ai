@@ -44,6 +44,7 @@ async def test_contexto_traz_fatos_e_conversas_anteriores(monkeypatch):
     # Turno com foto não busca conversas.
     contexto = await runner._carregar_contexto("foto", "chat-1", "u1", imagem_b64="abc")
     assert contexto.conversas == ()
+    assert contexto.imagem_b64 == "abc"
 
 
 async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
@@ -61,7 +62,7 @@ async def test_contexto_sobrevive_a_falha_nos_fatos(monkeypatch):
 def test_perfil_nao_vai_pro_estado_checkpointado():
     """Perfil no estado sobrevivia no checkpoint: turno com a busca falhando reaproveitava o antigo."""
 
-    assert set(runner._estado_inicial("oi", 1)) == {"messages", "stock_id"}
+    assert set(runner._estado_inicial("oi", 1)) == {"messages", "stock_id", "tem_imagem"}
 
 
 class _FakeGrafo:
@@ -109,16 +110,15 @@ def test_extrair_resposta_sem_mensagens():
     assert runner._extrair_resposta({}) is None
 
 
-def test_estado_inicial_sem_imagem_nao_tem_a_chave():
-    estado = runner._estado_inicial("oi", 1)
+def test_estado_inicial_marca_se_o_turno_tem_foto_e_nunca_leva_a_foto():
+    """`tem_imagem` é explícito nos dois casos: o checkpoint persiste, e um True esquecido mandaria
+    a mensagem de texto seguinte pra Visão. A foto em si não entra no estado."""
 
-    assert "imagem_b64" not in estado
+    assert runner._estado_inicial("oi", 1)["tem_imagem"] is False
 
-
-def test_estado_inicial_com_imagem_inclui_a_chave():
     estado = runner._estado_inicial("analise a foto", 1, imagem_b64="ZmFrZQ==")
-
-    assert estado["imagem_b64"] == "ZmFrZQ=="
+    assert estado["tem_imagem"] is True
+    assert "imagem_b64" not in estado
 
 
 async def test_stream_emite_um_evento_por_no_e_a_resposta_no_fim(monkeypatch):

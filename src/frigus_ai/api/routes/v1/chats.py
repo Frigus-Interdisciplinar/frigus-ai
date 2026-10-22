@@ -13,10 +13,21 @@ aqui, mesma regra pra essa rota e pra `a2a.py`.
 from collections.abc import AsyncIterable
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    Path,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from frigus_ai.api.deps import ChatServiceDep, CurrentUserDep, OptionalStockIdDep
+from frigus_ai.api.middleware import guard
+from frigus_ai.api.uploads import ler_foto
 from frigus_ai.schemas.chat import (
     _ROLE_MAP,
     ChatCreateResponse,
@@ -77,6 +88,40 @@ async def send_message(
 
     await chat.validar_ownership(chat_id, user_id)
     resposta = await chat.send_message(payload.content, chat_id, user_id, stock_id)
+
+    return ChatMessageResponse(chat_id=chat_id, content=resposta)
+
+
+@router.post(
+    "/{chat_id}/messages/photo",
+    summary="Enviar foto",
+    responses={
+        403: {"description": "O chat não pertence ao usuário."},
+        413: {"description": "Foto maior que 8MB."},
+        415: {"description": "O arquivo não é uma imagem."},
+        429: {"description": "Limite de mensagens ou de 5 fotos por minuto excedido."},
+    },
+)
+@guard.rate_limit(requests=5, window=60)
+async def send_photo(
+    chat_id: ChatIdPath,
+    foto: UploadFile,
+    user_id: CurrentUserDep,
+    stock_id: OptionalStockIdDep,
+    chat: ChatServiceDep,
+    content: Annotated[str, Form(max_length=4000, description="Texto que acompanha a foto (opcional).")] = "",
+) -> ChatMessageResponse:
+    """
+    Mensagem com foto (geladeira, freezer, despensa). A Visão lista o que reconhece e a conversa
+    segue: o usuário pode pedir "cadastra tudo isso" e o Estoque grava os itens, perguntando a
+    validade que faltar. A foto não fica guardada no histórico.
+    """
+
+    await chat.validar_ownership(chat_id, user_id)
+    imagem = await ler_foto(foto)
+    resposta = await chat.send_message(
+        content.strip() or "Analise esta foto da geladeira/freezer/despensa.", chat_id, user_id, stock_id, imagem=imagem
+    )
 
     return ChatMessageResponse(chat_id=chat_id, content=resposta)
 

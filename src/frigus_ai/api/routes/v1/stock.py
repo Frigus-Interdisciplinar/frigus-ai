@@ -5,7 +5,7 @@ leite"). Raciocínio ("o que faço pro jantar?") continua no chat. Regras em
 (`graph/tools/estoque/repo.py`) usa.
 """
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Query, UploadFile, status
 
 from frigus_ai.api.deps import (
     ChatServiceDep,
@@ -14,6 +14,7 @@ from frigus_ai.api.deps import (
     StockServiceDep,
 )
 from frigus_ai.api.middleware import guard
+from frigus_ai.api.uploads import ler_foto
 from frigus_ai.repositories.estoque_repository import FiltrosEstoque
 from frigus_ai.schemas.stock import (
     FotoAnaliseResponse,
@@ -26,9 +27,6 @@ from frigus_ai.schemas.stock import (
 )
 
 router = APIRouter(prefix="/stock", tags=["stock"])
-
-_MAX_FOTO_BYTES = 8 * 1024 * 1024
-
 
 @router.get(
     "/items",
@@ -133,13 +131,7 @@ async def analisar_foto(
     verdade é o usuário, confirmando via `POST /stock/items`.
     """
 
-    if not (foto.content_type or "").startswith("image/"):
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Envie uma imagem.")
-
-    # Lê no máximo 1 byte além do limite: arquivo grande não entra inteiro na RAM.
-    conteudo = await foto.read(_MAX_FOTO_BYTES + 1)
-    if len(conteudo) > _MAX_FOTO_BYTES:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Foto maior que 8MB.")
+    conteudo = await ler_foto(foto)
 
     resposta = await chat.analisar_foto(user_id, stock_id, conteudo)
 

@@ -7,8 +7,8 @@ o domínio (SQLAlchemy), que já tem teste próprio em `tests/repositories/`.
 import pytest
 from fastapi.testclient import TestClient
 
+from frigus_ai.api import uploads
 from frigus_ai.api.app import app
-from frigus_ai.api.routes.v1 import stock as rotas
 from frigus_ai.domain.errors import ItemDeEstoqueNaoEncontrado
 from frigus_ai.repositories import estoque_repository
 from frigus_ai.services.chat_service import service as chat_service
@@ -104,7 +104,7 @@ def test_analisar_foto_devolve_a_resposta_do_grafo(cliente, monkeypatch):
 
 
 def test_analisar_foto_maior_que_o_limite_vira_413(cliente):
-    foto_grande = b"x" * (rotas._MAX_FOTO_BYTES + 1)
+    foto_grande = b"x" * (uploads.MAX_FOTO_BYTES + 1)
 
     r = cliente.post("/v1/stock/foto", files={"foto": ("geladeira.jpg", foto_grande, "image/jpeg")})
 

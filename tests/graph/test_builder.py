@@ -22,7 +22,7 @@ from frigus_ai.graph.guardrail.schemas import (
 from frigus_ai.graph.names import ESTOQUE
 from frigus_ai.graph.nodes.especialista import especialista_com_agente
 from frigus_ai.graph.nodes.juiz import VereditoJuiz
-from frigus_ai.graph.state import EntradaGrafo, Roteamento
+from frigus_ai.graph.state import ContextoPrompt, EntradaGrafo, Roteamento
 
 
 class _FakeAgente:
@@ -172,7 +172,7 @@ async def test_caminho_do_turno_de_estoque(grafo):
 
 
 async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypatch):
-    """`decidir_apos_guardrail_entrada` desvia direto pra Visão quando há `imagem_b64` —
+    """`decidir_apos_guardrail_entrada` desvia direto pra Visão quando `tem_imagem` —
     o roteador (LLM de texto) nunca roda nesse turno."""
 
     from frigus_ai.graph import state as state_mod
@@ -201,10 +201,8 @@ async def test_turno_com_imagem_pula_o_roteador_e_vai_pra_visao(grafo, monkeypat
     app = compilar([VereditoJuiz(veredito="APROVADO", justificativa="ok")])
 
     await app.ainvoke(
-        EntradaGrafo(
-            messages=[HumanMessage(content="analise esta foto")],
-            imagem_b64="ZmFrZQ==",
-        )
+        EntradaGrafo(messages=[HumanMessage(content="analise esta foto")], tem_imagem=True),
+        context=ContextoPrompt(imagem_b64="ZmFrZQ=="),
     )
 
     assert agentes["router"].chamadas == 0
@@ -234,7 +232,8 @@ async def test_juiz_reprovado_em_turno_de_foto_reescreve_no_orquestrador(grafo, 
     ])
 
     await app.ainvoke(
-        EntradaGrafo(messages=[HumanMessage(content="analise esta foto")], imagem_b64="ZmFrZQ==")
+        EntradaGrafo(messages=[HumanMessage(content="analise esta foto")], tem_imagem=True),
+        context=ContextoPrompt(imagem_b64="ZmFrZQ=="),
     )
 
     assert len(prompts) == 1

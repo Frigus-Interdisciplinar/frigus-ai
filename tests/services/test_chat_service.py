@@ -344,7 +344,7 @@ async def test_analisar_foto_usa_thread_id_unico_e_nao_salva_historico(monkeypat
     assert stock_id == 1
     assert imagem_b64 == "ZmFrZS1qcGVnLWJ5dGVz"  # base64 de b"fake-jpeg-bytes"
     assert salvou == []
-    # a thread descartável é apagada depois (o checkpoint guardava o base64 pra sempre)
+    # a thread descartável é apagada depois: análise avulsa não deixa checkpoint
     assert descartadas == [session_id]
 
 
@@ -361,3 +361,51 @@ async def test_analisar_foto_sem_resposta_devolve_mensagem_padrao(monkeypatch):
     resposta = await chat_service.analisar_foto(user_id="3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", stock_id=1, imagem=b"x")
 
     assert resposta == "Não consegui analisar a foto."
+
+
+async def test_send_message_com_foto_manda_o_base64_pro_grafo_e_grava_so_o_texto(monkeypatch):
+    recebido = {}
+
+    async def _executar(conteudo, session_id, user_id, stock_id, **kwargs):
+        recebido["kwargs"] = kwargs
+        return "Vi leite."
+
+    gravadas = []
+
+    async def _salvar(user_id, session_id, novas):
+        gravadas.extend(novas)
+
+    async def _limite(user_id):
+        return None
+
+    monkeypatch.setattr(runner, "executar", _executar)
+    monkeypatch.setattr(chat_repository, "salvar_mensagens", _salvar)
+    monkeypatch.setattr(chat_service, "garantir_limite", _limite)
+
+    resposta = await chat_service.send_message("e agora?", "chat-1", "u1", 1, imagem=b"fake-jpeg-bytes")
+
+    assert resposta == "Vi leite."
+    assert recebido["kwargs"] == {"imagem_b64": "ZmFrZS1qcGVnLWJ5dGVz"}
+    assert [m.content for m in gravadas] == ["e agora?", "Vi leite."]  # a foto não vai pro histórico
+
+
+async def test_send_message_sem_foto_nao_passa_imagem_ao_grafo(monkeypatch):
+    recebido = {}
+
+    async def _executar(conteudo, session_id, user_id, stock_id, **kwargs):
+        recebido["kwargs"] = kwargs
+        return "oi"
+
+    async def _limite(user_id):
+        return None
+
+    async def _salvar(*a, **kw):
+        return None
+
+    monkeypatch.setattr(runner, "executar", _executar)
+    monkeypatch.setattr(chat_repository, "salvar_mensagens", _salvar)
+    monkeypatch.setattr(chat_service, "garantir_limite", _limite)
+
+    await chat_service.send_message("oi", "chat-1", "u1", 1)
+
+    assert recebido["kwargs"] == {}

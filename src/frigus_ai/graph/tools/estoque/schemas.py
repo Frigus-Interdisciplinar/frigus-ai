@@ -22,6 +22,13 @@ class AddStockProductArgs(BaseModel):
     minimal_quantity: int | None = Field(default=None, description="Quantidade mínima antes de sugerir recompra (opcional).")
 
 
+class AddStockProductsArgs(BaseModel):
+    items: list[AddStockProductArgs] = Field(
+        min_length=1, max_length=50,
+        description="Os produtos a cadastrar de uma vez (ex.: itens de uma foto), cada um com a própria validade.",
+    )
+
+
 class QueryStockArgs(BaseModel):
     storage_place: StoragePlace | None = Field(default=None, description="Filtra por local de armazenamento.")
     category: Category | None = Field(default=None, description="Filtra por categoria do produto.")

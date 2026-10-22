@@ -5,7 +5,11 @@ from langchain_core.runnables import Runnable
 from langgraph.runtime import Runtime
 
 from frigus_ai.graph.names import NodeLiteral
-from frigus_ai.graph.nodes.contexto import mensagens_do_turno, responder_com_evidencias
+from frigus_ai.graph.nodes.contexto import (
+    formatar_evidencias,
+    mensagens_do_turno,
+    responder_com_evidencias,
+)
 from frigus_ai.graph.state import (
     AsyncNodeComContexto,
     ConteudoEspecialista,
@@ -43,7 +47,10 @@ def especialista(
             return EspecialistaUpdate(
                 dados_especialistas=[
                     ResultadoEspecialista(
-                        agente=nome, resposta=conteudo["resposta"], dados=conteudo["dados"]
+                        agente=nome,
+                        resposta=conteudo["resposta"],
+                        dados=conteudo["dados"],
+                        evidencias=conteudo.get("evidencias", []),
                     )
                 ],
             )
@@ -63,7 +70,9 @@ def especialista_com_agente(
         resposta, evidencias = await responder_com_evidencias(
             agente, mensagens_do_turno(estado), runtime.context
         )
-        return ConteudoEspecialista(resposta=resposta, dados=evidencias or resposta)
+        return ConteudoEspecialista(
+            resposta=resposta, dados=formatar_evidencias(evidencias) or resposta, evidencias=evidencias
+        )
 
     return no
 

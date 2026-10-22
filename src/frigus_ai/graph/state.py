@@ -1,7 +1,7 @@
 import operator
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Annotated, Literal, NotRequired, TypedDict, get_args
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, get_args
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import MessagesState
@@ -68,21 +68,35 @@ class ContextoPrompt:
     fatos:     Fatos | None = None
     conversas: tuple[str, ...] = ()
 
+    # A foto do turno vive só na memória da chamada: no estado ela iria pra cada checkpoint (MBs) e
+    # limpar depois não apagaria os anteriores. O estado leva só `tem_imagem`, pro roteamento.
+    imagem_b64: str | None = None
+
 
 class EntradaGrafo(MessagesState):
     """Único formato aceito ao iniciar um turno — impede injetar campos internos do estado."""
 
     stock_id:             NotRequired[int | None]
-    imagem_b64:           NotRequired[str]
+    tem_imagem:           NotRequired[bool]
+
+
+class Evidencia(TypedDict):
+    """O retorno de uma tool no turno, com os argumentos da chamada — o que o Juiz confere, em
+    forma auditável."""
+
+    tool:     str
+    args:     dict[str, Any]
+    conteudo: str
 
 
 class ResultadoEspecialista(TypedDict):
     """O que um especialista devolveu no turno. `dados` é o que o Juiz confere (vazio = o
-    especialista estava indisponível e `resposta` é só o aviso)."""
+    especialista estava indisponível e `resposta` é só o aviso); `evidencias` é o mesmo dado, por tool."""
 
-    agente:   NodeLiteral
-    resposta: str
-    dados:    str
+    agente:     NodeLiteral
+    resposta:   str
+    dados:      str
+    evidencias: list[Evidencia]
 
 
 class Estado(MessagesState):
@@ -90,7 +104,7 @@ class Estado(MessagesState):
     mapa_pii:              NotRequired[MapaPII]
     mensagem_bloqueada:    NotRequired[str | None]
     stock_id:              NotRequired[int | None]
-    imagem_b64:            NotRequired[str]
+    tem_imagem:            NotRequired[bool]
 
     # Vazia quando o roteador respondeu direto.
     especialistas:         NotRequired[list[RotaEspecialista]]
@@ -102,6 +116,9 @@ class Estado(MessagesState):
 
     # O que o Juiz confere: preservado mesmo depois que o orquestrador reescreve a resposta.
     dados_especialista:    NotRequired[str]
+
+    # As tools que sustentam a resposta, de todos os especialistas do turno (auditoria).
+    evidencias:            NotRequired[list[Evidencia]]
 
     reescritas_juiz:       NotRequired[int]
     veredito_juiz:         NotRequired[str]
@@ -124,8 +141,9 @@ class RouterUpdate(TypedDict):
 class ConteudoEspecialista(TypedDict):
     """Retorno de especialista cuja resposta ao usuário difere dos dados que o Juiz confere."""
 
-    resposta: str
-    dados:    str
+    resposta:   str
+    dados:      str
+    evidencias: NotRequired[list[Evidencia]]
 
 
 class EspecialistaUpdate(TypedDict):
@@ -138,6 +156,7 @@ class EspecialistaUpdate(TypedDict):
 class OrquestradorUpdate(TypedDict):
     resposta_especialista: str
     dados_especialista:    str
+    evidencias:            list[Evidencia]
 
 
 class JuizUpdate(TypedDict):
@@ -191,6 +210,7 @@ __all__ = [
     "EntradaGrafo",
     "EspecialistaUpdate",
     "Estado",
+    "Evidencia",
     "GuardrailEntradaUpdate",
     "GuardrailSaidaUpdate",
     "InventarioGeladeira",

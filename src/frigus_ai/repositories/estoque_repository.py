@@ -134,34 +134,46 @@ def _produto_do_catalogo(s: Session, dados: ProdutoNovo) -> int:
     return novo.id
 
 
+def _inserir_item(s: Session, stock_id: int, dados: ProdutoNovo) -> tuple[int, int]:
+    """Cria o produto se não existir e insere o item; mesma validade soma quantidade (ON CONFLICT)."""
+
+    product_id = _produto_do_catalogo(s, dados)
+
+    stmt = (
+        insert(StockProduct)
+        .values(
+            product_id=product_id,
+            stock_id=stock_id,
+            quantity=dados["quantity"],
+            minimal_quantity=dados["minimal_quantity"],
+            expire_date=dados["expire_date"],
+            product_status=dados["product_status"],
+            category=dados["category"],
+        )
+        .on_conflict_do_update(
+            index_elements=["product_id", "stock_id", "expire_date"],
+            set_={"quantity": StockProduct.quantity + dados["quantity"]},
+        )
+        .returning(StockProduct.id, StockProduct.quantity)
+    )
+
+    item_id, quantidade = s.execute(stmt).one()
+
+    return item_id, quantidade
+
+
 class _EstoquePostgresRepo(PostgresRepo):
     @transacional
     def adicionar_produto(self, s: Session, stock_id: int, dados: ProdutoNovo) -> tuple[int, int]:
-        """Cria o produto se não existir e insere o item; mesma validade soma quantidade (ON CONFLICT)."""
+        return _inserir_item(s, stock_id, dados)
 
-        product_id = _produto_do_catalogo(s, dados)
+    @transacional
+    def adicionar_produtos(
+        self, s: Session, stock_id: int, itens: list[ProdutoNovo]
+    ) -> list[tuple[int, int]]:
+        """Todos na mesma transação: um item inválido desfaz o lote inteiro, sem estoque pela metade."""
 
-        stmt = (
-            insert(StockProduct)
-            .values(
-                product_id=product_id,
-                stock_id=stock_id,
-                quantity=dados["quantity"],
-                minimal_quantity=dados["minimal_quantity"],
-                expire_date=dados["expire_date"],
-                product_status=dados["product_status"],
-                category=dados["category"],
-            )
-            .on_conflict_do_update(
-                index_elements=["product_id", "stock_id", "expire_date"],
-                set_={"quantity": StockProduct.quantity + dados["quantity"]},
-            )
-            .returning(StockProduct.id, StockProduct.quantity)
-        )
-
-        item_id, quantidade = s.execute(stmt).one()
-
-        return item_id, quantidade
+        return [_inserir_item(s, stock_id, dados) for dados in itens]
 
     @transacional
     def consultar_estoque(
@@ -291,6 +303,10 @@ def adicionar_produto(stock_id: int, dados: ProdutoNovo) -> tuple[int, int]:
     return _estoque.adicionar_produto(stock_id, dados)
 
 
+def adicionar_produtos(stock_id: int, itens: list[ProdutoNovo]) -> list[tuple[int, int]]:
+    return _estoque.adicionar_produtos(stock_id, itens)
+
+
 def consultar_estoque(stock_id: int, filtros: FiltrosEstoque) -> list[ItemEstoque]:
     return _estoque.consultar_estoque(stock_id, filtros)
 
@@ -324,6 +340,7 @@ __all__ = [
     "ItemEstoque",
     "ProdutoNovo",
     "adicionar_produto",
+    "adicionar_produtos",
     "atualizar_quantidade",
     "consultar_estoque",
     "descartar",

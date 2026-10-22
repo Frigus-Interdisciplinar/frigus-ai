@@ -23,7 +23,7 @@ class Provedor(BaseModel):
 
     api_key:   SecretStr = SecretStr("")
     base_url:  str | None = None
-    timeout_s: float = 30.0
+    timeout_s: float = 15.0
     retries:   int = 0
 
 
@@ -72,8 +72,8 @@ class LLMSettings(BaseModel):
 
     # Teto por papel, acima da política do provider: saída curta e estruturada (guardrail, juiz,
     # roteador, fatos, resumo) não espera tanto quanto um especialista; foto é a chamada mais pesada.
-    timeout_curto_s: float = 15.0
-    timeout_visao_s: float = 60.0
+    timeout_curto_s: float = 8.0
+    timeout_visao_s: float = 30.0
 
     # Guardrails, juiz e roteador usam a temperatura 0: saída determinística.
     default_temperature:   float = 0.7
@@ -83,3 +83,15 @@ class LLMSettings(BaseModel):
     # Limites do grafo. ~3 mensagens por turno: 21 ≈ 7 turnos de histórico.
     max_historico_mensagens: int = 21
     max_reescritas_juiz:     int = 2
+
+    # Item da foto com chance de aparecer abaixo disso vai pro usuário confirmar. Chute: não foi
+    # calibrado com fotos reais (ver "Confiança não é probabilidade de acerto" em .agents/skills/jev.md).
+    confianca_minima_item_visao: float = 0.7
+
+    # Nome que o usuário disse -> item do estoque: abaixo disso a tool pergunta qual em vez de escolher.
+    # Chute, sem calibração.
+    confianca_minima_nome: float = 0.7
+
+    # Resposta que o Juiz acha "sustentada" com chance menor que isso é tratada como sem evidência.
+    # Mesmo aviso: chute, sem calibração.
+    confianca_minima_grounding: float = 0.8

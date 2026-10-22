@@ -13,7 +13,10 @@ import httpx
 
 from frigus_ai.infra.llm.jev.schemas import (
     Escolha,
+    MensagemUsuario,
     Nota,
+    ParteImagem,
+    ParteTexto,
     PedidoDecisao,
     Pergunta,
     PerguntaEscolha,
@@ -47,11 +50,27 @@ class Decisoes:
                 raise TypeError(f"{nome} não é escolha: {outra}")
 
     def sim(self, nome: str) -> bool:
+        return self.probabilidade(nome) >= 0.5
+
+    def probabilidade(self, nome: str) -> float:
+        """De a resposta de um predicado ser "sim"."""
+
         match self.respostas[nome]:
-            case Predicado() as predicado:
-                return predicado.sim
+            case Predicado(probability=probabilidade):
+                return probabilidade
             case outra:
                 raise TypeError(f"{nome} não é predicado: {outra}")
+
+    def probabilidade_da_opcao(self, nome: str, opcao: str) -> float | None:
+        """De a `opcao` ser a certa numa escolha; None se o gateway não mandou as probabilidades."""
+
+        match self.respostas[nome]:
+            case Escolha(probabilities=opcoes) if opcoes:
+                return next((o.probability for o in opcoes if o.value == opcao), 0.0)
+            case Escolha():
+                return None
+            case outra:
+                raise TypeError(f"{nome} não é escolha: {outra}")
 
 
 def disponivel() -> bool:
@@ -71,7 +90,7 @@ def _validar(
 
     match resposta:
         case Escolha(choice=valor, confidence=confianca) if valor in opcoes:
-            _medir(uso, resposta.name, modelo, valor, confianca)
+            _medir(uso, resposta.name, modelo, "opcao" if pergunta.dinamica else valor, confianca)
         
         case Predicado(probability=probabilidade):
             _medir(uso, resposta.name, modelo, "sim" if resposta.sim else "nao", max(probabilidade, 1 - probabilidade))
@@ -90,20 +109,35 @@ def _validar(
     return resposta
 
 
-async def decidir(uso: str, entrada: str, perguntas: Sequence[Pergunta]) -> Decisoes:
+async def decidir(
+    uso: str, entrada: str, perguntas: Sequence[Pergunta], imagem_b64: str | None = None
+) -> Decisoes:
     """Faz todas as `perguntas` sobre a mesma `entrada` numa requisição só. `uso` separa as métricas
-    por quem pergunta (ex.: `guardrail_entrada`)."""
+    por quem pergunta (ex.: `guardrail_entrada`). Com `imagem_b64` (JPEG), as perguntas valem pra
+    foto também: o JeV é só texto e dá 400, então vai direto na Luna, sem reserva."""
 
-    pedido = PedidoDecisao(
-        model=Model.JEV,
-        input=entrada,
-        questions=list(perguntas),
-        provider_options={"gateway": {"models": [Model.GPT_6_LUNA_DECISIONS]}},
-    )
+    if imagem_b64:
+        pedido = PedidoDecisao(
+            model=Model.GPT_6_LUNA_DECISIONS,
+            input=[MensagemUsuario(content=[
+                ParteTexto(text=entrada),
+                ParteImagem(image_url=f"data:image/jpeg;base64,{imagem_b64}"),
+            ])],
+            questions=list(perguntas),
+        )
+    else:
+        pedido = PedidoDecisao(
+            model=Model.JEV,
+            input=entrada,
+            questions=list(perguntas),
+            provider_options={"gateway": {"models": [Model.GPT_6_LUNA_DECISIONS]}},
+        )
     chave = settings.llm.gateway.api_key.get_secret_value()
+    # Foto é a chamada pesada: o teto de saída curta não serve.
+    timeout = settings.llm.timeout_visao_s if imagem_b64 else settings.llm.timeout_curto_s
 
     with medir_externo("jev"):
-        async with httpx.AsyncClient(timeout=settings.llm.timeout_curto_s) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resposta = await client.post(
                 f"{settings.llm.gateway.base_url}/decisions",
                 json=pedido.model_dump(mode="json", by_alias=True, exclude_none=True),
@@ -115,7 +149,11 @@ async def decidir(uso: str, entrada: str, perguntas: Sequence[Pergunta]) -> Deci
     # HTTP direto não passa pelo callback do LangChain: o custo entra nas métricas daqui.
     tokens = corpo.usage.get("input_tokens", 0)
     LLM_TOKENS.labels(provider="gateway", model=corpo.model, direction="input").inc(tokens)
-    LLM_COST.labels(provider="gateway", model=corpo.model).inc(custo_usd(corpo.model, tokens, 0))
+    # O gateway informa o custo real; a tabela local é só o plano B.
+    custo = corpo.provider_metadata.get("gateway", {}).get("cost")
+    LLM_COST.labels(provider="gateway", model=corpo.model).inc(
+        float(custo) if custo is not None else custo_usd(corpo.model, tokens, 0)
+    )
 
     por_nome = {p.name: p for p in perguntas}
     return Decisoes({r.name: _validar(uso, corpo.model, r, por_nome[r.name]) for r in corpo.answers})

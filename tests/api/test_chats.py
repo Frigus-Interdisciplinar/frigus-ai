@@ -268,3 +268,46 @@ def test_erro_de_dominio_sem_metadata_propria_vira_500_generico(cliente, monkeyp
 
     assert r.status_code == 500
     assert "sk-123" not in r.text
+
+
+def test_foto_no_chat_chega_ao_servico_com_texto_padrao_quando_nao_ha_legenda(cliente, monkeypatch):
+    chamado = {}
+
+    async def _send(conteudo, chat_id, user_id, stock_id, imagem=None):
+        chamado["args"] = (conteudo, chat_id, stock_id, imagem)
+        return "Vi leite e ovos."
+
+    monkeypatch.setattr(chat_service, "send_message", _send)
+
+    r = cliente.post(
+        f"/v1/chats/{CHAT_ID}/messages/photo", files={"foto": ("geladeira.jpg", b"fake", "image/jpeg")}
+    )
+
+    assert r.status_code == 200
+    assert r.json() == {"chat_id": CHAT_ID, "content": "Vi leite e ovos."}
+    conteudo, chat_id, stock_id, imagem = chamado["args"]
+    assert conteudo.startswith("Analise esta foto")
+    assert (chat_id, stock_id, imagem) == (CHAT_ID, 1, b"fake")
+
+
+def test_foto_no_chat_usa_a_legenda_e_barra_arquivo_que_nao_e_imagem(cliente, monkeypatch):
+    chamados = []
+
+    async def _send(conteudo, *a, **kw):
+        chamados.append(conteudo)
+        return "ok"
+
+    monkeypatch.setattr(chat_service, "send_message", _send)
+
+    ok = cliente.post(
+        f"/v1/chats/{CHAT_ID}/messages/photo",
+        data={"content": "o que vence primeiro?"},
+        files={"foto": ("g.jpg", b"fake", "image/jpeg")},
+    )
+    nao_imagem = cliente.post(
+        f"/v1/chats/{CHAT_ID}/messages/photo", files={"foto": ("notas.txt", b"texto", "text/plain")}
+    )
+
+    assert ok.status_code == 200
+    assert chamados == ["o que vence primeiro?"]
+    assert nao_imagem.status_code == 415

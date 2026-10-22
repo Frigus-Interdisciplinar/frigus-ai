@@ -68,7 +68,7 @@ def decidir_apos_guardrail_entrada(estado: Estado) -> str:
         return Route.FIM
     # O roteador decide por texto e não sabe lidar com imagem: turno com foto pula
     # direto pra visão, sem passar pelo LLM de roteamento.
-    if estado.get("imagem_b64"):
+    if estado.get("tem_imagem"):
         return VISAO
     return ROTEADOR
 

@@ -168,3 +168,42 @@ def test_descarte_de_item_zerado_nao_gera_movimento():
 
     assert sessao.descartes() != []
     assert sessao.movimentos() == []
+
+
+def test_lote_usa_uma_sessao_so_e_um_item_invalido_levanta_antes_de_gravar_o_resto(monkeypatch):
+    """O lote roda dentro de um único `@transacional`: a exceção de um item desfaz o conjunto."""
+
+    from datetime import date
+
+    from frigus_ai.repositories import estoque_repository as mod
+
+    sessoes = []
+    chamadas = []
+
+    class _Conn:
+        @contextmanager
+        def session(self):
+            sessoes.append(1)
+            yield object()
+
+    def _inserir(_s, _stock_id, dados):
+        chamadas.append(dados["product_name"])
+        if dados["product_name"] == "Ruim":
+            raise ValueError("item inválido")
+        return len(chamadas), dados["quantity"]
+
+    monkeypatch.setattr(mod, "_inserir_item", _inserir)
+    repo = _EstoquePostgresRepo(conn=_Conn())
+
+    def _novo(nome):
+        return {"product_name": nome, "category": "Grão", "storage_place": "Despensa", "quantity": 1,
+                "minimal_quantity": None, "expire_date": date(2099, 1, 1), "product_status": "Fresco",
+                "unit_price": 0.0}
+
+    assert repo.adicionar_produtos(42, [_novo("A"), _novo("B")]) == [(1, 1), (2, 1)]
+    assert len(sessoes) == 1
+
+    with pytest.raises(ValueError, match="item inválido"):
+        repo.adicionar_produtos(42, [_novo("C"), _novo("Ruim"), _novo("D")])
+    assert "D" not in chamadas
+    assert len(sessoes) == 2

@@ -1,3 +1,5 @@
+from datetime import date
+
 from langchain_core.tools import BaseTool, StructuredTool
 
 from frigus_ai.graph.tools.base import ToolSet
@@ -6,7 +8,9 @@ from frigus_ai.graph.tools.compras.schemas import (
     GenerateShoppingListFromLowStockArgs,
     MarkPurchasedArgs,
     QueryShoppingListArgs,
+    RegisterPurchaseArgs,
 )
+from frigus_ai.graph.tools.estoque.helpers import compute_product_status
 from frigus_ai.graph.tools.response import Response
 from frigus_ai.infra.postgres.context import current_stock_id
 from frigus_ai.repositories import compras_repository
@@ -70,6 +74,34 @@ class ComprasRepo(ToolSet):
         )
         return Response.ok(shopping_list_product_id=target_id, status=status)
 
+    def register_purchase(
+        self,
+        expire_date: str,
+        shopping_list_product_id: int | None = None,
+        product_name: str | None = None,
+        quantity: int | None = None,
+        unit_price: float | None = None,
+    ) -> dict:
+        """
+        Registra a compra de um item da lista: dá entrada no estoque E marca o item como Comprado,
+        numa operação só. Use quando o usuário disser que comprou algo da lista; `mark_purchased`
+        sozinho só troca o status e não coloca nada no estoque.
+
+        Localização por ID direto ou por nome do produto na lista aberta. A validade é obrigatória.
+        """
+
+        if shopping_list_product_id is None and not product_name:
+            return Response.error("Informe shopping_list_product_id ou product_name.")
+
+        validade = date.fromisoformat(expire_date)
+        status = compute_product_status(validade)
+        item_id, total = compras_repository.registrar_compra(
+            current_stock_id(), shopping_list_product_id, product_name, validade, status, quantity, unit_price
+        )
+        return Response.ok(
+            stock_product_id=item_id, quantity=total, expire_date=expire_date, product_status=status
+        )
+
     def generate_shopping_list_from_low_stock(self) -> dict:
         """
         Gera/atualiza a lista de compras com base em itens do estoque abaixo da
@@ -94,6 +126,9 @@ class ComprasRepo(ToolSet):
             ),
             StructuredTool.from_function(
                 self.mark_purchased, name="mark_purchased", args_schema=MarkPurchasedArgs
+            ),
+            StructuredTool.from_function(
+                self.register_purchase, name="register_purchase", args_schema=RegisterPurchaseArgs
             ),
             StructuredTool.from_function(
                 self.generate_shopping_list_from_low_stock,
