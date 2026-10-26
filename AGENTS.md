@@ -28,53 +28,37 @@ coisa; a nota diz o que fazer primeiro.
 
 | Requisito | Status | Onde |
 |---|---|---|
-| API FastAPI/Flask | ✅ Feito | `src/frigus_ai/api/` — rotas de negócio versionadas em `/v1` (chats, stock, shopping, recipes, profile), health, keys, MCP e A2A, com autenticação/rate limit condicionais (fastapi-guard com limites por rota via `app.state.guard_decorator`). `GET /chats` tipado (`ChatSummaryResponse`), ownership em `DELETE /chats/{id}` (403) e no `POST /a2a` |
-| Multiagente, mínimo 5 agentes | ✅ Feito | 12 nós no grafo: guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, assessor (A2A), visão, orquestrador, juiz (`graph/names.py`) |
-| LangChain para criação dos agentes | ✅ Feito | `graph/agents.py` |
-| LangGraph para orquestração | ✅ Feito | `graph/builder.py` |
-| Controle de sessões por usuário | ✅ Feito | `thread_id=session_id` no `MongoDBSaver` + histórico em Mongo. Ownership checado em `send_message`, `get_messages`, `/stream`, `DELETE` e no A2A (`contextId` valida dono antes de entrar na sessão). Comprovado com Mongo/Postgres reais: histórico sobrevive a reinício e outro usuário leva `ChatDeOutroUsuario` (`observability/RELATORIO.md`) |
-| Memória de longo prazo | ✅ Feito | Fatos estruturados (`alergias`/`preferencias`/`restricoes`/`habitos`) em Mongo (`user_fatos`), extraídos do chat em segundo plano e expostos via `GET/PUT /v1/profile`; resumo por chat em Mongo + embedding no Qdrant (busca semântica de conversas anteriores, `repositories/chat_embeddings_repository.py`). Os dois voltam pro prompt via `Runtime.context` do LangGraph, fora do checkpoint (`services/runner.py:_carregar_contexto` → `graph/agents.py` → `graph/prompts/__init__.py:load_prompt`); o perfil só entra em compras e receitas. Entrega garantida: `indexado_ate`/`resumido_ate` no doc do Mongo + reconciliador (`chat_service.reconciliar_memoria_loop`, no lifespan) refazem o que falhou |
-| MCP | ✅ Feito | `api/mcp.py` (montado em `/mcp`) expõe 20 tools com identidade por `X-API-Key`. Validado ao vivo com o cliente oficial do SDK `mcp` (`initialize`, `list_tools` e `call_tool(query_stock)` devolvendo dados reais) |
-| A2A | ✅ Feito | Superfície única e consolidada em `src/frigus_ai/api/routes/a2a.py` (contrato manual, com auth real por `X-API-Key`). A integração alternativa via `a2a-sdk` foi removida: o dispatcher da SDK sempre responde HTTP 200 e embute erro no corpo JSON-RPC, perdendo o 429/401 de transporte que o contrato manual já entrega |
-| RAG com fonte externa indicada | ✅ Feito | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` (fonte local, categoria explicitamente aceita pelo enunciado) |
-| Agente juiz (mitigação de alucinação) | ✅ Feito | `graph/nodes/juiz.py` — audita grounding/relevância/completude contra o retorno real das tools (`responder_com_evidencias`), até 2 retentativas pelo orquestrador (sem repetir escrita); falha na avaliação vira `INDISPONIVEL`, não `APROVADO`. Com o gateway configurado o avaliador é o JeV (grounding/relevância/completude como decisões tipadas), com o LLM de reserva |
-| Guardrail | ✅ Feito | `graph/guardrail/` — entrada (PII via `domain/privacy.py`, regex de ataque, classificador com cache no Redis; com `LLM__GATEWAY__API_KEY` o classificador é o JeV pela Decisions API do Vercel AI Gateway, `infra/jev.py`, com a mesma rubrica do `guardrail.md`) e saída. Classificador, revisor e juiz têm cadeia de fallback (Gemini → Groq → Luna, `graph/llm.py:estruturado`): antes só tinham o Gemini e, sem cota, aprovavam tudo em silêncio (falha aberta). Verificado ao vivo com o Gemini sem cota: injeção bloqueada, resposta alucinada reprovada |
-| Observabilidade/SRE — custo estimado (100 e 1000 usuários/semana) | ✅ Feito | `telemetry/evals/sre_report.py` contra o Prometheus real: US$ 9/semana (100 usuários) e US$ 90/semana (1000), com a premissa de 20 mensagens/usuário/semana explícita. Ver `observability/RELATORIO.md` |
-| Observabilidade/SRE — latência interagentes e tempo total de resposta | ✅ Feito | Prometheus mede HTTP, grafo, nodes, tools e LLM; LangSmith complementa os traces individuais |
-| Observabilidade/SRE — SLO/SLI e alertas | ✅ Feito | SLO do turno em `telemetry/metrics.py` (p95 ≤ 8s, erro ≤ 5%; exportado como `frigus_slo_target`), bloqueio do guardrail separado de erro (`outcome="blocked"`), SLIs gravados + alertas de SLO/burn rate em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na tela `/metrics` da web. Sem SLA (não há contrato) e sem Alertmanager (alertas só em `localhost:9090/alerts`) |
-| Observabilidade/SRE — índice de erros | ✅ Feito | SLI de erro do SLO (`error` / total de `frigus_graph_runs_total`; bloqueio do guardrail fora do numerador), gravado e alertado no Prometheus (`rules.yml`) e reportado pelo `telemetry/evals/sre_report.py` com orçamento de erro consumido; o `sre_report` agora usa `increase()` sobre a janela e foi rodado contra o Prometheus real somando 3 processos da API. Rodada de 2026-10-16 com o gateway pago e janela de 30 min contra o Prometheus real: erro 0%, p95 ≈ 52s (SLO de latência de 8s **não** bate — o turno de receitas sozinho leva ~58s), custo ≈ US$ 0,0045/turno (≈ US$ 9/semana com 100 usuários, ≈ US$ 90 com 1000) |
-| Observabilidade/SRE — custo/ROI | ✅ Feito | `telemetry/evals/sre_report.py`; valor por resolução = desperdício evitado (Embrapa/FGV, premissa de 20% evitado) ≈ US$ 0,035. Ver `observability/RELATORIO.md` |
-| Observabilidade/SRE — custo por resolução | ✅ Feito | `telemetry/evals/sre_report.py` define resolução = `frigus_graph_runs_total{outcome="success"}` e calcula custo/resolução a partir da tabela de preços por modelo (`PRECOS_POR_1M_TOKENS` em `telemetry/metrics_callback.py`, a mesma que alimenta `frigus_llm_cost_usd_total` em runtime) |
-| Desenho de arquitetura de alto nível | ✅ Feito | README.md — seção "Arquitetura" (Mermaid: clientes, API, grafo, persistência, externos, observabilidade) + `assets/diagrama-agentes.png` (só o fluxo de agentes, sem Visão/Assessor) |
-| Extra: Redis com fila ou ranking | ✅ Feito | `infra/redis/ranking.py` — ranking de produtos mais desperdiçados por `ZINCRBY`/`ZREVRANGE`, alimentado em `discard_product` e exposto como tool (`ranking_desperdicio`, domínio financeiro) |
-| Extra: Neo4j | ❌ Bloqueado | `neomodel` (OGM) no `pyproject.toml`, conexão lazy em `infra/neo4j/connection.py`, models `Ingredient`/`Recipe` com relações (`REQUIRES`/`SIMILAR_TO`). O grafo é só de receitas: preferência/alergia mora apenas no Mongo (`user_fatos`) — a tool `sugerir_receitas_compativeis` (`graph/tools/preferencias/`, dentro de `RECEITAS_TOOLS`) lê as alergias do perfil, soma o `evitar` do LLM e filtra no Cypher. Falta: sync automático de `products`/`recipes` do Postgres pro grafo (nunca existiu script pra isso; o seed manual `.cypher` foi removido — o grafo começa vazio). **A instância Aura do `.env` não existe mais** (`fb6503cd.databases.neo4j.io` dá NXDOMAIN): criar outra instância (ou usar o Neo4j do `docker-compose.yml`) e popular antes de demonstrar |
-| Extra: visão computacional (foto da geladeira) | ✅ Feito | `POST /stock/foto` (`api/routes/v1/stock.py`) + node `visao_node` (`graph/nodes/visao.py`, `with_structured_output` no Gemini Flash, bypassa o roteador via `tem_imagem` no estado). A foto vai por `context=` (`ContextoPrompt.imagem_b64`), nunca pelo estado: o checkpoint não a grava. Só descreve o que reconheceu — não escreve no estoque; o usuário confirma via `POST /stock/items` ou, no chat (`POST /chats/{id}/messages/photo`), pedindo pra cadastrar (tool `add_stock_products`, tudo ou nada). Itens que o JeV não vê na foto vão em `esclarecer`. Limite de 8MB no upload (`api/uploads.py`). `/stock/foto` usa thread descartável (`runner.descartar_thread`) |
-| Extra: complexidade do projeto | Em andamento | 6 domínios de negócio + guardrail duplo + juiz + RAG + integrações MCP/A2A + ranking Redis + Neo4j + visão já são acima da média |
+| API FastAPI/Flask | ✅ | `api/` — rotas de negócio em `/v1`, health, keys, MCP e A2A; auth e rate limit condicionais (fastapi-guard); ownership checado em chats e no A2A |
+| Multiagente, mínimo 5 agentes | ✅ | 12 nós no grafo (`graph/names.py`): guardrail entrada/saída, router, estoque, compras, receitas, faq, financeiro, assessor (A2A), visão, orquestrador, juiz |
+| LangChain / LangGraph | ✅ | `graph/agents.py` / `graph/builder.py` |
+| Controle de sessões por usuário | ✅ | `thread_id=session_id` no `MongoDBSaver` + histórico em Mongo; validado com bancos reais (`observability/RELATORIO.md`) |
+| Memória de longo prazo | ✅ | Fatos estruturados em Mongo (`user_fatos`, `GET/PUT /v1/profile`) + resumo por chat com embedding no Qdrant; voltam pro prompt via `Runtime.context` (`services/runner.py:_carregar_contexto`); reconciliador no lifespan refaz o que falhou |
+| MCP | ✅ | `api/mcp.py` em `/mcp`, 20 tools, identidade por `X-API-Key`; cliente de teste em `scripts/mcp_client.py` |
+| A2A | ✅ | Contrato manual único em `api/routes/a2a.py` (ver "Estrutura" sobre o `a2a-sdk` removido) |
+| RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
+| Agente juiz | ✅ | `graph/nodes/juiz.py` — audita contra o retorno real das tools, até 2 retentativas pelo orquestrador; falha na avaliação vira `INDISPONIVEL`, não `APROVADO`. JeV como avaliador quando o gateway está configurado |
+| Guardrail | ✅ | `graph/guardrail/` — entrada (PII, regex, classificador com cache Redis; JeV com gateway) e saída; fallback Gemini → Groq → Luna (`graph/llm.py:estruturado`) |
+| Observabilidade/SRE | ✅ | Prometheus (HTTP, grafo, nodes, tools, LLM), SLO/SLI e alertas em `observability/prometheus/rules.yml`, custo/erro/ROI/custo por resolução em `telemetry/evals/sre_report.py`. Números medidos e ressalvas (SLO de 8s não bate por latência do LLM; sem SLA nem Alertmanager): `observability/RELATORIO.md` |
+| Desenho de arquitetura | ✅ | README.md — seção "Arquitetura" (Mermaid) + `assets/diagrama-agentes.png` |
+| Extra: Redis fila/ranking | ✅ | `infra/redis/ranking.py` — ranking de desperdício, tool `ranking_desperdicio` |
+| Extra: Neo4j | ❌ Bloqueado | Models e traversal prontos (`infra/neo4j/`, tool `sugerir_receitas_compativeis`), mas falta sync Postgres → grafo e **a instância Aura do `.env` não existe mais** (NXDOMAIN): criar outra (ou usar o Neo4j do `docker-compose.yml`) e popular antes de demonstrar |
+| Extra: visão computacional | ✅ | `POST /stock/foto` + `graph/nodes/visao.py`; foto vai por `context=` (`ContextoPrompt.imagem_b64`), nunca pelo estado; só descreve, não escreve no estoque; limite de 8MB (`api/uploads.py`) |
+| Extra: complexidade | Em andamento | 6 domínios + guardrail duplo + juiz + RAG + MCP/A2A + Redis + Neo4j + visão |
 
-### Checklist por matéria/entrega
-
-| Área | Feito e comprovado | Pendente para fechar |
-|---|---|---|
-| Sistemas Multiagentes | Grafo LangGraph, 5+ especialistas, router, guardrails e juiz com retentativas | — (cenários 5/7, falhas por 429 do provedor; ver `observability/RELATORIO.md`) |
-| API e integrações | FastAPI com rotas em `/v1`, health, chats, autenticação condicional, MCP e A2A manual (superfície única); ownership checado em `send_message`, `get_messages`, `/stream` e `DELETE /chats/{id}`; `GET /chats` tipado | — (cliente externo em `scripts/mcp_client.py`: 20 tools e `call_tool` ok; uso documentado no README) |
-| Persistência | PostgreSQL, MongoDB, Redis e Qdrant lazy; histórico, fatos estruturados e checkpoint; todos os domínios (`receitas`, `financeiro`, `estoque`, `compras`) em SQLAlchemy + `@transacional`; pool `psycopg2` removido | — (validado contra os bancos reais; ver `observability/RELATORIO.md`) |
-| MCP | Tools em `src/frigus_ai/mcp.py`, contexto de usuário/estoque e testes MCP | — (`scripts/mcp_client.py` com o SDK oficial contra a API rodando; seção "Usando o MCP de um cliente" no README) |
-| A2A | Contrato manual único em `api/routes/a2a.py`, com autenticação real por `X-API-Key` (`api/auth/dependencies.py`); `a2a-sdk` removido do código (decisão registrada abaixo em "Estrutura") | Persistir sessão A2A além do `contextId` in-memory, se necessário |
-| Observabilidade/SRE | `/metrics`, métricas HTTP/grafo/node/tool/LLM, custo em USD, fallback de modelo, memória e chamadas externas; SLO + alertas no Prometheus e dashboard Grafana; `telemetry/evals/sre_report.py` calcula custo, índice de erros, custo/resolução e ROI a partir dos contadores | SLOs de latência e erro falham no plano gratuito dos LLMs (429); revalidar no plano pago |
-| Avaliação da disciplina | Métricas de runtime movidas pra `telemetry/`; `telemetry/evals/` agora só tem `sre_report.py` (custo/erro/ROI) e o harness de cenários (`telemetry/evals/scenarios.py` + `run_scenarios.py`) | — (rodado contra infra viva; relatório em `observability/RELATORIO.md`) |
-| Extras | RAG, arquitetura documentados, ranking de desperdício em Redis (`infra/redis/ranking.py`), Neo4j conectado (grafo de receitas + traversal `sugerir_receitas_compativeis` filtrando pelas alergias do `user_fatos`) e visão computacional (`POST /stock/foto`, `graph/nodes/visao.py`) | Sync automático Postgres → Neo4j (produtos/receitas) |
-
-**Importante:** a escola não paga API de IA generativa — por isso o projeto já usa só providers com
-tier gratuito viável (Gemini, Groq) e Claude/Anthropic como opcional (`ANTHROPIC_API_KEY` tem
-default vazio em `src/frigus_ai/settings/`, então o projeto roda sem ela).
+**Importante:** a escola não paga API de IA generativa. Desde 2026-10-23 o chat roda na GPT-6 Luna pelo
+Vercel AI Gateway (créditos pagos do bolso por um integrante, não pela escola: ~US$ 0,002 por turno), porque os planos gratuitos do Gemini
+(20 requisições/dia) e do Groq (8 mil tokens/minuto) não aguentam um turno do grafo. Sem
+`LLM__GATEWAY__API_KEY` o projeto ainda roda, só no Groq (lento, com 429) e sem JeV. Claude/Anthropic
+segue opcional (`ANTHROPIC_API_KEY` tem default vazio em `src/frigus_ai/settings/`).
 
 ## Stack
 
 - Python 3.13+, gerenciado com `uv` (`uv venv`, `uv sync`, `uv add <pkg>`)
 - LangChain 1.2 / LangGraph 1.1 para orquestração de agentes
-- LLMs: Gemini (`gemini-3.6-flash`, principal), Groq (`openai/gpt-oss-120b`), Claude
-  (`claude-haiku-4-5`, `claude-sonnet-4-6`), OpenRouter (`qwen/qwen3.8-27b:free`) e, pelo Vercel AI
-  Gateway, GPT-6 Luna (`openai/gpt-6-luna`). O enum `Model` fica em `settings/llm.py`, cada provider
+- LLMs: GPT-6 Luna (`openai/gpt-6-luna`, pelo Vercel AI Gateway, `reasoning_effort="low"`) em todas as
+  cadeias de chat e na visão, Groq (`openai/gpt-oss-120b`) e OpenRouter (`qwen/qwen3.8-27b:free`) de
+  reserva, Claude (`claude-haiku-4-5`, `claude-sonnet-4-6`) opcional e Gemini só para embeddings
+  (`gemini-embedding-001`). O enum `Model` fica em `settings/llm.py`, cada provider
   tem seu bloco em `LLMSettings` (`gemini`, `groq`, `claude`, `gateway`, `openrouter`: chave, URL,
   timeout e tentativas) e `infra/llm/` (`registry.py`, `builder.py`) constrói o modelo. Provider sem
   API key faz `build_llm` devolver `None` e fica fora das cadeias de fallback — só Gemini e Groq são
@@ -128,7 +112,7 @@ src/frigus_ai/          o "cérebro" do assistente, pacote instalável (hatchlin
 └── tui/                 app.py (Textual) + display.py + app.tcss — interface interativa
 
 data/                   pdf/Frigus-Documentacao.pdf (RAG) + sql/schema.sql (espelho do DDL do Supabase)
-observability/          prometheus/ e grafana/ (scrape config, regras de SLO, dashboard) — profile `observability` do compose (`just obs`);
+observability/          prometheus/ (scrape config, regras de SLO) — profile `observability` do compose (`just obs`);
                         RELATORIO.md (cenários, SRE e sessões contra a infra real)
 scripts/                run.sh (sobe o Docker e a app) e prometheus_token.py (token do /metrics → Prometheus)
 web/                    painel React (Vite): chat com timeline de execução, perfil e /metrics
@@ -147,16 +131,11 @@ existirem sem duplicar a lógica de montar estado, invocar o grafo e persistir h
 do app Frigus) ou por `X-API-Key`, ou cria/reaproveita o usuário local único quando
 `API__KEY_AUTH_ENABLED=false` (modo local/demo).
 
-`interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa agora.
-`src/frigus_ai/mcp.py` existe; o A2A vive só em `api/routes/a2a.py` (ver docstring do arquivo).
-Havia uma segunda implementação em `src/frigus_ai/a2a.py`, via `a2a-sdk` — removida porque o
-dispatcher JSON-RPC da SDK captura qualquer exceção e sempre responde HTTP 200 com o erro
-embutido no corpo, perdendo o 429 (rate limit) e 401 (auth) de transporte que o contrato manual
-já entrega e testa. Os tipos da SDK (`AgentCard` etc.) também são mensagens protobuf, não Pydantic
-— reusá-los exigiria conversão proto→dict a cada resposta sem ganhar nada sobre o schema Pydantic
-já escrito em `schemas/a2a.py`. Se o card um dia precisar de streaming/tasks de verdade, revisitar.
-O MCP e o A2A ainda devem ser tratados como integrações parcialmente concluídas até que seus
-contratos externos, autenticação e testes de ponta a ponta estejam fechados.
+`interfaces/terminal/` foi removido — a TUI (Textual) é a única interface interativa.
+O A2A vive só em `api/routes/a2a.py` (contrato manual). A integração via `a2a-sdk` foi removida: o
+dispatcher JSON-RPC da SDK sempre responde HTTP 200 com o erro no corpo, perdendo o 429/401 de
+transporte, e os tipos da SDK são protobuf, não Pydantic. Revisitar só se o card precisar de
+streaming/tasks de verdade.
 
 `src/frigus_ai/telemetry/metrics.py` e `metrics_callback.py` são observabilidade de runtime
 (Prometheus, importados por todos os nós do grafo) — não devem morar em `telemetry/evals/`. A subpasta `telemetry/evals/`
@@ -266,9 +245,10 @@ reais com métricas Prometheus nem commitar segredos.
 uv venv && uv sync   # instalar dependências
 just run             # sobe a TUI (sobe Postgres/Mongo/Redis/Qdrant via Docker automaticamente)
 just run api          # sobe a API (FastAPI/uvicorn, localhost:8000)
+just web              # API em modo local (`just api-local`: sem auth, usuário com estoque) + painel web (localhost:5173), abre direto no chat
 just test            # suíte de testes (não precisa de .env nem banco)
 just check           # lint (roda no CI em push/PR pra main); `just fix` aplica o que dá
-just obs             # Prometheus (9090) + Grafana (3000), já com o token do /metrics do .env
+just obs             # Prometheus (9090), já com o token do /metrics do .env
 ```
 
 `just run` chama o console script `frigus-ai` (`[project.scripts]`), que é o mesmo
@@ -288,12 +268,10 @@ just obs             # Prometheus (9090) + Grafana (3000), já com o token do /m
 ## Skills por biblioteca
 
 `.agents/skills/` guarda convenções e pegadinhas específicas de cada lib/serviço externo usada no
-projeto (pydantic, fastapi, mongo, langchain, jev, spoonacular — um arquivo por lib, regra + exemplo do
+projeto (pydantic, fastapi, mongo, langchain, jev, mcp, spoonacular — um arquivo por lib, regra + exemplo do
 que fazer e do que não fazer).
-`dependencies.md`, `responses.md`, `streaming.md`, `path-operations.md` e `other-tools.md` são
-material de referência do skill oficial do FastAPI, linkados a partir de `fastapi.md`. São achados
-reais deste repo ou do assessor-ai (repo irmão, mesmo stack de Mongo/LangChain — sinalizado quando o
-achado é de lá), não tutorial genérico. Consulte antes de escrever código novo que toque uma dessas
+São achados reais deste repo ou do assessor-ai (repo irmão, mesmo stack de Mongo/LangChain —
+sinalizado quando o achado é de lá), não tutorial genérico. Consulte antes de escrever código novo que toque uma dessas
 libs; adicione uma entrada nova quando encontrar uma pegadinha não óbvia que provavelmente vai se
 repetir.
 

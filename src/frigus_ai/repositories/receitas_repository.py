@@ -4,6 +4,7 @@ detalha ingredientes. Sem decisão de negócio nem tradução pra `Response` —
 em `graph/tools/receitas/repo.py` (a tool que o LLM chama).
 """
 
+from datetime import date, timedelta
 from typing import TypedDict
 
 from sqlalchemy import Float, func, select
@@ -49,18 +50,89 @@ class RecipeDetails(TypedDict):
     ingredientes: list[IngredienteInfo]
 
 
+class IngredienteDeReceita(TypedDict):
+    key: str
+    name: str
+    quantity: float | None
+    unit: str | None
+
+
+class ReceitaComIngredientes(TypedDict):
+    recipe_id: int
+    name: str
+    ingredientes: list[IngredienteDeReceita]
+
+
+class ItemDoEstoque(TypedDict):
+    key: str
+    name: str
+    expire_date: date
+    prioritario: bool
+
+
 class _ReceitasPostgresRepo(PostgresRepo):
     @transacional
-    def listar_receitas(self, s: Session, limit: int) -> list[RecipeSummary]:
-        stmt = (
-            select(Recipe.id, Recipe.name, Recipe.description)
-            .where(Recipe.active.is_(True))
-            .order_by(Recipe.name)
-            .limit(limit)
-        )
+    def listar_receitas(self, s: Session, limit: int, query: str | None = None) -> list[RecipeSummary]:
+        stmt = select(Recipe.id, Recipe.name, Recipe.description).where(Recipe.active.is_(True))
+        if query:
+            stmt = stmt.where(Recipe.name.icontains(query, autoescape=True))
+
+        stmt = stmt.order_by(Recipe.name).limit(limit)
         return [
             {"recipe_id": recipe_id, "name": name, "description": description}
             for recipe_id, name, description in s.execute(stmt)
+        ]
+
+    @transacional
+    def listar_com_ingredientes(self, s: Session) -> list[ReceitaComIngredientes]:
+        receitas = {
+            recipe_id: {"recipe_id": recipe_id, "name": name, "ingredientes": []}
+            for recipe_id, name in s.execute(
+                select(Recipe.id, Recipe.name).where(Recipe.active.is_(True)).order_by(Recipe.id)
+            )
+        }
+
+        stmt = (
+            select(
+                RecipeIngredient.recipe_id, Product.id, Product.name,
+                RecipeIngredient.quantity, RecipeIngredient.unit,
+            )
+            .join(Product, Product.id == RecipeIngredient.product_id)
+            .where(RecipeIngredient.recipe_id.in_(receitas))
+        )
+        for recipe_id, product_id, nome, quantidade, unidade in s.execute(stmt):
+            receitas[recipe_id]["ingredientes"].append({
+                "key": f"product:{product_id}",
+                "name": nome,
+                "quantity": float(quantidade) if quantidade is not None else None,
+                "unit": unidade,
+            })
+
+        return list(receitas.values())
+
+    @transacional
+    def estoque_utilizavel(self, s: Session, stock_id: int, dias_vencimento: int) -> list[ItemDoEstoque]:
+        """
+        Produtos com saldo positivo e validade que ainda não passou, com a validade mais próxima.
+        Produto vencido não vira ingrediente disponível só por ter saldo.
+        """
+
+        hoje = date.today()
+        stmt = (
+            select(Product.id, Product.name, func.min(StockProduct.expire_date))
+            .join(Product, Product.id == StockProduct.product_id)
+            .where(
+                StockProduct.stock_id == stock_id,
+                StockProduct.quantity > 0,
+                StockProduct.expire_date >= hoje,
+            )
+            .group_by(Product.id, Product.name)
+        )
+        limite = hoje + timedelta(days=dias_vencimento)
+
+        return [
+            {"key": f"product:{product_id}", "name": nome, "expire_date": validade, "prioritario": validade <= limite}
+            for product_id, nome, validade in s.execute(stmt)
         ]
 
     @transacional
@@ -166,12 +238,20 @@ class _ReceitasPostgresRepo(PostgresRepo):
 _receitas = _ReceitasPostgresRepo()
 
 
-def listar_receitas(limit: int) -> list[RecipeSummary]:
-    return _receitas.listar_receitas(limit)
+def listar_receitas(limit: int, query: str | None = None) -> list[RecipeSummary]:
+    return _receitas.listar_receitas(limit, query)
 
 
 def match_recipes_to_stock(stock_id: int, limit: int) -> list[RecipeSuggestionInfo]:
     return _receitas.match_recipes_to_stock(stock_id, limit)
+
+
+def listar_com_ingredientes() -> list[ReceitaComIngredientes]:
+    return _receitas.listar_com_ingredientes()
+
+
+def estoque_utilizavel(stock_id: int, dias_vencimento: int) -> list[ItemDoEstoque]:
+    return _receitas.estoque_utilizavel(stock_id, dias_vencimento)
 
 
 def get_recipe_details(recipe_id: int) -> RecipeDetails | None:
@@ -179,11 +259,16 @@ def get_recipe_details(recipe_id: int) -> RecipeDetails | None:
 
 
 __all__ = [
+    "IngredienteDeReceita",
     "IngredienteInfo",
+    "ItemDoEstoque",
+    "ReceitaComIngredientes",
     "RecipeDetails",
     "RecipeSuggestionInfo",
     "RecipeSummary",
+    "estoque_utilizavel",
     "get_recipe_details",
+    "listar_com_ingredientes",
     "listar_receitas",
     "match_recipes_to_stock",
 ]

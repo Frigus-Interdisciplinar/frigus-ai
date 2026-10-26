@@ -60,17 +60,24 @@ def test_find_recipes_mapeia_resultado_e_params(monkeypatch):
     ])
 
     r = find_recipes_by_ingredients.invoke(
-        {"ingredients": ["ovo", "cebola"], "number": 5}
+        {"ingredients": [" Ovo", "cebola", "ovo"], "number": 5}
     )
 
     assert r["status"] == "ok"
     assert r["receitas"] == [
-        {"id": 1, "title": "Omelete", "used_count": 2, "missed_count": 1, "missed": ["queijo"]}
+        {
+            "id": 1,
+            "title": "Omelete",
+            "image_url": None,
+            "used_count": 2,
+            "missed_count": 1,
+            "missed": ["queijo"],
+        }
     ]
 
     path, params = fake.chamadas[0]
     assert path == "/recipes/findByIngredients"
-    assert params["ingredients"] == "ovo,cebola"
+    assert params["ingredients"] == "cebola,ovo"
     assert params["ignorePantry"] is True
     assert params["ranking"] == 2
 
@@ -92,10 +99,17 @@ def test_get_recipe_information_traduz_aliases(monkeypatch):
         "status": "ok",
         "id": 42,
         "title": "Sopa",
+        "image_url": None,
         "ready_in_minutes": 30,
         "servings": 4,
         "ingredientes": [{"nome": "cebola", "quantidade": 1.0, "unidade": "un"}],
         "instrucoes": "Ferva.",
+        "preparo": [],
+        "nutrition": None,
+        "source_name": None,
+        "source_url": None,
+        "credits_text": None,
+        "license": None,
     }
 
 
@@ -114,6 +128,16 @@ def test_cota_esgotada_vira_response_error(monkeypatch):
 
     assert r["status"] == "error"
     assert "cota" in r["message"].lower()
+
+
+def test_chave_recusada_vira_response_error_sem_vazar_a_chave(monkeypatch):
+    _fake(monkeypatch, {"message": "unauthorized"}, status_code=401)
+
+    r = find_recipes_by_ingredients.invoke({"ingredients": ["ovo"]})
+
+    assert r["status"] == "error"
+    assert "recusou" in r["message"].lower()
+    assert "apikey" not in r["message"].lower()
 
 
 def test_cache_evita_segunda_chamada(monkeypatch):

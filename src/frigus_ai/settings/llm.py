@@ -28,16 +28,18 @@ class Provedor(BaseModel):
 
 
 class GeminiSettings(Provedor):
-    """Principal dos especialistas, guardrail, juiz e visão; também gera os embeddings."""
+    """Só os embeddings (FAQ e conversas anteriores); os modelos de chat passam pelo gateway."""
 
     api_key: SecretStr
 
 
 class GroqSettings(Provedor):
-    """Primeira reserva. 429 por rajada costuma passar em segundos, daí 1 retry."""
+    """
+    Reserva. Sem retry: o 429 do plano gratuito é por tokens/minuto (`retry-after` ~20s), então
+    esperar só atrasa o turno; melhor cair logo no próximo elo da cadeia.
+    """
 
     api_key: SecretStr
-    retries: int = 1
 
 
 class ClaudeSettings(Provedor):
@@ -48,7 +50,7 @@ class ClaudeSettings(Provedor):
 
 
 class GatewaySettings(Provedor):
-    """Vercel AI Gateway: GPT-6 Luna nas cadeias e JeV no guardrail. Luna raciocina, é mais lento."""
+    """Vercel AI Gateway, pago: GPT-6 Luna em todas as cadeias de chat e JeV no guardrail, roteador e juiz."""
 
     base_url:  str = "https://ai-gateway.vercel.sh/v1"
     timeout_s: float = 45.0
@@ -93,5 +95,7 @@ class LLMSettings(BaseModel):
     confianca_minima_nome: float = 0.7
 
     # Resposta que o Juiz acha "sustentada" com chance menor que isso é tratada como sem evidência.
-    # Mesmo aviso: chute, sem calibração.
-    confianca_minima_grounding: float = 0.8
+    # Calibrado em 2026-10-23 com 24 respostas reais: as com fato inventado ficaram em 0,00 a 0,28 e as
+    # corretas em 0,49 a 0,98; 0,4 fica no vão. Com 0,8 o juiz reprovava respostas corretas (0,7 a 0,77)
+    # e forçava até duas reescritas por turno. Amostra pequena: reavaliar com mais casos.
+    confianca_minima_grounding: float = 0.4

@@ -260,9 +260,9 @@ def test_historico_repassa_limit_e_barra_fora_da_faixa(cliente, monkeypatch):
 
 
 def test_erro_de_dominio_sem_metadata_propria_vira_500_generico(cliente, monkeypatch):
-    from frigus_ai.domain.errors import SpoonacularError
+    from frigus_ai.domain.errors import DomainError
 
-    _stub_send_message(monkeypatch, SpoonacularError("chave sk-123 inválida"))
+    _stub_send_message(monkeypatch, DomainError("chave sk-123 inválida"))
 
     r = cliente.post(f"/v1/chats/{CHAT_ID}/messages", json={"content": "oi"})
 

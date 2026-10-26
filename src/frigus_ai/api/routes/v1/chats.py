@@ -39,7 +39,7 @@ from frigus_ai.schemas.chat import (
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
-ChatIdPath = Annotated[str, Path(description="Id do chat, devolvido por `POST /v1/chats`. Um id novo é criado no primeiro envio.")]
+ChatIdPath = Annotated[str, Path(description="Id do chat, devolvido por `POST /v1/chats`. Id inexistente dá 404.")]
 
 
 async def _dono_do_chat_dentro_do_limite(chat_id: ChatIdPath, user_id: CurrentUserDep, chat: ChatServiceDep) -> str:
@@ -74,6 +74,7 @@ async def create_chat(user_id: CurrentUserDep, stock_id: OptionalStockIdDep, cha
     summary="Enviar mensagem",
     responses={
         403: {"description": "O chat não pertence ao usuário."},
+        404: {"description": "O chat não existe."},
         429: {"description": "Limite de mensagens excedido; ver `Retry-After`."},
     },
 )
@@ -97,6 +98,7 @@ async def send_message(
     summary="Enviar foto",
     responses={
         403: {"description": "O chat não pertence ao usuário."},
+        404: {"description": "O chat não existe."},
         413: {"description": "Foto maior que 8MB."},
         415: {"description": "O arquivo não é uma imagem."},
         429: {"description": "Limite de mensagens ou de 5 fotos por minuto excedido."},

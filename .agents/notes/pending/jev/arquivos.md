@@ -11,7 +11,7 @@ Pegadinhas do contrato e do gateway: `.agents/skills/jev.md`. Nada disso foi tes
 
 Observabilidade: `frigus_jev_decisions_total{uso, pergunta, escolha, modelo}` (escolha inclui `recusa` e
 `invalida`; `modelo` mostra se respondeu o JeV ou a reserva) e `frigus_jev_confidence{uso}`, mais
-latência/erro em `frigus_external_call_*{target="jev"}`. Painéis "JeV: ..." no Grafana. Cada uso
+latência/erro em `frigus_external_call_*{target="jev"}`. Painéis "JeV" na tela `/metrics` do front. Cada uso
 novo passa o próprio `uso` pro `decidir`/`escolher`.
 
 Próximos usos, em ordem de prioridade:

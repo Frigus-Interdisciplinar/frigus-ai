@@ -103,8 +103,7 @@ Resposta: array com `id, title, imageType, readyInMinutes, servings, sourceUrl`.
 
 ## Client HTTP
 
-Ainda não existe (`tools/spoonacular/` não foi criado). Usar `httpx` (ver
-[other-tools.md](other-tools.md) — ainda não é dependência do projeto, adicionar com `uv add httpx`
+Ainda não existe (`tools/spoonacular/` não foi criado). Usar `httpx` (ainda não é dependência do projeto, adicionar com `uv add httpx`
 junto da primeira tool que fizer a chamada real). Mesmo padrão de `connection.py` lazy que
 `infra/mongo/` e `infra/postgres/` já seguem — client HTTP configurado uma vez, não por chamada.
 

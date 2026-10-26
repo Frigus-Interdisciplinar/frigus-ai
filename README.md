@@ -84,14 +84,14 @@ flowchart TB
     end
 
     subgraph EXTERNO["Serviços externos"]
-        LLM["LLMs: Gemini, Groq,<br/>Vercel AI Gateway (GPT-6 Luna, JeV)"]
+        LLM["LLMs: Vercel AI Gateway (GPT-6 Luna, JeV),<br/>Groq, Gemini (embeddings)"]
         SPOON["Spoonacular"]
         ASSR["Assessor financeiro (A2A)"]
         FB["Firebase Auth"]
     end
 
     subgraph OBS["Observabilidade"]
-        PROM["Prometheus (SLO e alertas)"] --> GRAF["Grafana"]
+        PROM["Prometheus (SLO e alertas)"]
         LS["LangSmith (traces)"]
     end
 
@@ -138,7 +138,7 @@ justificativa livre.
 ```
 frigus-ai/
 ├── pyproject.toml / uv.lock
-├── docker-compose.yml               # Postgres, Mongo, Redis, Neo4j e Qdrant; profile `observability`: Prometheus + Grafana
+├── docker-compose.yml               # Postgres, Mongo, Redis, Neo4j e Qdrant; profile `observability`: Prometheus
 ├── justfile                         # run, web, obs, test, check, fix, deploy
 ├── scripts/                         # run.sh (sobe o Docker e a app) e prometheus_token.py (token do /metrics)
 ├── data/
@@ -146,7 +146,6 @@ frigus-ai/
 │   └── sql/schema.sql               # Espelho do schema public do Supabase (DDL)
 ├── observability/
 │   ├── prometheus/                  # scrape, regras de SLO e alertas
-│   ├── grafana/                     # datasource e dashboard (inclui os painéis do JeV)
 │   └── RELATORIO.md                 # cenários, SRE e sessões contra a infra real
 ├── web/                             # Painel React (Vite): chat com a timeline de execução, perfil e /metrics
 ├── tests/                           # Espelha a estrutura do pacote
@@ -329,7 +328,7 @@ uv sync
 
 ```bash
 docker compose up -d
-just obs   # opcional: Prometheus (9090) + Grafana (3000), já com o token do /metrics
+just obs   # opcional: Prometheus (9090), já com o token do /metrics
 ```
 
 (O `just run` também sobe os serviços sozinho via `scripts/run.sh`, assumindo Docker Desktop.)

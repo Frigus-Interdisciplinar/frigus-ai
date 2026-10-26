@@ -1,4 +1,5 @@
 import type { ChatSummary, ExecutionEvent, Fatos, Message } from "../types";
+import { clearApiKey, getApiKey } from "./auth";
 
 export class ApiError extends Error {
   constructor(
@@ -9,15 +10,27 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...init?.headers,
-  };
+function cabecalhos(extra?: HeadersInit): Record<string, string> {
+  const key = getApiKey();
 
-  const res = await fetch(path, { ...init, headers });
+  return {
+    "Content-Type": "application/json",
+    ...(key ? { "X-API-Key": key } : {}),
+    ...(extra as Record<string, string> | undefined),
+  };
+}
+
+// Key recusada: a sessão acabou. Fora da tela de login, volta pra ela (lá o erro aparece no form).
+function sessaoExpirou(): void {
+  clearApiKey();
+  if (window.location.pathname !== "/login") window.location.assign("/login");
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, { ...init, headers: cabecalhos(init?.headers) });
 
   if (!res.ok) {
+    if (res.status === 401) sessaoExpirou();
     const body = await res.json().catch(() => null);
     throw new ApiError(body?.detail ?? `Erro ${res.status}`, res.status);
   }
@@ -25,6 +38,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return undefined as T;
 
   return res.json() as Promise<T>;
+}
+
+export async function criarApiKey(
+  nome: string,
+  email: string,
+  segredo: string,
+): Promise<{ user_id: string; api_key: string }> {
+  const res = await fetch("/keys", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Signup-Secret": segredo },
+    body: JSON.stringify({ nome, email }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(body?.detail ?? `Erro ${res.status}`, res.status);
+  }
+
+  return res.json();
 }
 
 export function listChats(): Promise<ChatSummary[]> {
@@ -57,11 +89,12 @@ export async function streamMessage(
 ): Promise<void> {
   const res = await fetch(`/v1/chats/${chatId}/messages/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: cabecalhos(),
     body: JSON.stringify({ content }),
   });
 
   if (!res.ok || !res.body) {
+    if (res.status === 401) sessaoExpirou();
     const body = await res.json().catch(() => null);
     throw new ApiError(body?.detail ?? `Erro ${res.status}`, res.status);
   }

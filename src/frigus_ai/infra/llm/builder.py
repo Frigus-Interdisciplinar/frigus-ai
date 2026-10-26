@@ -43,6 +43,10 @@ def build_llm(
     if top_p is not None and provider == "gemini":
         kwargs["top_p"] = top_p
 
+    # Luna é modelo de raciocínio: no esforço padrão cada chamada leva ~4,6s; `low` mira o ~1,5s do Gemini.
+    if model == Model.GPT_6_LUNA:
+        kwargs["reasoning_effort"] = "low"
+
     # gpt-oss é modelo de raciocínio: sem isso o chain-of-thought vem dentro do content.
     if provider == "groq":
         kwargs["reasoning_format"] = "hidden"

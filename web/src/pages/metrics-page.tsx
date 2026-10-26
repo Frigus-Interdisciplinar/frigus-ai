@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { LineChart, type Serie } from "../components/line-chart";
+import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { getMetricsToken, setMetricsToken } from "../lib/auth";
 import { cn } from "../lib/cn";
 import {
   groupByLabel,
@@ -11,6 +15,58 @@ import {
   type HistogramStat,
   type PromSample,
 } from "../lib/prom";
+
+const INTERVALO_MS = 15_000;
+// 120 leituras de 15s = 30 min de histórico, só na memória da aba.
+const MAX_PONTOS = 120;
+
+interface Leitura {
+  t: number;
+  ok: number;
+  bloqueados: number;
+  erros: number;
+  durSoma: number;
+  durContagem: number;
+  custo: number;
+  tokensIn: number;
+  tokensOut: number;
+  emAndamento: number;
+}
+
+function leitura(samples: PromSample[]): Leitura {
+  const turnos = (outcome: string) =>
+    sumByName(samples.filter((s) => s.labels.outcome === outcome), "frigus_graph_runs_total");
+  const tokens = (direction: string) =>
+    sumByName(samples.filter((s) => s.labels.direction === direction), "frigus_llm_tokens_total");
+
+  return {
+    t: Date.now(),
+    ok: turnos("success"),
+    bloqueados: turnos("blocked"),
+    erros: turnos("error"),
+    durSoma: sumByName(samples, "frigus_graph_duration_seconds_sum"),
+    durContagem: sumByName(samples, "frigus_graph_duration_seconds_count"),
+    custo: sumByName(samples, "frigus_llm_cost_usd_total"),
+    tokensIn: tokens("input"),
+    tokensOut: tokens("output"),
+    emAndamento: sumByName(samples, "frigus_graph_in_progress"),
+  };
+}
+
+// Contadores só crescem; o delta entre leituras vira "por minuto". Delta negativo = a API reiniciou.
+function porMinuto(h: Leitura[], campo: (l: Leitura) => number): number[] {
+  return h.slice(1).map((l, i) => {
+    const delta = campo(l) - campo(h[i]);
+    return delta > 0 ? (delta * 60_000) / (l.t - h[i].t) : 0;
+  });
+}
+
+function latenciaMedia(h: Leitura[]): number[] {
+  return h.slice(1).map((l, i) => {
+    const turnos = l.durContagem - h[i].durContagem;
+    return turnos > 0 ? (l.durSoma - h[i].durSoma) / turnos : 0;
+  });
+}
 
 function Kpi({ label, value }: { label: string; value: string | number }) {
   return (
@@ -95,28 +151,42 @@ function TimeBreakdown({ title, stats }: { title: string; stats: Record<string, 
 export function MetricsPage() {
   const [samples, setSamples] = useState<PromSample[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [historico, setHistorico] = useState<Leitura[]>([]);
+  const [pedeToken, setPedeToken] = useState(false);
+  const [tokenDigitado, setTokenDigitado] = useState("");
+  const [token, setToken] = useState(getMetricsToken() ?? "");
 
   useEffect(() => {
     let cancelado = false;
 
     async function carregar() {
       try {
-        const res = await fetch("/metrics");
+        const res = await fetch("/metrics", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (res.status === 401) {
+          // O /metrics tem segredo próprio (o do Prometheus), diferente da API key do usuário.
+          if (!cancelado) setPedeToken(true);
+          return;
+        }
         if (!res.ok) throw new Error(`erro ${res.status}`);
         const text = await res.text();
-        if (!cancelado) setSamples(parseMetrics(text));
+        if (cancelado) return;
+        setPedeToken(false);
+        setErro(null);
+        const lidas = parseMetrics(text);
+        setSamples(lidas);
+        setHistorico((h) => [...h, leitura(lidas)].slice(-MAX_PONTOS));
       } catch {
         if (!cancelado) setErro("Não consegui carregar /metrics.");
       }
     }
 
     carregar();
-    const id = setInterval(carregar, 15_000);
+    const id = setInterval(carregar, INTERVALO_MS);
     return () => {
       cancelado = true;
       clearInterval(id);
     };
-  }, []);
+  }, [token]);
 
   const httpTotal = samples ? sumByName(samples, "frigus_http_requests_total") : 0;
   const httpAtivos = samples ? sumByName(samples, "frigus_http_active_requests") : 0;
@@ -142,11 +212,44 @@ export function MetricsPage() {
   const sloOk = p95 !== null && sloLatencia !== null && sloErro !== null && p95 <= sloLatencia && taxaErro <= sloErro;
   const custoUsd = samples ? sumByName(samples, "frigus_llm_cost_usd_total") : 0;
   const fallbacks = samples ? sumByName(samples, "frigus_llm_fallbacks_total") : 0;
+  const jevDecisoes = samples ? sumByName(samples, "frigus_jev_decisions_total") : 0;
+  const jevConfSoma = samples ? sumByName(samples, "frigus_jev_confidence_sum") : 0;
+  const jevConfContagem = samples ? sumByName(samples, "frigus_jev_confidence_count") : 0;
   const emAndamento = samples ? sumByName(samples, "frigus_graph_in_progress") : 0;
 
   const nodeStats = samples ? histogramStatsByLabel(samples, "frigus_node_duration_seconds", "node") : {};
   const nodeTotalTime = Object.values(nodeStats).reduce((acc, s) => acc + s.totalSeconds, 0);
   const nodeMaisLento = Object.entries(nodeStats).sort((a, b) => b[1].totalSeconds - a[1].totalSeconds)[0];
+
+  const graficos: { title: string; series: Serie[]; format: (n: number) => string }[] = [
+    {
+      title: "turnos por minuto",
+      format: (n) => n.toFixed(1),
+      series: [
+        { label: "ok", stroke: "stroke-primary", fundo: "bg-primary", values: porMinuto(historico, (l) => l.ok) },
+        { label: "bloqueados", stroke: "stroke-muted-foreground", fundo: "bg-muted-foreground", values: porMinuto(historico, (l) => l.bloqueados) },
+        { label: "erro", stroke: "stroke-destructive", fundo: "bg-destructive", values: porMinuto(historico, (l) => l.erros) },
+      ],
+    },
+    {
+      title: "latência média do turno",
+      format: fmtSeconds,
+      series: [{ label: "média na janela", stroke: "stroke-primary", fundo: "bg-primary", values: latenciaMedia(historico) }],
+    },
+    {
+      title: "tokens por minuto",
+      format: (n) => n.toFixed(0),
+      series: [
+        { label: "entrada", stroke: "stroke-primary", fundo: "bg-primary", values: porMinuto(historico, (l) => l.tokensIn) },
+        { label: "saída", stroke: "stroke-muted-foreground", fundo: "bg-muted-foreground", values: porMinuto(historico, (l) => l.tokensOut) },
+      ],
+    },
+    {
+      title: "custo LLM por minuto (US$)",
+      format: (n) => n.toFixed(4),
+      series: [{ label: "custo", stroke: "stroke-primary", fundo: "bg-primary", values: porMinuto(historico, (l) => l.custo) }],
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background px-4 py-10">
@@ -159,6 +262,32 @@ export function MetricsPage() {
         </header>
 
         {erro && <p className="text-sm text-destructive">{erro}</p>}
+
+        {pedeToken && (
+          <Card className="flex flex-col gap-3 p-4">
+            <p className="text-sm text-foreground">
+              O <code>/metrics</code> pede o token do Prometheus (<code>API_KEYS__METRICS_TOKEN</code>).
+            </p>
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const novo = tokenDigitado.trim();
+                setMetricsToken(novo);
+                setToken(novo);
+              }}
+            >
+              <Input
+                type="password"
+                value={tokenDigitado}
+                onChange={(e) => setTokenDigitado(e.target.value)}
+                placeholder="cole o token"
+                required
+              />
+              <Button type="submit">Salvar</Button>
+            </form>
+          </Card>
+        )}
 
         {samples && sloLatencia !== null && sloErro !== null && (
           <div
@@ -176,7 +305,7 @@ export function MetricsPage() {
             </strong>
             <span className="ml-2 text-muted-foreground">
               p95 até {fmtSeconds(sloLatencia)} e erro até {(sloErro * 100).toFixed(0)}% — acumulado
-              desde que a API subiu (janela de 5m e alertas no Grafana/Prometheus).
+              desde que a API subiu (janela de 5m e alertas no Prometheus).
             </span>
           </div>
         )}
@@ -199,7 +328,24 @@ export function MetricsPage() {
           <Kpi label="turnos em andamento" value={emAndamento} />
           <Kpi label="custo LLM (tabela fixa)" value={`US$ ${custoUsd.toFixed(4)}`} />
           <Kpi label="fallbacks de modelo" value={fallbacks} />
+          <Kpi label="decisões do JeV" value={jevDecisoes} />
+          <Kpi
+            label="confiança média do JeV"
+            value={jevConfContagem > 0 ? `${((jevConfSoma / jevConfContagem) * 100).toFixed(0)}%` : "-"}
+          />
         </div>
+
+        <section className="flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground">
+            ao vivo: uma leitura a cada {INTERVALO_MS / 1000}s, até {(MAX_PONTOS * INTERVALO_MS) / 60_000} min,
+            só nesta aba (recarregar a página zera).
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {graficos.map((g) => (
+              <LineChart key={g.title} {...g} />
+            ))}
+          </div>
+        </section>
 
         {samples && (
           <>
@@ -218,6 +364,16 @@ export function MetricsPage() {
               />
               <Breakdown title="tools" data={groupByLabel(samples, "frigus_tool_runs_total", "tool")} />
               <Breakdown title="rotas do router" data={groupByLabel(samples, "frigus_router_decisions_total", "route")} />
+              <Breakdown title="JeV por uso" data={groupByLabel(samples, "frigus_jev_decisions_total", "uso")} />
+              <Breakdown title="JeV: quem respondeu (JeV ou reserva)" data={groupByLabel(samples, "frigus_jev_decisions_total", "modelo")} />
+              <TimeBreakdown
+                title="latência do JeV"
+                stats={histogramStatsByLabel(
+                  samples.filter((s) => s.labels.target === "jev"),
+                  "frigus_external_call_duration_seconds",
+                  "target",
+                )}
+              />
             </div>
           </>
         )}

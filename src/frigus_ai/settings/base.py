@@ -42,6 +42,8 @@ class Settings(BaseSettings):
                 raise ValueError("API__KEY_AUTH_ENABLED precisa ser true quando ENVIRONMENT=production")
             if "*" in self.api.cors_origins:
                 raise ValueError('API__CORS_ORIGINS não pode conter "*" quando ENVIRONMENT=production')
+            if not self.api_keys.metrics_token.get_secret_value():
+                raise ValueError("API_KEYS__METRICS_TOKEN é obrigatório quando ENVIRONMENT=production")
         return self
 
 

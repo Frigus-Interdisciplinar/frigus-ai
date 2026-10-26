@@ -21,10 +21,12 @@ from frigus_ai.schemas.execution import (
     RunFailed,
     RunFinished,
     RunStarted,
+    ToolFinished,
+    ToolStarted,
 )
 from frigus_ai.services.user_service import user_service
 from frigus_ai.telemetry.metrics import GRAPH_DURATION, GRAPH_IN_PROGRESS, GRAPH_RUNS
-from frigus_ai.telemetry.metrics_callback import PrometheusCallbackHandler
+from frigus_ai.telemetry.metrics_callback import PrometheusCallbackHandler, no_do_grafo
 
 logger = Logging.get_logger(__name__)
 
@@ -185,10 +187,19 @@ async def executar_stream(
                 version="v2",
             ):
                 nome = event.get("name")
-                if nome not in _NOMES_DE_NODE:
+                tipo = event.get("event")
+
+                # Só o nome da tool, de qual node do grafo ela saiu (dentro de um especialista o
+                # evento vem do subgrafo do agente, então o node está no `checkpoint_ns`).
+                if tipo in ("on_tool_start", "on_tool_end"):
+                    dono = no_do_grafo(event.get("metadata") or {})
+                    if dono in _NOMES_DE_NODE and isinstance(nome, str):
+                        evento_tool = ToolStarted if tipo == "on_tool_start" else ToolFinished
+                        yield evento_tool(node=cast(NodeLiteral, dono), tool=nome)
                     continue
 
-                tipo = event.get("event")
+                if nome not in _NOMES_DE_NODE:
+                    continue
 
                 if tipo == "on_chain_start":
                     yield NodeStarted(node=cast(NodeLiteral, nome))

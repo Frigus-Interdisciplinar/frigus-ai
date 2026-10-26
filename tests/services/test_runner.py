@@ -17,6 +17,8 @@ from frigus_ai.schemas.execution import (
     NodeStarted,
     RouteSelected,
     RunFinished,
+    ToolFinished,
+    ToolStarted,
 )
 from frigus_ai.services import runner
 from frigus_ai.services.user_service import user_service
@@ -176,3 +178,33 @@ def test_outcome_bloqueio_do_guardrail_nao_e_resolucao_nem_erro():
     assert runner._outcome({"mensagem_bloqueada": "Não consigo processar essa solicitação."}) == "blocked"
     assert runner._outcome({"mensagem_bloqueada": None}) == "success"
     assert runner._outcome({}) == "success"
+
+
+class _FakeGrafoComTools:
+    """Emite eventos de tool de dentro do subgrafo do agente, como o LangGraph faz."""
+
+    async def astream_events(self, estado, config, version, context=None):
+        sub_agente = {"langgraph_checkpoint_ns": "estoque_node:abc|tools:xyz", "langgraph_node": "tools"}
+
+        yield {"event": "on_chain_start", "name": "estoque_node", "data": {}}
+        yield {"event": "on_tool_start", "name": "query_stock", "metadata": sub_agente, "data": {"input": {"segredo": 1}}}
+        yield {"event": "on_tool_end", "name": "query_stock", "metadata": sub_agente, "data": {"output": "dados"}}
+        # Tool de fora de qualquer node nosso (ex.: tool de um runnable avulso): ignorada.
+        yield {"event": "on_tool_start", "name": "avulsa", "metadata": {}, "data": {}}
+        yield {"event": "on_chain_end", "name": "estoque_node", "data": {"output": {"resposta_especialista": "cru"}}}
+
+
+async def test_stream_emite_so_o_nome_da_tool_e_de_qual_node_ela_veio(monkeypatch):
+    monkeypatch.setattr(runner, "fluxo_agentes", _FakeFluxoAgentes(_FakeGrafoComTools()))
+
+    eventos = [e async for e in runner.executar_stream("oi", "sessao", 1, 1)]
+
+    tools = [e for e in eventos if isinstance(e, (ToolStarted, ToolFinished))]
+    assert tools == [
+        ToolStarted(node="estoque_node", tool="query_stock"),
+        ToolFinished(node="estoque_node", tool="query_stock"),
+    ]
+    # Argumento e retorno da tool nunca vão pro stream.
+    assert "segredo" not in "".join(e.model_dump_json() for e in eventos)
+    assert "dados" not in "".join(e.model_dump_json() for e in tools)
+

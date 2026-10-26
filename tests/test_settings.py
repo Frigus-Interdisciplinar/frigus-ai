@@ -9,9 +9,10 @@ _BASE = {
 }
 
 
-def _settings(*, environment="local", key_auth_enabled=False, cors_origins=("*",)) -> Settings:
+def _settings(*, environment="local", key_auth_enabled=False, cors_origins=("*",), metrics_token="") -> Settings:
     return Settings(
         environment=environment,
+        api_keys={"metrics_token": metrics_token},
         api={"key_auth_enabled": key_auth_enabled, "cors_origins": list(cors_origins), "a2a_base_url": "http://x"},
         **_BASE,
     )
@@ -28,8 +29,18 @@ def test_producao_com_cors_aberto_aborta():
 
 
 def test_producao_com_auth_e_cors_fechado_ok():
-    s = _settings(environment="production", key_auth_enabled=True, cors_origins=("https://app.frigus.com",))
+    s = _settings(
+        environment="production",
+        key_auth_enabled=True,
+        cors_origins=("https://app.frigus.com",),
+        metrics_token="segredo",
+    )
     assert s.environment == "production"
+
+
+def test_producao_sem_token_de_metricas_aborta():
+    with pytest.raises(ValidationError, match="METRICS_TOKEN"):
+        _settings(environment="production", key_auth_enabled=True, cors_origins=("https://app.frigus.com",))
 
 
 def test_local_sem_auth_ok():

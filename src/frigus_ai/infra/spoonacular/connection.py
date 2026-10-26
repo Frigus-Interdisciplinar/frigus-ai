@@ -25,7 +25,8 @@ class SpoonacularConnector(Connector[httpx.AsyncClient]):
         if self._client is None:
             self._client = httpx.AsyncClient(
                 base_url=self._BASE_URL,
-                params={"apiKey": settings.api_keys.spoonacular_api_key.get_secret_value()},
+                # Header, não `?apiKey=`: na URL a chave vai parar no log do httpx e em tracebacks.
+                headers={"x-api-key": settings.api_keys.spoonacular_api_key.get_secret_value()},
             )
 
         return self._client

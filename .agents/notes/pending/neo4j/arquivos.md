@@ -27,3 +27,17 @@
 `src/frigus_ai/repositories/preferencias_repository.py`,
 `src/frigus_ai/graph/tools/preferencias/`, `src/frigus_ai/graph/tools/__init__.py`,
 `src/frigus_ai/graph/prompts/receitas.md`, `src/frigus_ai/infra/neo4j/`.
+
+## Sync Postgres → Neo4j e sugestão por estoque (feito; sync e consulta validados num Neo4j real do docker-compose)
+
+- `repositories/grafo_receitas_repository.py`: `sincronizar` (constraints `recipe_key`/`ingredient_key`, `MERGE` por
+  chave estável `local:<id>` / `product:<id>`, remove relação obsoleta, `ingredients_complete` só com ingrediente
+  cadastrado, receita que saiu do catálogo fica incompleta) e `sugerir` (Cypher por estoque + vencimento).
+- `RecipeService.sincronizar_grafo` roda em segundo plano no `lifespan`; `RecipeService.sugerir` usa o grafo e cai
+  no cruzamento SQL se o Neo4j falhar. `GET /v1/recipes/suggestions` devolve ingredientes encontrados/faltantes,
+  `reason` (priorização por vencimento) e `unverified_restrictions`.
+- Identidade do ingrediente = `product_id` do Postgres, então só receitas **locais** entram. Receitas da Spoonacular
+  (nomes em inglês) precisam de uma tabela de mapeamento antes de entrar no grafo.
+- A escrita usa os models do neomodel (`bulk_create_or_update` por `key`, `disconnect_all` + `connect` numa transação); só `sugerir` é Cypher cru (`none()`/`any()`/list comprehension não existem no query builder).
+- Pendente: `restricoes_atendidas` por receita (hoje nenhuma é
+  verificada), `preferir_rapidas` (receita local não tem tempo de preparo) e rodar o cenário de demonstração.

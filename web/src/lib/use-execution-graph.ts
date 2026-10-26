@@ -5,6 +5,9 @@ export type NodeStatus = "idle" | "active" | "done";
 export type GraphStatus = Record<NodeName, NodeStatus>;
 export type NodeTiming = { start: number | null; end: number | null };
 export type GraphTimings = Record<NodeName, NodeTiming>;
+// Tools que o node chamou neste turno, na ordem; "rodando" até chegar o tool_finished.
+export type ToolUse = { nome: string; estado: "rodando" | "ok" };
+export type GraphTools = Record<NodeName, ToolUse[]>;
 
 const NODES: NodeName[] = [
   "guardrail_entrada_node",
@@ -32,9 +35,14 @@ function idleTimings(): GraphTimings {
 // Consome a timeline de execução (SSE) e mantém o estado visual do grafo: qual node está ativo,
 // quais já terminaram, qual aresta acabou de ser percorrida, quais já foram (`traveled`, as
 // arestas de fato usadas — não "toda saída de um nó que rodou") e quanto tempo cada node levou.
+function idleTools(): GraphTools {
+  return Object.fromEntries(NODES.map((n) => [n, []])) as unknown as GraphTools;
+}
+
 export function useExecutionGraph() {
   const [status, setStatus] = useState<GraphStatus>(idleStatus);
   const [timings, setTimings] = useState<GraphTimings>(idleTimings);
+  const [tools, setTools] = useState<GraphTools>(idleTools);
   const [activeEdge, setActiveEdge] = useState<string | null>(null);
   const [traveled, setTraveled] = useState<ReadonlySet<string>>(() => new Set());
   const lastNode = useRef<NodeName | null>(null);
@@ -45,8 +53,25 @@ export function useExecutionGraph() {
         lastNode.current = null;
         setStatus(idleStatus());
         setTimings(idleTimings());
+        setTools(idleTools());
         setActiveEdge(null);
         setTraveled(new Set());
+        break;
+
+      case "tool_started":
+        setTools((prev) => ({
+          ...prev,
+          [evento.node]: [...prev[evento.node], { nome: evento.tool, estado: "rodando" }],
+        }));
+        break;
+
+      case "tool_finished":
+        setTools((prev) => {
+          const lista = [...prev[evento.node]];
+          const i = lista.findIndex((t) => t.nome === evento.tool && t.estado === "rodando");
+          if (i !== -1) lista[i] = { ...lista[i], estado: "ok" };
+          return { ...prev, [evento.node]: lista };
+        });
         break;
 
       case "node_started": {
@@ -101,9 +126,10 @@ export function useExecutionGraph() {
     lastNode.current = null;
     setStatus(idleStatus());
     setTimings(idleTimings());
+    setTools(idleTools());
     setActiveEdge(null);
     setTraveled(new Set());
   }, []);
 
-  return { status, timings, activeEdge, traveled, feed, reset };
+  return { status, timings, tools, activeEdge, traveled, feed, reset };
 }

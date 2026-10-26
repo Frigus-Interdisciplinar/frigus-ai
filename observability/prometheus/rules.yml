@@ -2,7 +2,7 @@
 # própria API (`frigus_slo_target`, definido em src/frigus_ai/telemetry/metrics.py), então
 # mudar o SLO é mudar uma constante no código.
 #
-# Sem Alertmanager: os alertas aparecem em http://localhost:9090/alerts (e no Grafana). Pra
+# Sem Alertmanager: os alertas aparecem em http://localhost:9090/alerts. Pra
 # avisar alguém de verdade (e-mail, Slack, PagerDuty) basta subir um Alertmanager e apontar
 # `alerting:` no prometheus.yml — as regras não mudam.
 groups:

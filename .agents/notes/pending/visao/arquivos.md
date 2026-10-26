@@ -6,7 +6,7 @@
   (`UploadFile`, não base64 em JSON — mais simples e mais barato em payload), limite
   de 8MB (`_MAX_FOTO_BYTES`), rate limit `@guard.rate_limit(requests=5, window=60)`
   (fotos são mais caras que texto).
-- Node `visao_node` (`graph/nodes/visao.py`): `with_structured_output` no Gemini Flash
+- Node `visao_node` (`graph/nodes/visao.py`): `with_structured_output` na Luna (antes Gemini Flash)
   (`temperature=0.1`, é tarefa factual). `category`/`storage_place` do item
   identificado reaproveitam os `Literal` de `graph/tools/estoque/schemas.py` — os
   MESMOS valores que `POST /stock/items` aceita, e como viram function-calling/schema
@@ -37,8 +37,9 @@
 
 ## Falta fazer
 
-- O fallback do Gemini é a Luna (`llm_visao` em `graph/llm.py`). Nunca foi exercitado contra o
-  gateway real: falta confirmar que o chat da Luna aceita `image_url`.
+- `llm_visao` em `graph/llm.py` é só a Luna desde 2026-10-23. Confirmado contra o gateway real que o chat
+  dela aceita `image_url` (imagem sintética de 96x96, respondeu a cor em 2,9s); ainda falta testar com fotos
+  reais de geladeira.
 - Verificação por item (`_itens_incertos` em `visao.py`): pergunta ao JeV/Luna, com a foto, se cada
   item aparece nela; os abaixo de `confianca_minima_item_visao` (0,7, chute) vão em `esclarecer`.
   Calibrar o limiar com fotos reais e comparar as listas do Gemini e da Luna.

@@ -5,7 +5,7 @@ import asyncio
 from uuid import uuid4
 
 from frigus_ai.domain.errors import EstoqueAtualNaoDefinido
-from frigus_ai.domain.models import Fatos
+from frigus_ai.domain.models import Fatos, RecipePreferences, RecipePreferencesPatch
 from frigus_ai.infra.logging import Logging
 from frigus_ai.repositories import fatos_repository, identidade_repository
 
@@ -50,6 +50,16 @@ class UserService:
         remover alergia). Único caminho autorizado a remover alergia."""
 
         await asyncio.to_thread(fatos_repository.salvar_fatos, user_id, fatos)
+
+    async def buscar_preferencias_receitas(self, user_id: str) -> RecipePreferences:
+        return await asyncio.to_thread(fatos_repository.buscar_preferencias_receitas, user_id)
+
+    async def atualizar_preferencias_receitas(
+        self, user_id: str, patch: RecipePreferencesPatch
+    ) -> RecipePreferences:
+        await asyncio.to_thread(fatos_repository.atualizar_preferencias_receitas, user_id, patch)
+
+        return await self.buscar_preferencias_receitas(user_id)
 
     async def atualizar_fatos_por_extracao(self, user_id: str, fatos_extraidos: Fatos) -> None:
         """

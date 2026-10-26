@@ -11,8 +11,11 @@
   `web/` roda sem auth.
 - **Vercel AI Gateway:** ativo desde 2026-10-16 (US$ 15 de créditos comprados); `/decisions` responde 200.
   Sem créditos volta 403 e Luna/JeV ficam inativos (o código cai nos LLMs normais).
-- **SLO de latência:** erro 0%, mas p95 ≈ 52s contra 8s; o turno de receitas leva ~58s. Falta medir onde
-  o tempo vai (histograma por node) e cortar chamadas ou paralelizar.
+- **SLO de latência:** erro 0%, mas o maior turno levou 37,7s contra 8s (Luna pelo gateway, 14 turnos de 2026-10-23; as primeiras medições chegaram a 126s por cota do Gemini e 429 do Groq). Medido por
+  node: `estoque_node` 47% e `orquestrador_node` 30% do tempo, quase tudo em chamadas de LLM; tools e JeV
+  são desprezíveis. Falta cortar chamadas ou paralelizar. `receitas_node` aparece com 0s no histograma
+  (tempo contabilizado no `estoque_node`?), a investigar.
+- **Spoonacular:** a chave agora vai no header `x-api-key` (antes ia na URL e aparecia no log do httpx); a chave antiga foi recusada (401) e já foi trocada.
 - **OpenRouter:** o modelo gratuito `qwen3.8-27b:free` saiu do ar (404); trocar ou tirar da cadeia.
 - **Neo4j (extra):** a instância Aura do `.env` não existe mais.
 - **Dependência sem uso:** `a2a-sdk[fastapi]` segue no `pyproject.toml`, mas o A2A é o contrato manual
@@ -39,9 +42,9 @@ Antes de reportar item como pendente, confira o código: este checklist envelhec
 | RAG com fonte externa | ✅ | `graph/tools/faq/` — Qdrant sobre `data/pdf/Frigus-Documentacao.pdf` |
 | Agente juiz | ✅ | `graph/nodes/juiz.py` — grounding contra o retorno das tools, até 2 retentativas; falha vira `INDISPONIVEL` |
 | Guardrail | ✅ | `graph/guardrail/` — entrada (PII + ataque + classificador com cache) e saída |
-| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; dashboard Grafana com 30 painéis (inclui memória, chamadas externas, bloqueios do guard e o JeV) |
+| SRE: latência interagentes | ✅ | Prometheus mede HTTP, grafo, node, tool e LLM; tela `/metrics` do front (inclui memória, chamadas externas, bloqueios do guard e o JeV) |
 | SRE: custo 100 e 1000 usuários/semana | ✅ | `evals/sre_report.py` estima a partir do custo médio por turno; volume/usuário é placeholder |
-| SRE: SLO/SLI e alertas | ✅ | SLO p95 ≤ 8s e erro ≤ 5% (`telemetry/metrics.py`, exportado em `frigus_slo_target`), `outcome="blocked"` separado de erro, regras/alertas em `observability/prometheus/rules.yml`, faixa de SLO no Grafana e banner na web. Sem SLA nem Alertmanager (decisão: não há contrato nem plantão) |
+| SRE: SLO/SLI e alertas | ✅ | SLO p95 ≤ 8s e erro ≤ 5% (`telemetry/metrics.py`, exportado em `frigus_slo_target`), `outcome="blocked"` separado de erro, regras/alertas em `observability/prometheus/rules.yml`, faixa de SLO no front e banner na web. Sem SLA nem Alertmanager (decisão: não há contrato nem plantão) |
 | SRE: índice de erros | ✅ | SLI de erro gravado/alertado no Prometheus e no `sre_report.py` (com orçamento de erro); falta validar contra scrape real |
 | SRE: custo/ROI | ✅ | `evals/sre_report.py` calcula; `VALOR_POR_RESOLUCAO_USD` é placeholder até ter dado de negócio real |
 | SRE: custo por resolução | ✅ | `evals/sre_report.py`: resolução = `outcome="success"` (bloqueio não conta), custo pela tabela `PRECOS_POR_1M_TOKENS` de `telemetry/metrics_callback.py` (também em runtime: `frigus_llm_cost_usd_total`). Preço do `gemini-3.6-flash` conferido em 2026-10-11 (dobra em 2027) |
