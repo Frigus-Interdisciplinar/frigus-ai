@@ -3,13 +3,14 @@ Persistência crua da lista de compras: item pendente/comprado/removido, sempre 
 lista "Aberta" do estoque do usuário. Sem decisão de negócio nem tradução pra `Response`
 — isso fica em `graph/tools/compras/repo.py` (a tool que o LLM chama).
 
-Cada estoque tem no máximo uma lista `Aberta` por vez — `_lista_aberta` garante isso
-(busca antes de criar), igual `_get_or_create_open_list` fazia no SQL cru.
+Cada estoque tem no máximo uma lista `Aberta` por vez. `_lista_aberta` cria com `ON CONFLICT DO
+NOTHING` e relê: o que garante a unicidade sob concorrência é o índice parcial de
+`data/sql/migrations/001_integridade_estoque_compras.sql`.
 """
 
 from datetime import date
 from decimal import Decimal
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -35,21 +36,30 @@ class ItemCompra(TypedDict):
     status: str | None
 
 
-def _lista_aberta(s: Session, stock_id: int) -> str:
-    lista_id = s.scalar(
+def _buscar_lista_aberta(s: Session, stock_id: int) -> str | None:
+    return s.scalar(
         select(ShoppingList.id)
         .where(ShoppingList.stock_id == stock_id, ShoppingList.status == ABERTA)
         .order_by(ShoppingList.date.desc())
         .limit(1)
     )
-    if lista_id is not None:
+
+
+def _lista_aberta(s: Session, stock_id: int) -> str:
+    if (lista_id := _buscar_lista_aberta(s, stock_id)) is not None:
         return lista_id
 
-    nova = ShoppingList(date=date.today(), stock_id=stock_id, status=ABERTA)
-    s.add(nova)
-    s.flush()
+    nova_id = s.scalar(
+        insert(ShoppingList)
+        .values(date=date.today(), stock_id=stock_id, status=ABERTA)
+        .on_conflict_do_nothing()
+        .returning(ShoppingList.id)
+    )
+    if nova_id is not None:
+        return nova_id
 
-    return nova.id
+    # Conflito: outra transação criou a lista aberta entre a busca e o insert.
+    return cast(str, _buscar_lista_aberta(s, stock_id))
 
 
 def _produto_do_catalogo(s: Session, name: str, category: str | None, storage_place: str | None) -> int:
@@ -68,9 +78,14 @@ def _produto_do_catalogo(s: Session, name: str, category: str | None, storage_pl
 
 
 def _localizar_item(
-    s: Session, stock_id: int, shopping_list_product_id: int | None, product_name: str | None
+    s: Session, stock_id: int, shopping_list_product_id: int | None, product_name: str | None,
+    travar: bool = False,
 ) -> ShoppingListProduct:
-    """Item por ID direto ou por nome, sempre preso à lista Aberta do estoque do usuário."""
+    """
+    Item por ID direto ou por nome, sempre preso à lista Aberta do estoque do usuário.
+    `travar` segura a linha até o fim da transação: sem isso, duas compras simultâneas do
+    mesmo item passam as duas pela checagem de `Comprado` e somam o estoque duas vezes.
+    """
 
     stmt = (
         select(ShoppingListProduct)
@@ -86,6 +101,9 @@ def _localizar_item(
         )
     else:
         raise ItemDeCompraNaoEncontrado
+
+    if travar:
+        stmt = stmt.with_for_update(of=ShoppingListProduct)
 
     item = s.scalars(stmt.limit(1)).first()
     if item is None:
@@ -169,7 +187,7 @@ class _ComprasPostgresRepo(PostgresRepo):
         `estoque_repository.adicionar_produto`). Devolve (id do item do estoque, quantidade final).
         """
 
-        item = _localizar_item(s, stock_id, shopping_list_product_id, product_name)
+        item = _localizar_item(s, stock_id, shopping_list_product_id, product_name, travar=True)
         if item.status == "Comprado":
             raise ValueError("Esse item da lista já foi marcado como comprado; a entrada no estoque já foi feita.")
 
@@ -203,6 +221,11 @@ class _ComprasPostgresRepo(PostgresRepo):
 
     @transacional
     def gerar_por_estoque_baixo(self, s: Session, stock_id: int) -> list[ItemCompra]:
+        """
+        Reconcilia a sugestão com o estoque: repetir a geração mantém a quantidade (não soma de novo)
+        e item já comprado ou removido não volta pra `Pendente` sozinho.
+        """
+
         baixos = s.execute(
             select(
                 StockProduct.product_id, 
@@ -237,11 +260,16 @@ class _ComprasPostgresRepo(PostgresRepo):
                 )
                 .on_conflict_do_update(
                     index_elements=["list_id", "product_id"],
-                    set_={"quantity": ShoppingListProduct.quantity + sugerida},
+                    set_={"quantity": sugerida},
+                    where=ShoppingListProduct.status == "Pendente",
                 )
                 .returning(ShoppingListProduct.id, ShoppingListProduct.quantity)
             )
-            item_id, quantidade_final = s.execute(stmt).one()
+            linha = s.execute(stmt).one_or_none()
+            if linha is None:
+                continue
+
+            item_id, quantidade_final = linha
             adicionados.append({
                 "shopping_list_product_id": item_id, "product_name": name,
                 "category": category, "quantity": quantidade_final, "status": "Pendente",

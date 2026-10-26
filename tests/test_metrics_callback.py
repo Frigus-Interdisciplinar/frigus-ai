@@ -1,6 +1,6 @@
 """
 Custo e fallback no callback Prometheus: o node vem do nosso grafo (não do node interno do
-`create_agent`), custo = tokens × tabela, e especialista respondendo fora do Gemini é fallback.
+`create_agent`), custo = tokens × tabela, e especialista respondendo fora da Luna é fallback.
 """
 
 from uuid import uuid4
@@ -45,8 +45,8 @@ def test_fallback_no_especialista_conta_pelo_node_do_grafo():
 
 
 def test_modelo_principal_no_especialista_nao_e_fallback():
-    antes = LLM_FALLBACKS.labels(node=ESTOQUE, model=Model.GEMINI_FLASH)._value.get()
+    antes = LLM_FALLBACKS.labels(node=ESTOQUE, model=Model.GPT_6_LUNA)._value.get()
 
-    _rodar(Model.GEMINI_FLASH, {"langgraph_checkpoint_ns": f"{ESTOQUE}:abc"})
+    _rodar(Model.GPT_6_LUNA, {"langgraph_checkpoint_ns": f"{ESTOQUE}:abc"})
 
-    assert LLM_FALLBACKS.labels(node=ESTOQUE, model=Model.GEMINI_FLASH)._value.get() == antes
+    assert LLM_FALLBACKS.labels(node=ESTOQUE, model=Model.GPT_6_LUNA)._value.get() == antes

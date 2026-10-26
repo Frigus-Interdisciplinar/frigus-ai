@@ -150,8 +150,12 @@ async def message_send(payload: JsonRpcRequest, user_id: CurrentUserDep) -> Json
     except ValueError:
         return _erro(payload.id, -32602, "params inválidos para message/send.")
 
-    session_id = params.message.context_id or str(uuid4())
-    await chat_service.validar_ownership(session_id, user_id)
+    if params.message.context_id:
+        session_id = params.message.context_id
+        await chat_service.validar_ownership(session_id, user_id)
+    else:
+        session_id = await chat_service.criar_chat(user_id)
+
     stock_id = await chat_service.iniciar_sessao(user_id)
     resposta = await chat_service.send_message(
         params.message.texto(), session_id, user_id, stock_id

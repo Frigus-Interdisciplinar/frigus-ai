@@ -7,7 +7,7 @@ isso fica em `services/user_service.py`.
 
 from datetime import UTC, datetime
 
-from frigus_ai.domain.models import Fatos
+from frigus_ai.domain.models import Fatos, RecipePreferences, RecipePreferencesPatch
 from frigus_ai.infra.logging import Logging
 from frigus_ai.infra.mongo import mongo
 
@@ -39,6 +39,27 @@ class FatosRepository:
             upsert=True,
         )
 
+    def buscar_preferencias_receitas(self, user_id: str) -> RecipePreferences:
+        doc = self._collection().find_one({"user_id": user_id}, {"recipe_preferences": 1})
+
+        return RecipePreferences(**(doc or {}).get("recipe_preferences", {}))
+
+    def atualizar_preferencias_receitas(self, user_id: str, patch: RecipePreferencesPatch) -> None:
+        valores = patch.model_dump(exclude_none=True)
+        if not valores:
+            return
+
+        self._collection().update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    **{f"recipe_preferences.{campo}": valor for campo, valor in valores.items()},
+                    "updated_at": datetime.now(UTC),
+                },
+            },
+            upsert=True,
+        )
+
 
 _fatos_repository = FatosRepository()
 
@@ -51,4 +72,17 @@ def salvar_fatos(user_id: str, fatos: Fatos) -> None:
     _fatos_repository.salvar_fatos(user_id, fatos)
 
 
-__all__ = ["buscar_fatos", "salvar_fatos"]
+def buscar_preferencias_receitas(user_id: str) -> RecipePreferences:
+    return _fatos_repository.buscar_preferencias_receitas(user_id)
+
+
+def atualizar_preferencias_receitas(user_id: str, patch: RecipePreferencesPatch) -> None:
+    _fatos_repository.atualizar_preferencias_receitas(user_id, patch)
+
+
+__all__ = [
+    "atualizar_preferencias_receitas",
+    "buscar_fatos",
+    "buscar_preferencias_receitas",
+    "salvar_fatos",
+]

@@ -39,7 +39,7 @@ ACTIVE_REQUESTS = Gauge(
 )
 
 
-# SLO do turno de chat, exportado como `frigus_slo_target` pra Grafana, alertas e relatório lerem
+# SLO do turno de chat, exportado como `frigus_slo_target` pra tela de métricas, alertas e relatório lerem
 # do mesmo lugar. SLIs: p95 de `frigus_graph_duration_seconds` e erro = outcome="error" / turnos.
 # Bloqueio do guardrail (outcome="blocked") não é erro. Não há SLA (sem contrato).
 SLO_LATENCIA_P95_S = 8.0
@@ -127,7 +127,7 @@ LLM_COST = Counter(
 
 LLM_FALLBACKS = Counter(
     "frigus_llm_fallbacks_total",
-    "Chamadas de especialista que não saíram do modelo principal (Gemini caiu, fallback assumiu).",
+    "Chamadas de especialista que não saíram do modelo principal (a Luna caiu, fallback assumiu).",
     labelnames=("node", "model"),
 )
 

@@ -61,7 +61,7 @@ async def _itens_incertos(b64: str, itens: list[ItemIdentificado]) -> list[str]:
 @especialista(VISAO)
 async def no_visao(estado: Estado, runtime: Runtime[ContextoPrompt]) -> str:
     if llm_visao is None:
-        raise FalhaNoAgente("Modelo de visão não configurado (GEMINI_API_KEY ausente).")
+        raise FalhaNoAgente("Modelo de visão não configurado (LLM__GATEWAY__API_KEY ausente).")
 
     if not (b64 := runtime.context.imagem_b64):
         raise FalhaNoAgente("Turno de foto sem imagem no contexto.")

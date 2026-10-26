@@ -26,6 +26,7 @@ class ReceitaPorIngrediente(BaseModel):
 
     id: int
     title: str
+    image_url: str | None = Field(alias="image", default=None)
     used_count: int = Field(alias="usedIngredientCount")
     missed_count: int = Field(alias="missedIngredientCount")
     missed: list[str] = Field(alias="missedIngredients", default_factory=list)
@@ -52,6 +53,28 @@ class IngredienteReceita(BaseModel):
     unidade: str | None = Field(alias="unit", default=None)
 
 
+class EtapaReceita(BaseModel):
+    number: int
+    step: str
+
+
+class GrupoPreparo(BaseModel):
+    name: str = ""
+    steps: list[EtapaReceita] = Field(default_factory=list)
+
+
+class Nutriente(BaseModel):
+    name: str
+    amount: float
+    unit: str
+
+
+class Nutricao(BaseModel):
+    """Valores por porção."""
+
+    nutrients: list[Nutriente] = Field(default_factory=list)
+
+
 class ReceitaDetalhada(BaseModel):
     """Resposta de `GET /recipes/{id}/information`."""
 
@@ -59,7 +82,14 @@ class ReceitaDetalhada(BaseModel):
 
     id: int
     title: str
+    image_url: str | None = Field(alias="image", default=None)
     ready_in_minutes: int | None = Field(alias="readyInMinutes", default=None)
     servings: int | None = None
     ingredientes: list[IngredienteReceita] = Field(alias="extendedIngredients", default_factory=list)
     instrucoes: str | None = Field(alias="instructions", default=None)
+    preparo: list[GrupoPreparo] = Field(alias="analyzedInstructions", default_factory=list)
+    nutrition: Nutricao | None = None
+    source_name: str | None = Field(alias="sourceName", default=None)
+    source_url: str | None = Field(alias="sourceUrl", default=None)
+    credits_text: str | None = Field(alias="creditsText", default=None)
+    license: str | None = None

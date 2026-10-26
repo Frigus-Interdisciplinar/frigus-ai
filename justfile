@@ -13,15 +13,20 @@ run mode="tui":
     @echo "Running the application"
     {{bash}} scripts/run.sh {{mode}}
 
+# API em modo local/demo: sem auth, tudo resolve pro primeiro usuário do Postgres (o que tem estoque).
+# Não altera o .env; vale só pra este processo. O painel abre direto no chat, sem login.
+api-local:
+    $env:API__KEY_AUTH_ENABLED = "false"; just run api
+
 web:
-    @echo "Starting API and frontend in separate terminals"
-    Start-Process powershell -WorkingDirectory '{{justfile_directory()}}' -ArgumentList '-NoExit', '-Command', 'just run api'
+    @echo "Starting API (modo local) and frontend in separate terminals"
+    Start-Process powershell -WorkingDirectory '{{justfile_directory()}}' -ArgumentList '-NoExit', '-Command', 'just api-local'
     Start-Process powershell -WorkingDirectory '{{justfile_directory()}}/web' -ArgumentList '-NoExit', '-Command', 'npm run dev'
 
 obs:
-    @echo "Subindo Prometheus (9090) e Grafana (3000)"
+    @echo "Subindo Prometheus (9090)"
     {{python}} scripts/prometheus_token.py
-    docker compose --profile observability up -d --force-recreate prometheus grafana
+    docker compose --profile observability up -d --force-recreate prometheus
 
 check:
     @echo "Running pre-commit checks"

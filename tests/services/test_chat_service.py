@@ -11,9 +11,10 @@ import asyncio
 
 import pytest
 
+from frigus_ai.domain.errors import ChatDeOutroUsuario, ChatNaoEncontrado
 from frigus_ai.domain.models import Fatos, Resumo
 from frigus_ai.repositories import chat_embeddings_repository, chat_repository
-from frigus_ai.schemas.execution import AnswerReady, RunStarted
+from frigus_ai.schemas.execution import AnswerReady, RunFailed, RunStarted
 from frigus_ai.services import chat_service as chat_service_module
 from frigus_ai.services import runner
 from frigus_ai.services.chat_service import service as chat_service
@@ -409,3 +410,45 @@ async def test_send_message_sem_foto_nao_passa_imagem_ao_grafo(monkeypatch):
     await chat_service.send_message("oi", "chat-1", "u1", 1)
 
     assert recebido["kwargs"] == {}
+
+
+def test_conversa_redige_pii_antes_de_ir_pro_llm():
+    texto = chat_service_module._conversa([{"role": "user", "content": "meu cpf é 123.456.789-09"}])
+
+    assert "123.456.789-09" not in texto
+    assert "CPF OMITIDO" in texto
+
+
+async def test_stream_sem_resposta_final_nao_grava_turno(monkeypatch):
+    """Desconexão ou falha antes da resposta não vira "Sem resposta." na memória."""
+
+    async def _executar_stream(*_):
+        yield RunStarted()
+        yield RunFailed(message="falhou")
+
+    salvos = []
+
+    async def _salvar(user_id, session_id, novas):
+        salvos.append(novas)
+
+    monkeypatch.setattr(runner, "executar_stream", _executar_stream)
+    monkeypatch.setattr(chat_repository, "salvar_mensagens", _salvar)
+
+    _ = [e async for e in chat_service.stream_message("pergunta", "sessao-1", "u1", None)]
+    await chat_service_module.drenar_tarefas(timeout=1)
+
+    assert salvos == []
+
+
+@pytest.mark.parametrize("dono, erro", [(None, ChatNaoEncontrado), ("outro", ChatDeOutroUsuario), ("u1", None)])
+async def test_validar_ownership_exige_chat_existente_e_do_usuario(monkeypatch, dono, erro):
+    async def _buscar_dono(session_id):
+        return dono
+
+    monkeypatch.setattr(chat_repository, "buscar_dono_chat", _buscar_dono)
+
+    if erro is None:
+        await chat_service.validar_ownership("c1", "u1")
+    else:
+        with pytest.raises(erro):
+            await chat_service.validar_ownership("c1", "u1")

@@ -16,10 +16,10 @@ from frigus_ai.infra.neo4j.connection import neo4j
 
 
 class ReceitaCompativel(TypedDict):
-    recipe_id: str
+    recipe_id: int
     name: str
-    preparation_time_minutes: int
-    difficulty: str
+    preparation_time_minutes: int | None
+    difficulty: str | None
 
 
 async def receitas_sem_ingredientes(evitar: list[str], limit: int = 10) -> list[ReceitaCompativel]:
@@ -36,7 +36,7 @@ async def receitas_sem_ingredientes(evitar: list[str], limit: int = 10) -> list[
             MATCH (r)-[:REQUIRES]->(i:Ingredient)
             WHERE any(e IN $evitar WHERE toLower(i.name) CONTAINS e)
         }
-        RETURN r.id AS recipe_id, r.name AS name,
+        RETURN r.external_id AS recipe_id, r.name AS name,
                r.preparation_time_minutes AS preparation_time_minutes,
                r.difficulty AS difficulty
         LIMIT $limit

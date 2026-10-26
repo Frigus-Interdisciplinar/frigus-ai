@@ -12,6 +12,7 @@ from fastapi import status
 
 class ErrorCode(StrEnum):
     CHAT_DE_OUTRO_USUARIO = "chat_de_outro_usuario"
+    CHAT_NAO_ENCONTRADO = "chat_nao_encontrado"
     LIMITE_DE_MENSAGENS = "limite_de_mensagens"
     FALHA_NO_AGENTE = "falha_no_agente"
     ERRO_INTERNO = "erro_interno"
@@ -21,6 +22,8 @@ class ErrorCode(StrEnum):
     COMPRA_ITEM_NAO_ENCONTRADO = "compra_item_nao_encontrado"
     PRODUTO_NAO_CADASTRADO = "produto_nao_cadastrado"
     ESTOQUE_NAO_DEFINIDO = "estoque_nao_definido"
+    RECEITA_NAO_ENCONTRADA = "receita_nao_encontrada"
+    RECEITAS_INDISPONIVEIS = "receitas_indisponiveis"
 
 
 class FrigusError(Exception):
@@ -68,6 +71,15 @@ class ChatDeOutroUsuario(ChatError):
 
     def __init__(self, chat_id: str) -> None:
         super().__init__(f"Chat {chat_id!r} pertence a outro usuário.")
+
+
+class ChatNaoEncontrado(ChatError):
+    status_code = status.HTTP_404_NOT_FOUND
+    code = ErrorCode.CHAT_NAO_ENCONTRADO
+    public_message = "Chat não encontrado; crie um com POST /v1/chats."
+
+    def __init__(self, chat_id: str) -> None:
+        super().__init__(f"Chat {chat_id!r} não existe.")
 
 
 class FalhaNoAgente(ChatError):
@@ -143,6 +155,10 @@ class AssessorIndisponivel(AssessorError):
 class SpoonacularError(DomainError):
     """Erro base das chamadas à API da Spoonacular."""
 
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = ErrorCode.RECEITAS_INDISPONIVEIS
+    public_message = "Receitas externas indisponíveis no momento."
+
 
 class ApiKeyNaoConfiguradaError(SpoonacularError):
     def __init__(self) -> None:
@@ -154,3 +170,17 @@ class CotaExcedidaError(SpoonacularError):
         super().__init__(
             "cota diária da API de receitas (Spoonacular) esgotada — tente novamente amanhã"
         )
+
+
+class ChaveRecusadaError(SpoonacularError):
+    def __init__(self) -> None:
+        super().__init__("a Spoonacular recusou a SPOONACULAR_API_KEY (401/403) — chave inválida ou revogada")
+
+
+class ReceitaNaoEncontrada(DomainError):
+    status_code = status.HTTP_404_NOT_FOUND
+    code = ErrorCode.RECEITA_NAO_ENCONTRADA
+    public_message = "Receita não encontrada."
+
+    def __init__(self) -> None:
+        super().__init__("receita não encontrada")

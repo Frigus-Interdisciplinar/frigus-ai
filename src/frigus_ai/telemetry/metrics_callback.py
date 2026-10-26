@@ -25,10 +25,10 @@ _ALLOWED_NODES = frozenset(get_args(NodeLiteral))
 _ALLOWED_PROVIDERS = frozenset({"google_genai", "groq", "anthropic", "openai"})
 _ALLOWED_MODELS = frozenset(m.value for m in Model)
 
-# Nodes que usam `llm_especialista` (Gemini com fallback — graph/llm.py): outro modelo
+# Nodes que usam `llm_especialista` (Luna com fallback — graph/llm.py): outro modelo
 # respondendo neles é fallback.
 _NODES_ESPECIALISTA = frozenset({ESTOQUE, COMPRAS, RECEITAS, FINANCEIRO})
-_MODELO_ESPECIALISTA = Model.GEMINI_FLASH.value
+_MODELO_ESPECIALISTA = Model.GPT_6_LUNA.value
 
 
 class PrecoPor1MTokens(NamedTuple):
@@ -74,7 +74,7 @@ def _bounded_label(value: object, allowed: frozenset[str]) -> str:
     return "unknown"
 
 
-def _node_do_grafo(metadata: dict[str, Any]) -> str:
+def no_do_grafo(metadata: dict[str, Any]) -> str:
     """O node do NOSSO grafo. Dentro de um especialista (`create_agent`), `langgraph_node` é o
     node interno do agente ("model", "tools") — o nosso vem no começo do `checkpoint_ns`."""
 
@@ -180,7 +180,7 @@ class PrometheusCallbackHandler(BaseCallbackHandler):
         self._llms[run_id] = _LLMRun(
             provider=_bounded_label(run_metadata.get("ls_provider"), _ALLOWED_PROVIDERS),
             model=_bounded_label(run_metadata.get("ls_model_name"), _ALLOWED_MODELS),
-            node=_node_do_grafo(run_metadata),
+            node=no_do_grafo(run_metadata),
             started_at=time.perf_counter(),
         )
 
@@ -227,4 +227,4 @@ class PrometheusCallbackHandler(BaseCallbackHandler):
         LLM_DURATION.labels(**labels, outcome="error").observe(duration)
 
 
-__all__ = ["PRECOS_POR_1M_TOKENS", "PrecoPor1MTokens", "PrometheusCallbackHandler", "custo_usd"]
+__all__ = ["PRECOS_POR_1M_TOKENS", "PrecoPor1MTokens", "PrometheusCallbackHandler", "custo_usd", "no_do_grafo"]

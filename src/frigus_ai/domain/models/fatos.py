@@ -1,6 +1,6 @@
 """Memória de longo prazo: fatos estruturados do usuário e resumo de conversa."""
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 RESTRICOES_CANONICAS = [
     "Vegetariano",
@@ -73,4 +73,37 @@ class Fatos(BaseModel):
         return list(vistos)
 
 
-__all__ = ["RESTRICOES_CANONICAS", "Fatos", "Resumo"]
+def _restricoes_unicas(valores: list[str] | None) -> list[str] | None:
+    if valores is None:
+        return None
+
+    return list(dict.fromkeys(_normalizar_restricao(v) for v in valores))
+
+
+class RecipePreferences(BaseModel):
+    """
+    Escolhas explícitas da tela de receitas, no subdocumento `recipe_preferences` de `user_fatos`.
+    Ficam fora de `Fatos` de propósito: a extração automática do chat sobrescreve `restricoes`
+    de `Fatos` e não pode apagar o que o usuário configurou à mão.
+    """
+
+    restricoes:          list[str] = []
+    preferir_rapidas:    bool = False
+    preferir_economicas: bool = False
+
+    _normalizar = field_validator("restricoes")(_restricoes_unicas)
+
+
+class RecipePreferencesPatch(BaseModel):
+    """Campo ausente ou `null` não altera; `restricoes: []` limpa as exclusões."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    restricoes:          list[str] | None = None
+    preferir_rapidas:    bool | None = None
+    preferir_economicas: bool | None = None
+
+    _normalizar = field_validator("restricoes")(_restricoes_unicas)
+
+
+__all__ = ["RESTRICOES_CANONICAS", "Fatos", "RecipePreferences", "RecipePreferencesPatch", "Resumo"]

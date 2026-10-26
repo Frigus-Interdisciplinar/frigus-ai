@@ -1,6 +1,5 @@
 import logging
 from typing import ClassVar
-from uuid import uuid4
 
 import pyfiglet
 from rich.text import Text
@@ -32,7 +31,7 @@ class FrigusTUI(App):
     def __init__(self) -> None:
         super().__init__()
         self.user_id: str | None = None
-        self.session_id = str(uuid4())
+        self.session_id = ""
         self.stock_id: int | None = None
 
     def compose(self) -> ComposeResult:
@@ -47,6 +46,7 @@ class FrigusTUI(App):
         self._redirecionar_logs()
         self.user_id = await user_service.obter_ou_criar_padrao()
         self.stock_id = await chat_service.iniciar_sessao(self.user_id)
+        self.session_id = await chat_service.criar_chat(self.user_id)
 
     def _redirecionar_logs(self) -> None:
         handler = _LogWidgetHandler(self.query_one("#logs", RichLog))

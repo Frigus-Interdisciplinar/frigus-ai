@@ -96,7 +96,8 @@ async def test_jev_aprova_sustentada_relevante_e_completa(monkeypatch):
 
 
 async def test_jev_sustentada_sem_convicao_reprova_como_sem_evidencia(monkeypatch):
-    _jev_avalia(monkeypatch, mod.Grounding.SUSTENTADA, chance_sustentada=0.55)
+    abaixo_do_limiar = mod.settings.llm.confianca_minima_grounding - 0.05
+    _jev_avalia(monkeypatch, mod.Grounding.SUSTENTADA, chance_sustentada=abaixo_do_limiar)
 
     update = await no_juiz(_estado())
 

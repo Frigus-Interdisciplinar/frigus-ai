@@ -6,7 +6,11 @@ from typing import NamedTuple, cast
 import httpx
 from langchain_core.tools import BaseTool, StructuredTool
 
-from frigus_ai.domain.errors import ApiKeyNaoConfiguradaError, CotaExcedidaError
+from frigus_ai.domain.errors import (
+    ApiKeyNaoConfiguradaError,
+    ChaveRecusadaError,
+    CotaExcedidaError,
+)
 from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.response import Response, ToolResponse
 from frigus_ai.infra.spoonacular import spoonacular
@@ -82,7 +86,19 @@ async def _chamar(path: _Path, params: dict[str, _ParamValue]) -> object:
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 402:
             raise CotaExcedidaError from e
+        if e.response.status_code in (401, 403):
+            # Sem `from e`: a URL do httpx carrega `apiKey=` e iria parar no traceback do log.
+            raise ChaveRecusadaError from None
         raise
+
+
+async def detalhar_receita(recipe_id: int, include_nutrition: bool = False) -> ReceitaDetalhada:
+    dados = await _chamar(
+        f"/recipes/{recipe_id}/information",
+        {"includeNutrition": include_nutrition},
+    )
+
+    return ReceitaDetalhada.model_validate(dados)
 
 
 class SpoonacularRepo(ToolSet):
@@ -102,7 +118,7 @@ class SpoonacularRepo(ToolSet):
         dados = await _chamar(
             "/recipes/findByIngredients",
             {
-                "ingredients": ",".join(ingredients),
+                "ingredients": ",".join(sorted({i.strip().lower() for i in ingredients if i.strip()})),
                 "number": number,
                 "ranking": ranking,
                 "ignorePantry": ignore_pantry,
@@ -125,12 +141,9 @@ class SpoonacularRepo(ToolSet):
         unidade, tempo de preparo, porções e modo de preparo.
         """
 
-        dados = await _chamar(
-            f"/recipes/{recipe_id}/information",
-            {"includeNutrition": include_nutrition},
-        )
+        receita = await detalhar_receita(recipe_id, include_nutrition)
 
-        return Response.ok(**ReceitaDetalhada.model_validate(dados).model_dump())
+        return Response.ok(**receita.model_dump())
 
     def as_tools(self) -> list[BaseTool]:
         def find_sync(**kwargs):
@@ -159,4 +172,4 @@ class SpoonacularRepo(ToolSet):
         ]
 
 
-__all__ = ["SpoonacularRepo"]
+__all__ = ["SpoonacularRepo", "detalhar_receita"]

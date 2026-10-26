@@ -40,6 +40,10 @@ def cliente(monkeypatch):
         """Monkeypatch: não acessa MongoDB, assume que o usuário é o dono."""
         return
 
+    async def _criar_chat(user_id):
+        return "chat-novo"
+
+    monkeypatch.setattr(rotas.chat_service, "criar_chat", _criar_chat)
     monkeypatch.setattr(rotas.chat_service, "iniciar_sessao", _iniciar_sessao)
     monkeypatch.setattr(rotas.chat_service, "send_message", _send_message)
     monkeypatch.setattr(rotas.chat_service, "validar_ownership", _validar_ownership)

@@ -7,8 +7,6 @@
 3. Ler primeiro as notas pendentes em `pending/`, especialmente:
    - `pending/requisitos-disciplina/arquivos.md` — **começa por aqui**: placar dos requisitos
      e ordem P0/P1/P2 do que ainda falta pra nota
-   - `pending/memoria-fatos/arquivos.md` — fatos estruturados, normalização, o que falta pra
-     virar memória de verdade no chat
    - `pending/neo4j/arquivos.md` — sync Postgres→Neo4j e mapeamento fatos→relações
    - `pending/visao/arquivos.md` — limpeza de checkpoint, retry do Juiz, fallback de provider
    - `pending/api-e-services/arquivos.md` — schemas de resposta e organização de rotas
@@ -16,15 +14,9 @@
    - `pending/jev/arquivos.md` — onde o JeV já decide e os próximos usos (guardrail de saída,
      categoria e resolução de nome de produto)
    - `observability/RELATORIO.md` — cenários, SRE e sessões rodados contra a infra real
-4. Consultar `implemented/` para entender o que já foi feito e decisões descartadas:
-   - `implemented/gap-assessor/`, `implemented/a2a-sdk/`, `implemented/tools-repos/`,
-     `implemented/plano-correcao-refactor/` — arquivadas em 2026-09-23, cada uma com um aviso
-     no topo explicando o que mudou desde que foram escritas (a integração A2A via `a2a-sdk`
-     foi removida, `services/chat/` virou módulo flat, a migração `ToolSet`→`*Repo` terminou).
-     Mantidas só como histórico — não usar como lista de tarefas.
-   - `implemented/contratos-grafo-e-repositories/arquivos.md`
-   - `implemented/infra-conexoes/arquivos.md`
-   - `implemented/tipos-compartilhados/arquivos.md`
+4. Consultar `implemented/` só para entender decisões já tomadas
+   (`contratos-grafo-e-repositories`, `memoria-fatos`). Notas obsoletas foram apagadas; o histórico
+   está no git.
 5. Conferir `git status --short --branch` antes de editar.
 
 ## Não repetir
@@ -34,7 +26,7 @@
   import e de inversão de dependência reais, não por estética.
 - Não checar ownership no corpo de rota que é gerador (SSE): tem que ser dependência, senão
   roda depois que o status HTTP já saiu.
-- Não reviver a integração A2A via `a2a-sdk` (`implemented/a2a-sdk/`) sem o card anunciar
+- Não reviver a integração A2A via `a2a-sdk` sem o card anunciar
   streaming/tasks de verdade — hoje é operação única, o contrato manual já cobre.
 - Não apagar arquivos sem permissão prévia explícita do usuário.
 - Não commitar `.env` nem expor credenciais.

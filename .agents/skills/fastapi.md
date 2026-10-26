@@ -5,19 +5,8 @@ Duas partes: **práticas oficiais** (do skill oficial do FastAPI) e **pegadinhas
 
 ## Referências
 
-O conteúdo longo do skill oficial está nos arquivos ao lado, neste mesmo diretório:
-
-| Arquivo | Assunto |
-|---|---|
-| [dependencies.md](dependencies.md) | `Depends` com `yield`, `scope`, dependência como classe |
-| [responses.md](responses.md) | return type vs. `response_model`, status code, headers |
-| [streaming.md](streaming.md) | JSON Lines, SSE (`EventSourceResponse`), bytes |
-| [path-operations.md](path-operations.md) | roteamento, `APIRouter`, parâmetros de rota |
-| [pydantic.md](pydantic.md) | Ellipsis, `RootModel`, validação |
-| [other-tools.md](other-tools.md) | uv, Ruff, ty, Asyncer, SQLModel, HTTPX |
-
-Os arquivos oficiais linkam entre si como `references/<arquivo>.md`; aqui todos estão no mesmo
-diretório, então o caminho é só `<arquivo>.md`.
+Práticas gerais do FastAPI (`Depends`, `response_model`, SSE, roteamento): skill oficial em
+`.venv/Lib/site-packages/fastapi/.agents/skills/fastapi/`. Validação Pydantic: [pydantic.md](pydantic.md).
 
 ## Divergências deliberadas do skill oficial
 
@@ -102,8 +91,7 @@ def create_chat(user_id=Depends(get_current_user)):
     return ChatCreateResponse(chat_id=...)
 ```
 
-`response_model` continua certo quando o schema público é **diferente** do que a função retorna. Ver
-[responses.md](responses.md).
+`response_model` continua certo quando o schema público é **diferente** do que a função retorna. 
 
 ## Nada de Ellipsis (`...`) nos schemas
 
@@ -161,7 +149,7 @@ pode chamá-lo direto — o cuidado mudou de lugar. Pra streaming de token o gra
 por `fluxo_agentes().astream(..., stream_mode="messages")`, que devolve 2-tuplas
 `(AIMessageChunk, metadata)`. **Todos os 10 nós têm LLM**, então isso inclui o `ROUTE=` do roteador,
 o veredito do Juiz e o guardrail: filtre por `metadata["langgraph_node"]` ou o cliente recebe o
-raciocínio interno inteiro. Ver [streaming.md](streaming.md).
+raciocínio interno inteiro.
 
 ---
 

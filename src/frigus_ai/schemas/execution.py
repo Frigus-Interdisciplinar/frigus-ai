@@ -2,8 +2,8 @@
 Eventos da timeline de execução do agente, pra streaming via SSE
 (`POST /chats/{chat_id}/messages/stream`, ver `api/routes/v1/chats.py`).
 
-Nunca carregam prompt, estado interno do grafo, argumento de tool ou conteúdo cru de LLM — só
-identidade de node e a resposta final já revisada. Quem produz esses eventos é
+Nunca carregam prompt, estado interno do grafo, argumento ou retorno de tool, nem conteúdo cru de
+LLM — só identidade de node, o NOME da tool que ele chamou e a resposta final já revisada. Quem produz esses eventos é
 `services/runner.py:executar_stream`.
 
 Sem streaming de token da resposta final: o texto só fica seguro pra mostrar depois que o nó que
@@ -38,6 +38,18 @@ class NodeFinished(BaseModel):
     node: NodeLiteral
 
 
+class ToolStarted(BaseModel):
+    type: Literal["tool_started"] = "tool_started"
+    node: NodeLiteral
+    tool: str
+
+
+class ToolFinished(BaseModel):
+    type: Literal["tool_finished"] = "tool_finished"
+    node: NodeLiteral
+    tool: str
+
+
 class AnswerReady(BaseModel):
     type: Literal["answer_ready"] = "answer_ready"
     content: str
@@ -57,6 +69,8 @@ ExecutionEvent = Annotated[
     | NodeStarted
     | RouteSelected
     | NodeFinished
+    | ToolStarted
+    | ToolFinished
     | AnswerReady
     | RunFinished
     | RunFailed,
@@ -73,4 +87,6 @@ __all__ = [
     "RunFailed",
     "RunFinished",
     "RunStarted",
+    "ToolFinished",
+    "ToolStarted",
 ]

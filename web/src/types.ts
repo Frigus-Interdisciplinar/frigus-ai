@@ -43,6 +43,8 @@ export type ExecutionEvent =
   | { type: "node_started"; node: NodeName }
   | { type: "route_selected"; route: Route }
   | { type: "node_finished"; node: NodeName }
+  | { type: "tool_started"; node: NodeName; tool: string }
+  | { type: "tool_finished"; node: NodeName; tool: string }
   | { type: "answer_ready"; content: string }
   | { type: "run_finished" }
   | { type: "run_failed"; message: string };

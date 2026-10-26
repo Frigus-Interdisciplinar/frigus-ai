@@ -80,10 +80,10 @@ async def test_sem_collection_busca_e_remocao_nao_falham(client):
 
 
 async def test_pii_nao_vai_pro_indice(client):
-    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "leite; CPF 123.456.789-01")
+    await repo.salvar_resumo("chat-1", "3f2b8c1e-5a4d-4e9b-9c7a-1d2e3f4a5b6c", "leite; CPF 123.456.789-09")
 
     [ponto] = (await client.scroll(settings.database.qdrant_chats_collection))[0]
-    assert "123.456.789-01" not in ponto.payload["resumo"]
+    assert "123.456.789-09" not in ponto.payload["resumo"]
 
 
 async def test_cria_indice_de_session_id_mesmo_em_collection_ja_existente(client, monkeypatch):

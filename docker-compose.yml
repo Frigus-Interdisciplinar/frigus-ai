@@ -93,24 +93,6 @@ services:
       - ./observability/prometheus/metrics_token:/etc/prometheus/metrics_token:ro
       - frigus_prometheus_data:/prometheus
 
-  grafana:
-    image: grafana/grafana:11.4.0
-    profiles: ["observability"]
-    container_name: frigus_grafana
-    restart: unless-stopped
-    depends_on:
-      - prometheus
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_AUTH_DISABLE_LOGIN_FORM: "true"
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - frigus_grafana_data:/var/lib/grafana
-
 volumes:
   frigus_postgres_data:
   frigus_mongo_data:
@@ -118,4 +100,3 @@ volumes:
   frigus_neo4j_data:
   frigus_qdrant_data:
   frigus_prometheus_data:
-  frigus_grafana_data:

@@ -16,10 +16,10 @@ class AddStockProductArgs(BaseModel):
     product_name: str = Field(description="Nome do produto (ex.: 'Leite integral', 'Peito de frango').")
     category: Category = Field(description=f"Categoria do produto. Uma de: {', '.join(CATEGORY_VALUES)}.")
     storage_place: StoragePlace = Field(description=f"Onde o produto é guardado. Uma de: {', '.join(STORAGE_PLACE_VALUES)}.")
-    quantity: int = Field(description="Quantidade de unidades adicionadas ao estoque.")
+    quantity: int = Field(ge=1, description="Quantidade de unidades adicionadas ao estoque.")
     expire_date: str = Field(description="Data de validade no formato YYYY-MM-DD.")
-    unit_price: float = Field(default=0.0, description="Preço unitário pago (usado para o módulo financeiro).")
-    minimal_quantity: int | None = Field(default=None, description="Quantidade mínima antes de sugerir recompra (opcional).")
+    unit_price: float = Field(default=0.0, ge=0, description="Preço unitário pago (usado para o módulo financeiro).")
+    minimal_quantity: int | None = Field(default=None, ge=0, description="Quantidade mínima antes de sugerir recompra (opcional).")
 
 
 class AddStockProductsArgs(BaseModel):

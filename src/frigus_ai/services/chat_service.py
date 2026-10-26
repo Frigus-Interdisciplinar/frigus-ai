@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import uuid4
 
-from frigus_ai.domain.errors import ChatDeOutroUsuario, LimiteDeMensagensExcedido
+from frigus_ai.domain.errors import (
+    ChatDeOutroUsuario,
+    ChatNaoEncontrado,
+    LimiteDeMensagensExcedido,
+)
 from frigus_ai.domain.identifiers import novo_chat_id
 from frigus_ai.domain.models import ChatMessage, Fatos, Resumo, Role
+from frigus_ai.domain.privacy import redigir_pii
 from frigus_ai.graph.llm import estruturado, llm_guardrail, llm_luna, llm_rapido
 from frigus_ai.graph.prompts import load_prompt
 from frigus_ai.infra.logging import Logging
@@ -77,7 +82,7 @@ async def drenar_tarefas(timeout: float = 10.0) -> None:
 
 
 def _conversa(mensagens: list[dict]) -> str:
-    return "\n".join(f"{msg['role']}: {msg['content']}" for msg in mensagens)
+    return "\n".join(f"{msg['role']}: {redigir_pii(str(msg['content']))}" for msg in mensagens)
 
 
 def _atualizar_resumo(resumo_atual: str, mensagens_recentes: list[dict]) -> Resumo | None:
@@ -86,7 +91,7 @@ def _atualizar_resumo(resumo_atual: str, mensagens_recentes: list[dict]) -> Resu
 
     logger.info("Atualizando resumo da conversa...")
     prompt = load_prompt("resumidor").format(
-        resumo_atual=resumo_atual, mensagens=_conversa(mensagens_recentes)
+        resumo_atual=redigir_pii(resumo_atual), mensagens=_conversa(mensagens_recentes)
     )
     resumo = llm_resumo.invoke(prompt)
     if not isinstance(resumo, Resumo):
@@ -100,7 +105,7 @@ def _extrair_fatos(mensagens_recentes: list[dict], fatos_atuais: Fatos) -> Fatos
 
     logger.info("Extraindo fatos da conversa...")
     prompt = load_prompt("fatos").format(
-        fatos_atuais=fatos_atuais.model_dump_json(), mensagens=_conversa(mensagens_recentes)
+        fatos_atuais=redigir_pii(fatos_atuais.model_dump_json()), mensagens=_conversa(mensagens_recentes)
     )
     fatos = llm_fatos.invoke(prompt)
     if not isinstance(fatos, Fatos):
@@ -122,9 +127,10 @@ class ChatService:
         return chat_id
 
     async def validar_ownership(self, session_id: str, user_id: str) -> None:
-        # Chat inexistente não é erro: o cliente escolhe o id e o 1º envio cria o chat.
         dono = await chat_repository.buscar_dono_chat(session_id)
-        if dono is not None and dono != user_id:
+        if dono is None:
+            raise ChatNaoEncontrado(session_id)
+        if dono != user_id:
             raise ChatDeOutroUsuario(session_id)
 
     async def listar_chats(self, user_id: str) -> list[ChatDocument]:
@@ -173,15 +179,19 @@ class ChatService:
                 if isinstance(evento, AnswerReady):
                     resposta = evento.content
                 elif isinstance(evento, RunFailed):
-                    resposta = evento.message
+                    logger.warning("Turno falhou sem resposta | session_id=%s | %s", session_id, evento.message)
                 yield evento
             terminou = True
         finally:
             if not terminou:
                 SSE_DISCONNECTS.inc()
-            _disparar_em_segundo_plano(self._persistir_turno(
-                conteudo, resposta or "Sem resposta.", session_id, user_id, via="stream"
-            ))
+            # Sem resposta final não há turno: a memória não guarda texto que o assistente não disse.
+            if resposta:
+                _disparar_em_segundo_plano(self._persistir_turno(
+                    conteudo, resposta, session_id, user_id, via="stream"
+                ))
+            else:
+                logger.warning("Stream encerrado sem resposta final | session_id=%s", session_id)
 
     async def _persistir_turno(
         self, conteudo: str, resposta: str, session_id: str, user_id: str, via: str

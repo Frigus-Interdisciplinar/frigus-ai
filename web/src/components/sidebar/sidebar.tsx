@@ -3,6 +3,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { Link, useNavigate, useParams } from "react-router";
 import { listChats } from "../../lib/api";
+import { clearApiKey, getApiKey } from "../../lib/auth";
 import type { ChatSummary } from "../../types";
 import { Button } from "../ui/button";
 
@@ -138,6 +139,17 @@ export function Sidebar({ refreshKey }: { refreshKey: number }) {
           </svg>
           Métricas
         </Link>
+        {getApiKey() && (
+          <button
+            onClick={() => {
+              clearApiKey();
+              navigate("/login");
+            }}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent/10"
+          >
+            Sair
+          </button>
+        )}
       </div>
     </aside>
   );

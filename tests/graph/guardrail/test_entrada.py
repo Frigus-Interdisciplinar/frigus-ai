@@ -8,7 +8,7 @@ esses casos nunca tocam a rede. O caminho que cai no LLM fica de fora daqui.
 
 import pytest
 
-from frigus_ai.domain.privacy import anonimizar_entrada
+from frigus_ai.domain.privacy import anonimizar_entrada, redigir_pii
 from frigus_ai.graph.guardrail import entrada as mod
 from frigus_ai.graph.guardrail.entrada import guardrail_entrada
 from frigus_ai.graph.guardrail.padroes import pede_dado_interno, tem_injecao
@@ -97,8 +97,8 @@ async def test_injecao_tem_precedencia_sobre_acesso_interno():
 @pytest.mark.parametrize(
     "texto,valor",
     [
-        ("meu cpf é 123.456.789-01", "123.456.789-01"),
-        ("cpf 12345678901 ok", "12345678901"),
+        ("meu cpf é 123.456.789-09", "123.456.789-09"),
+        ("cpf 12345678909 ok", "12345678909"),
         ("manda pro joao@exemplo.com por favor", "joao@exemplo.com"),
         ("meu telefone é (11) 98765-4321", "(11) 98765-4321"),
         ("senha: superSecreta123", "senha: superSecreta123"),
@@ -114,13 +114,13 @@ def test_anonimiza_pii(texto, valor):
 
 
 def test_anonimizacao_e_reversivel_pelo_mapa():
-    anonimizado, mapa = anonimizar_entrada("cpf 123.456.789-01 e email a@b.com")
+    anonimizado, mapa = anonimizar_entrada("cpf 123.456.789-09 e email a@b.com")
 
     restaurado = anonimizado
     for token, valor in mapa.items():
         restaurado = restaurado.replace(token, valor)
 
-    assert restaurado == "cpf 123.456.789-01 e email a@b.com"
+    assert restaurado == "cpf 123.456.789-09 e email a@b.com"
 
 
 def test_texto_sem_pii_fica_intacto():
@@ -129,6 +129,18 @@ def test_texto_sem_pii_fica_intacto():
 
     assert anonimizado == texto
     assert mapa == {}
+
+
+def test_numero_longo_em_nome_nao_vira_pii():
+    texto = "Arroz contrato 1234567890923"
+
+    assert anonimizar_entrada(texto) == (texto, {})
+    assert redigir_pii(texto) == texto
+
+
+def test_documento_com_digito_verificador_invalido_nao_vira_pii():
+    assert anonimizar_entrada("cpf 123.456.789-01 e cnpj 11222333000182")[1] == {}
+    assert redigir_pii("cnpj 11.222.333/0001-81") == "cnpj [CNPJ OMITIDO]"
 
 
 def test_anonimiza_multiplas_ocorrencias_com_tokens_distintos():

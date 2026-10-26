@@ -5,8 +5,11 @@ com provider opcional (sem API key -> None, fora da cadeia de fallback).
 
 import importlib
 
+import pytest
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
+from frigus_ai.domain.models import Fatos
 from frigus_ai.graph import llm as llm_mod
 from frigus_ai.infra.llm import BUILDERS, PROVIDER_MAP, build_llm
 from frigus_ai.settings import settings
@@ -14,7 +17,6 @@ from frigus_ai.settings.llm import Model
 
 
 def test_openrouter_resolve_para_chatopenai_com_base_url():
-    from pydantic import SecretStr
 
     assert PROVIDER_MAP[Model.QWEN_3_8_FREE] == "openrouter"
 
@@ -39,6 +41,27 @@ def test_provider_desconhecido_levanta():
         raise AssertionError("esperava ValueError")
 
 
+def _recarregar_settings_e_llm():
+    import frigus_ai.settings
+    import frigus_ai.settings.base
+
+    for mod in (frigus_ai.settings.base, frigus_ai.settings):
+        importlib.reload(mod)
+
+    return importlib.reload(llm_mod)
+
+
+@pytest.fixture
+def llm_com_gateway(monkeypatch):
+    """`graph/llm.py` recarregado com a chave do gateway (sem ela a Luna não existe nas cadeias)."""
+
+    monkeypatch.setenv("LLM__GATEWAY__API_KEY", "fake-key")
+    yield _recarregar_settings_e_llm()
+
+    monkeypatch.setenv("LLM__GATEWAY__API_KEY", "")
+    _recarregar_settings_e_llm()
+
+
 def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
     monkeypatch.setenv("LLM__OPENROUTER__API_KEY", "fake-key")
 
@@ -51,7 +74,8 @@ def test_com_chave_openrouter_entra_no_fallback(monkeypatch):
 
     try:
         assert recarregado.llm_openrouter is not None
-        assert len(recarregado.llm_especialista.fallbacks) == 2
+        # Sem a chave do gateway (Luna fora): Groq principal e OpenRouter de reserva.
+        assert len(recarregado.llm_especialista.fallbacks) == 1
     finally:
         # setenv("") em vez de delenv: `OPENROUTER_API_KEY` não tem default no
         # `Settings` (é obrigatória, embora vazia conte como "provider desligado").
@@ -92,14 +116,14 @@ def test_timeout_explicito_sobrepoe_a_politica(monkeypatch):
     assert recebido["timeout"] == 5.0
 
 
-def test_papeis_de_saida_curta_usam_timeout_menor():
+def test_papeis_de_saida_curta_usam_timeout_menor(llm_com_gateway):
     """Guardrail, juiz e roteador não esperam o que um especialista espera."""
 
-    assert llm_mod.llm_guardrail.timeout == settings.llm.timeout_curto_s
-    assert llm_mod.llm_juiz.timeout == settings.llm.timeout_curto_s
-    assert llm_mod.llm_rapido.request_timeout == settings.llm.timeout_curto_s
-    assert llm_mod.llm_gemini.timeout == settings.llm.gemini.timeout_s
-    assert settings.llm.timeout_curto_s < settings.llm.gemini.timeout_s
+    assert llm_com_gateway.llm_guardrail.request_timeout == settings.llm.timeout_curto_s
+    assert llm_com_gateway.llm_juiz.request_timeout == settings.llm.timeout_curto_s
+    assert llm_com_gateway.llm_rapido.request_timeout == settings.llm.timeout_curto_s
+    assert llm_com_gateway.llm_luna.request_timeout == settings.llm.gateway.timeout_s
+    assert settings.llm.timeout_curto_s < settings.llm.gateway.timeout_s
 
 
 class _Elo:
@@ -146,7 +170,6 @@ def test_estruturado_usa_json_schema_so_no_elo_da_groq(monkeypatch):
 
 def test_luna_so_entra_com_chave_e_vai_pelo_gateway():
     from langchain_openai import ChatOpenAI
-    from pydantic import SecretStr
 
     assert build_llm(Model.GPT_6_LUNA, 0.7, settings.llm) is None
 
@@ -160,11 +183,34 @@ def test_luna_so_entra_com_chave_e_vai_pelo_gateway():
     assert luna.openai_api_base == "https://ai-gateway.vercel.sh/v1"
 
 
-def test_guardrail_e_juiz_nao_dependem_so_do_gemini():
-    """Antes só tinham o Gemini: sem cota ele falhava aberto e aprovava tudo em silêncio."""
+def test_guardrail_e_juiz_nao_dependem_de_um_modelo_so(llm_com_gateway):
+    """Antes só tinham um modelo: sem cota ele falhava aberto e aprovava tudo em silêncio."""
 
-    from frigus_ai.graph.guardrail import entrada, saida
-    from frigus_ai.graph.nodes import juiz
+    cadeia = llm_com_gateway.estruturado(
+        Fatos, llm_com_gateway.llm_guardrail, llm_com_gateway.llm_rapido, llm_com_gateway.llm_luna
+    )
 
-    for cadeia in (entrada.llm_classificador, juiz.llm_avaliador, saida.llm_revisor):
-        assert len(cadeia.fallbacks) >= 1
+    assert len(cadeia.fallbacks) >= 1
+
+
+def test_chat_inteiro_usa_a_luna_e_nenhum_gemini(llm_com_gateway):
+    """A Luna é bem mais barata por token que o Gemini 3.6 Flash; o Gemini ficou só nos embeddings."""
+
+    for modelo in (llm_com_gateway.llm_luna, llm_com_gateway.llm_luna_agil, llm_com_gateway.llm_guardrail, llm_com_gateway.llm_juiz):
+        assert modelo.model_name == Model.GPT_6_LUNA.value
+
+    for cadeia in (llm_com_gateway.llm_especialista, llm_com_gateway.llm_agil):
+        assert cadeia.runnable.model_name == Model.GPT_6_LUNA.value
+
+
+def test_groq_nao_espera_retry_do_429_por_tokens_por_minuto():
+    assert settings.llm.groq.retries == 0
+
+
+def test_luna_pede_esforco_de_raciocinio_baixo(monkeypatch):
+    cfg = settings.llm.model_copy(update={"gateway": settings.llm.gateway.model_copy(update={"api_key": SecretStr("k")})})
+
+    recebido = _kwargs_passados(monkeypatch, Model.GPT_6_LUNA, cfg)
+
+    assert recebido["reasoning_effort"] == "low"
+
