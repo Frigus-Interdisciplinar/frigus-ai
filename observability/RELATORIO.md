@@ -1,6 +1,6 @@
 # Relatório de avaliação e SRE — Frigus AI
 
-Execuções de 2026-10-23 contra a infra real: Postgres (Supabase), MongoDB (Atlas), Redis (Upstash),
+Execuções de 2026-10-23 (e a medição de resumo de 2026-10-26) contra a infra real: Postgres (Supabase), MongoDB (Atlas), Redis (Upstash),
 Qdrant Cloud, Neo4j (local nas primeiras rodadas, Aura nas demais; 214 receitas sincronizadas do
 Postgres) e Prometheus local (`docker compose --profile observability`). O JeV (TypeSafe), pelo Vercel
 AI Gateway, decide guardrail de entrada, roteador e juiz. Este relatório substitui o de 2026-10-16.
@@ -22,6 +22,69 @@ uv run python -m frigus_ai.telemetry.evals.sre_report      # relatório (JANELA 
 Os números vieram dos cenários de `telemetry/evals/scenarios.py` enviados por
 `POST /v1/chats/{id}/messages` (para as métricas caírem no processo da API, que o Prometheus raspa)
 e de consultas ao Prometheus. Nada foi estimado à mão, exceto onde está dito.
+
+## 0. Resumo (medição de 2026-10-26)
+
+Medição mais recente: `run_scenarios --rodadas 5`, 7 cenários × 5 rodadas = **35 turnos** direto no
+grafo (o mesmo caminho da API), mesma infra em nuvem e configuração final (seção 1). Custo, erros e
+tempo por node vêm dos contadores Prometheus do próprio processo; a latência é medida turno a turno.
+Reproduzir: `uv run python -m frigus_ai.telemetry.evals.run_scenarios --rodadas 5`.
+
+| Indicador | 23/10 (API, 14 turnos) | 26/10 (35 turnos) | SLO |
+|---|---|---|---|
+| Cenários que passaram | 7/7 duas vezes | **35/35** | — |
+| Índice de erros | 0% | **0%** | ≤ 5% ✅ |
+| Bloqueios do guardrail | 2 | 5 (todos o cenário de ataque) | — |
+| Latência mediana por turno | — | **8,0 s** | — |
+| Latência média por turno | 15,7 s | ≈ 8,1 s | — |
+| Latência p95 (observada) | ≈ 51 s (artefato) | **18,1 s** | ≤ 8 s ❌ |
+| Maior turno | 37,7 s | **20,9 s** | — |
+| Custo por turno | US$ 0,0017 | **US$ 0,0015** | — |
+| Custo por resolução | US$ 0,0019 | **US$ 0,0018** | — |
+| 100 usuários/semana | US$ 3,46 | **US$ 3,07** | — |
+| 1000 usuários/semana | US$ 34,57 | **US$ 30,74** | — |
+| ROI por resolução | ≈ 18× | **≈ 19,5×** (US$ 0,035 − 0,0018) | — |
+
+O p95 agora é o valor observado (o 18,1 s é o 34º de 35 turnos, em ordem crescente), não o `histogram_quantile`, que
+interpolava dentro do bucket. Os totais de custo vêm dos contadores do processo, sem a extrapolação do
+`increase()` da medição de 23/10, então são exatos para esses 35 turnos.
+
+Latência por cenário (5 rodadas):
+
+| Cenário | Faixa | Observação |
+|---|---|---|
+| guardrail-fora-do-escopo | 0,5 a 0,7 s | bloqueio direto, sem LLM de chat |
+| financeiro-gastos | 5,0 a 6,2 s | |
+| faq-documentacao | 6,6 a 12,2 s | |
+| estoque-consulta | 6,7 a 13,7 s | |
+| compras-consulta | 7,4 a 10 s | |
+| financeiro-ranking-desperdicio | 7,0 a 11,8 s | |
+| **receitas-sugestao** | **9,9 a 20,9 s** | maior variação: a reescrita pedida pelo juiz dobra o turno |
+
+Tempo somado por node (35 turnos, 360 s): estoque 34%, orquestrador 24%, compras 12%, financeiro 8%,
+receitas 8%, faq 5%, juiz 4%, roteador 3%, guardrails e A2A < 1%.
+
+### Onde vale focar
+
+1. **Latência (único SLO que não bate).** Nenhum cenário passa de 21 s e a mediana é 8 s, mas o p95 de
+   18 s está 2,3× acima dos 8 s. O tempo está em chamadas de LLM em série, não em infra: estoque e
+   orquestrador somam 58% do tempo. Estoque, compras e financeiro devolvem JSON, então o orquestrador
+   faz uma segunda chamada só para formatar; receitas e faq pulam essa etapa (`_RESPONDEM_EM_TEXTO` em
+   `graph/nodes/orquestrador.py`) e a faq é das mais rápidas. Fazer os especialistas de dados
+   responderem em texto, ou formatar sem LLM os casos simples, é o corte com maior retorno. Não foi
+   feito: muda o contrato entre especialistas e juiz e precisa de uma rodada de qualidade depois.
+2. **Receitas.** Pior cenário e o de maior variância (9,9 a 20,9 s); a causa é o laço juiz → reescrita
+   (seção 4). Vale medir quantas reescritas ocorrem por turno antes de mexer.
+3. **Custo não precisa de trabalho.** US$ 0,0015 por turno e ROI de ~19×; mesmo com 1000 usuários por
+   semana são cerca de US$ 31.
+4. **Erros e segurança estão limpos:** 0% de erro, guardrail bloqueou 5/5 tentativas, sem 429 nem
+   fallback de modelo.
+
+Limites desta medição: amostra de 35 turnos e um único usuário de teste; critério de acerto fraco
+(palavra-chave); sem foto, escrita no estoque nem receitas por Neo4j nos cenários (escrever mexeria nos
+dados reais do usuário padrão); não passou pelo HTTP, então não inclui a latência da API nem o
+`/metrics` raspado pelo Prometheus. A medição pela API de 23/10 (seções 1 e 2) continua valendo para
+essas partes.
 
 ## 1. Configuração final
 

@@ -41,9 +41,9 @@ coisa; a nota diz o que fazer primeiro.
 | Observabilidade/SRE | ✅ | Prometheus (HTTP, grafo, nodes, tools, LLM), SLO/SLI e alertas em `observability/prometheus/rules.yml`, custo/erro/ROI/custo por resolução em `telemetry/evals/sre_report.py`. Números medidos e ressalvas (SLO de 8s não bate por latência do LLM; sem SLA nem Alertmanager): `observability/RELATORIO.md` |
 | Desenho de arquitetura | ✅ | README.md — seção "Arquitetura" (Mermaid) + `assets/diagrama-agentes.png` |
 | Extra: Redis fila/ranking | ✅ | `infra/redis/ranking.py` — ranking de desperdício, tool `ranking_desperdicio` |
-| Extra: Neo4j | ❌ Bloqueado | Models e traversal prontos (`infra/neo4j/`, tool `sugerir_receitas_compativeis`), mas falta sync Postgres → grafo e **a instância Aura do `.env` não existe mais** (NXDOMAIN): criar outra (ou usar o Neo4j do `docker-compose.yml`) e popular antes de demonstrar |
+| Extra: Neo4j | ✅ | `infra/neo4j/`, `repositories/grafo_receitas_repository.py` — sync Postgres → grafo no `lifespan` (214 receitas no Aura, conferido em 2026-10-29), `GET /v1/recipes/suggestions` e tool `sugerir_receitas_compativeis`; cai no cruzamento SQL se o Neo4j falhar |
 | Extra: visão computacional | ✅ | `POST /stock/foto` + `graph/nodes/visao.py`; foto vai por `context=` (`ContextoPrompt.imagem_b64`), nunca pelo estado; só descreve, não escreve no estoque; limite de 8MB (`api/uploads.py`) |
-| Extra: complexidade | Em andamento | 6 domínios + guardrail duplo + juiz + RAG + MCP/A2A + Redis + Neo4j + visão |
+| Extra: complexidade | ✅ | 6 domínios + guardrail duplo + juiz + RAG + MCP/A2A + Redis + Neo4j + visão |
 
 **Importante:** a escola não paga API de IA generativa. Desde 2026-10-23 o chat roda na GPT-6 Luna pelo
 Vercel AI Gateway (créditos pagos do bolso por um integrante, não pela escola: ~US$ 0,002 por turno), porque os planos gratuitos do Gemini
