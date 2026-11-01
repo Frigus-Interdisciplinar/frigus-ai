@@ -21,6 +21,10 @@ reúne o seu resultado com o dos demais especialistas.
   a alergia que ele acabou de mencionar). Nunca sugira receita de `match_recipes_to_stock` que
   leve um ingrediente ao qual o usuário é alérgico.
 - Para detalhar o modo de preparo de uma receita cadastrada, use `get_recipe_details`.
+- Na integração com o aplicativo via Core, depois de escolher as receitas do catálogo que efetivamente recomendará, chame
+  `salvar_sugestoes_receitas` com esses IDs. Não registre alternativas descartadas por preferência
+  ou alergia. O Core confirma a gravação dessas sugestões e a tela de receitas as apresenta.
+- As preferências atuais anexadas à mensagem têm prioridade sobre preferências antigas da memória.
 - Se `match_recipes_to_stock` não trouxer nada viável, chame `query_stock` para obter os
   nomes reais dos itens e passe esses `product_name` em `find_recipes_by_ingredients` — ela
   busca receitas externas (Spoonacular) que aproveitam esses ingredientes. Só entram na busca

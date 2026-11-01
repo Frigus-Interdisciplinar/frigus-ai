@@ -13,6 +13,21 @@ from frigus_ai.infra.postgres.models import Group, Stock, User, UserGroup
 
 class _IdentidadeRepo(PostgresRepo):
     @transacional
+    def pode_acessar_estoque(self, s: Session, user_id: str, stock_id: int) -> bool:
+        return s.scalar(
+            select(Stock.id)
+            .join(Group, Group.id == Stock.group_id)
+            .join(UserGroup, UserGroup.group_id == Group.id)
+            .join(User, User.id == UserGroup.user_id)
+            .where(
+                User.id == user_id, Stock.id == stock_id,
+                text("users.deleted_at IS NULL"), text("groups.deleted_at IS NULL"),
+                text("stocks.deleted_at IS NULL"),
+            )
+            .limit(1)
+        ) is not None
+
+    @transacional
     def criar_usuario(self, s: Session, nome: str, email: str) -> str:
         """
         Cria usuário + grupo + estoque + vínculo (bootstrap completo). `hash_password`
@@ -89,3 +104,7 @@ def buscar_primeiro_usuario() -> str | None:
 
 def resolver_stock_id(user_id: str) -> int | None:
     return _identidade.resolver_stock_id(user_id)
+
+
+def pode_acessar_estoque(user_id: str, stock_id: int) -> bool:
+    return _identidade.pode_acessar_estoque(user_id, stock_id)

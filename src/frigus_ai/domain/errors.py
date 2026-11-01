@@ -22,6 +22,7 @@ class ErrorCode(StrEnum):
     COMPRA_ITEM_NAO_ENCONTRADO = "compra_item_nao_encontrado"
     PRODUTO_NAO_CADASTRADO = "produto_nao_cadastrado"
     ESTOQUE_NAO_DEFINIDO = "estoque_nao_definido"
+    ESTOQUE_SEM_ACESSO = "estoque_sem_acesso"
     RECEITA_NAO_ENCONTRADA = "receita_nao_encontrada"
     RECEITAS_INDISPONIVEIS = "receitas_indisponiveis"
 
@@ -54,6 +55,12 @@ class EstoqueAtualNaoDefinido(ContextoDeSessaoError):
 
     def __init__(self) -> None:
         super().__init__("current_stock_id não definido — usuário sem grupo/estoque associado.")
+
+
+class EstoqueSemAcesso(ContextoDeSessaoError):
+    status_code = status.HTTP_403_FORBIDDEN
+    code = ErrorCode.ESTOQUE_SEM_ACESSO
+    public_message = "Você não tem acesso a este estoque."
 
 
 class ChatError(DomainError):
