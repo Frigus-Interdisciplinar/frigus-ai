@@ -35,7 +35,7 @@ No diagnóstico local, o lote de Suco De Frutas existia no estoque solicitado e 
 
 5. Antes do deploy, repetir a suíte no **Python 3.13 declarado pelo projeto**. A validação acima usou o venv existente, **Python 3.14.7**, fora do intervalo `>=3.13,<3.14` do `pyproject.toml`; o ambiente não foi alterado.
 
-6. No ambiente de implantação, configurar `API_KEYS__CORE_SERVICE_KEY` na IA e `FRIGUS_AI_API_KEY` no Core com o mesmo segredo de serviço, manter `FRIGUS_AI_BASE_URL` como origem da IA e confirmar o PostgreSQL compartilhado. Validar a disponibilidade de um provedor/modelo configurado e depois executar o roteiro autenticado no aplicativo. Esse deploy e essa validação ponta a ponta ainda estão pendentes.
+6. No ambiente de implantação, configurar `API_KEYS__CORE_SERVICE_KEY` na IA e a credencial interna correspondente no Core com o mesmo segredo de serviço. A adaptação seletiva para o Core `origin/dev` usa `FRIGUS_AI_CORE_SERVICE_KEY` e preserva `FRIGUS_AI_API_KEY` exclusivamente para NFC-e; o checkout antigo `f824262` usa `FRIGUS_AI_API_KEY` na ponte e não deve substituir o cliente mais recente. Consulte `docs/ai-chat-origin-dev.md` no Core. Manter `FRIGUS_AI_BASE_URL` como origem da IA e confirmar o PostgreSQL compartilhado. Validar a disponibilidade de um provedor/modelo configurado e depois executar o roteiro autenticado no aplicativo. Esse deploy e essa validação ponta a ponta ainda estão pendentes.
 
 ## 🔍 Checklist de Qualidade
 
