@@ -1,8 +1,11 @@
 from collections.abc import Sequence
 
+from groq import APIError as GroqAPIError
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.runtime import Runtime
+from openai import APIError as OpenAIAPIError
 
+from frigus_ai.domain.errors import ProvedorIAIndisponivel
 from frigus_ai.graph.agents import router_app
 from frigus_ai.graph.names import ROTEADOR
 from frigus_ai.graph.prompts import load_sections
@@ -63,8 +66,8 @@ async def _rotear_com_jev(mensagens: Sequence[AnyMessage]) -> list[RotaEspeciali
 
 
 async def _rotear(mensagens: Sequence[AnyMessage], contexto: ContextoPrompt) -> Roteamento:
-    """JeV decide quem atende; o LLM entra quando é preciso escrever a resposta. Falha de chamada
-    ou saída fora do schema vira resposta genérica — o turno nunca cai por causa do roteador."""
+    """JeV decide quem atende; o LLM entra quando é preciso escrever a resposta. Saída
+    fora do schema vira resposta genérica; indisponibilidade do provedor não vira intenção ambígua."""
 
     if jev.disponivel():
         try:
@@ -76,6 +79,12 @@ async def _rotear(mensagens: Sequence[AnyMessage], contexto: ContextoPrompt) -> 
     try:
         saida = await router_app.ainvoke({"messages": list(mensagens)}, context=contexto)
         roteamento = saida["structured_response"]
+    except (GroqAPIError, OpenAIAPIError) as erro:
+        log.warning(
+            "Provedor do roteador indisponível | tipo=%s | status=%s",
+            type(erro).__name__, getattr(erro, "status_code", None),
+        )
+        raise ProvedorIAIndisponivel from None
     except Exception as e:
         log.warning("Roteador falhou, respondendo sem especialista: %s", e)
         return Roteamento(resposta=_NAO_ENTENDI)

@@ -15,6 +15,7 @@ class ErrorCode(StrEnum):
     CHAT_NAO_ENCONTRADO = "chat_nao_encontrado"
     LIMITE_DE_MENSAGENS = "limite_de_mensagens"
     FALHA_NO_AGENTE = "falha_no_agente"
+    PROVEDOR_IA_INDISPONIVEL = "provedor_ia_indisponivel"
     ERRO_INTERNO = "erro_interno"
     ERRO_NO_CHAT = "erro_no_chat"
     ESTOQUE_ITEM_NAO_ENCONTRADO = "estoque_item_nao_encontrado"
@@ -103,6 +104,12 @@ class LimiteDeMensagensExcedido(ChatError):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     code = ErrorCode.LIMITE_DE_MENSAGENS
     public_message = "Limite de mensagens excedido; tente novamente em instantes."
+
+
+class ProvedorIAIndisponivel(ChatError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = ErrorCode.PROVEDOR_IA_INDISPONIVEL
+    public_message = "O serviço de inteligência artificial está indisponível no momento. Tente novamente em instantes."
 
 
 class EstoqueError(DomainError):
