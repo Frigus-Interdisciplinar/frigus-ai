@@ -15,6 +15,7 @@ class ErrorCode(StrEnum):
     CHAT_NAO_ENCONTRADO = "chat_nao_encontrado"
     LIMITE_DE_MENSAGENS = "limite_de_mensagens"
     FALHA_NO_AGENTE = "falha_no_agente"
+    PROVEDOR_IA_INDISPONIVEL = "provedor_ia_indisponivel"
     ERRO_INTERNO = "erro_interno"
     ERRO_NO_CHAT = "erro_no_chat"
     ESTOQUE_ITEM_NAO_ENCONTRADO = "estoque_item_nao_encontrado"
@@ -22,6 +23,7 @@ class ErrorCode(StrEnum):
     COMPRA_ITEM_NAO_ENCONTRADO = "compra_item_nao_encontrado"
     PRODUTO_NAO_CADASTRADO = "produto_nao_cadastrado"
     ESTOQUE_NAO_DEFINIDO = "estoque_nao_definido"
+    ESTOQUE_SEM_ACESSO = "estoque_sem_acesso"
     RECEITA_NAO_ENCONTRADA = "receita_nao_encontrada"
     RECEITAS_INDISPONIVEIS = "receitas_indisponiveis"
 
@@ -54,6 +56,12 @@ class EstoqueAtualNaoDefinido(ContextoDeSessaoError):
 
     def __init__(self) -> None:
         super().__init__("current_stock_id não definido — usuário sem grupo/estoque associado.")
+
+
+class EstoqueSemAcesso(ContextoDeSessaoError):
+    status_code = status.HTTP_403_FORBIDDEN
+    code = ErrorCode.ESTOQUE_SEM_ACESSO
+    public_message = "Você não tem acesso a este estoque."
 
 
 class ChatError(DomainError):
@@ -96,6 +104,12 @@ class LimiteDeMensagensExcedido(ChatError):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     code = ErrorCode.LIMITE_DE_MENSAGENS
     public_message = "Limite de mensagens excedido; tente novamente em instantes."
+
+
+class ProvedorIAIndisponivel(ChatError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = ErrorCode.PROVEDOR_IA_INDISPONIVEL
+    public_message = "O serviço de inteligência artificial está indisponível no momento. Tente novamente em instantes."
 
 
 class EstoqueError(DomainError):

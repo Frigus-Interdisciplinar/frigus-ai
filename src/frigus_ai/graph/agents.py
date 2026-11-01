@@ -1,6 +1,7 @@
 from langchain.agents import create_agent
 from langchain.agents.middleware import dynamic_prompt
 
+from frigus_ai.domain.recipe_turn import turno_atual
 from frigus_ai.graph.llm import (
     llm_agil,
     llm_especialista,
@@ -32,7 +33,13 @@ def _montar(nome: str, model, tools: list | None = None, response_format=None):
         # contexto (agente chamado solto), o prompt sai sem essas seções.
         contexto = request.runtime.context or ContextoPrompt()
         fatos = contexto.fatos if nome in _AGENTES_COM_PERFIL else None
-        return load_prompt(nome, fatos=fatos, conversas=contexto.conversas)
+        prompt = load_prompt(nome, fatos=fatos, conversas=contexto.conversas)
+        turno = turno_atual()
+        if nome == "receitas" and turno is not None:
+            escolhas = ", ".join(sorted(turno.preferences)) or "nenhuma preferência selecionada"
+            prompt += f"\nPreferências atuais do aplicativo: {escolhas}. Estas escolhas substituem preferências antigas; alergias informadas continuam válidas."
+            prompt += "\nNesta integração, recomende receitas cadastradas retornadas por match_recipes_to_stock e registre as escolhidas com salvar_sugestoes_receitas. Se nenhuma for compatível, informe isso; receitas externas não possuem registro no catálogo do aplicativo."
+        return prompt
 
     return create_agent(
         model=model,

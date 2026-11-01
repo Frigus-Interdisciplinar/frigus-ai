@@ -1,9 +1,11 @@
 from langchain_core.tools import BaseTool, StructuredTool
 
+from frigus_ai.domain.recipe_turn import turno_atual
 from frigus_ai.graph.tools.base import ToolSet
 from frigus_ai.graph.tools.receitas.schemas import (
     GetRecipeDetailsArgs,
     MatchRecipesToStockArgs,
+    SalvarSugestoesArgs,
 )
 from frigus_ai.graph.tools.response import Response
 from frigus_ai.infra.postgres.context import current_stock_id
@@ -20,8 +22,26 @@ class ReceitasRepo(ToolSet):
         a lista ranqueada por (ingredientes disponíveis / total) e proximidade de vencimento.
         """
 
-        sugestoes = receitas_repository.match_recipes_to_stock(current_stock_id(), limit)
+        turno = turno_atual()
+        filtros = {}
+        if turno is not None:
+            categorias, termos = turno.exclusoes()
+            filtros = {"categorias_excluidas": categorias, "termos_excluidos": termos, "persistir": False}
+        sugestoes = receitas_repository.match_recipes_to_stock(current_stock_id(), min(max(limit, 1), 10), **filtros)
+        if turno is not None:
+            turno.candidates.update({s["recipe_id"]: s["name"] for s in sugestoes})
         return Response.ok(total_records=len(sugestoes), sugestoes=sugestoes)
+
+    def salvar_sugestoes_receitas(self, recipe_ids: list[int]) -> dict:
+        """Registra somente as receitas do catálogo que você efetivamente recomenda, depois de aplicar as preferências e alergias do usuário."""
+
+        turno = turno_atual()
+        if turno is None:
+            return Response.error("O registro explícito de sugestões requer a integração com o aplicativo Frigus.")
+        if not recipe_ids or len(recipe_ids) > 10 or any(i not in turno.candidates for i in recipe_ids):
+            return Response.error("Selecione apenas IDs retornados por match_recipes_to_stock neste turno.")
+        turno.recipes.update({i: turno.candidates[i] for i in recipe_ids})
+        return Response.ok(recipe_ids=list(turno.recipes))
 
     def get_recipe_details(self, recipe_id: int) -> dict:
         """
@@ -43,6 +63,9 @@ class ReceitasRepo(ToolSet):
             ),
             StructuredTool.from_function(
                 self.get_recipe_details, name="get_recipe_details", args_schema=GetRecipeDetailsArgs
+            ),
+            StructuredTool.from_function(
+                self.salvar_sugestoes_receitas, name="salvar_sugestoes_receitas", args_schema=SalvarSugestoesArgs,
             ),
         ]
 

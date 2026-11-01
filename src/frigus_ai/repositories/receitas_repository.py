@@ -7,7 +7,7 @@ em `graph/tools/receitas/repo.py` (a tool que o LLM chama).
 from datetime import date, timedelta
 from typing import TypedDict
 
-from sqlalchemy import Float, func, select
+from sqlalchemy import Float, func, or_, select
 from sqlalchemy.orm import Session
 
 from frigus_ai.infra.postgres.connection import PostgresRepo, transacional
@@ -136,7 +136,11 @@ class _ReceitasPostgresRepo(PostgresRepo):
         ]
 
     @transacional
-    def match_recipes_to_stock(self, s: Session, stock_id: int, limit: int) -> list[RecipeSuggestionInfo]:
+    def match_recipes_to_stock(
+        self, s: Session, stock_id: int, limit: int, *,
+        categorias_excluidas: list[str] | None = None, termos_excluidos: list[str] | None = None,
+        persistir: bool = True,
+    ) -> list[RecipeSuggestionInfo]:
         """
         Cruza o estoque atual (produtos com quantidade > 0) com os ingredientes de
         cada receita ativa e ranqueia por (ingredientes disponíveis / total),
@@ -149,7 +153,8 @@ class _ReceitasPostgresRepo(PostgresRepo):
                 StockProduct.product_id,
                 func.min(StockProduct.expire_date).label("nearest_expire_date"),
             )
-            .where(StockProduct.stock_id == stock_id, StockProduct.quantity > 0)
+            .where(StockProduct.stock_id == stock_id, StockProduct.quantity > 0,
+                   StockProduct.expire_date >= date.today())
             .group_by(StockProduct.product_id)
             .cte("estoque_atual")
         )
@@ -171,7 +176,7 @@ class _ReceitasPostgresRepo(PostgresRepo):
             select(Recipe.id, Recipe.name, match.c.matched, match.c.missing, match.c.nearest_expire_date)
             .select_from(match)
             .join(Recipe, Recipe.id == match.c.recipe_id)
-            .where(Recipe.active.is_(True))
+            .where(Recipe.active.is_(True), match.c.matched > 0)
             .order_by(
                 (match.c.matched.cast(Float) / func.nullif(match.c.matched + match.c.missing, 0)).desc(),
                 match.c.nearest_expire_date.asc().nulls_last(),
@@ -179,19 +184,31 @@ class _ReceitasPostgresRepo(PostgresRepo):
             .limit(limit)
         )
 
+        exclusoes = [Product.name.icontains(termo, autoescape=True) for termo in (termos_excluidos or [])]
+        if categorias_excluidas:
+            exclusoes.append(Product.category.in_(categorias_excluidas))
+        if exclusoes:
+            incompativeis = (
+                select(RecipeIngredient.recipe_id)
+                .join(Product, Product.id == RecipeIngredient.product_id)
+                .where(or_(*exclusoes))
+            )
+            stmt = stmt.where(Recipe.id.not_in(incompativeis))
+
         sugestoes: list[RecipeSuggestionInfo] = []
         for recipe_id, name, matched, missing, nearest_expire_date in s.execute(stmt):
             total = matched + missing
             score = round(matched / total, 3) if total else 0.0
 
-            s.add(RecipeSuggestion(
-                recipe_id=recipe_id,
-                stock_id=stock_id,
-                matched_ingredients=matched,
-                missing_ingredients=missing,
-                nearest_expire_date=nearest_expire_date,
-                score=score,
-            ))
+            if persistir:
+                s.add(RecipeSuggestion(
+                    recipe_id=recipe_id,
+                    stock_id=stock_id,
+                    matched_ingredients=matched,
+                    missing_ingredients=missing,
+                    nearest_expire_date=nearest_expire_date,
+                    score=score,
+                ))
 
             sugestoes.append({
                 "recipe_id": recipe_id,
@@ -242,8 +259,8 @@ def listar_receitas(limit: int, query: str | None = None) -> list[RecipeSummary]
     return _receitas.listar_receitas(limit, query)
 
 
-def match_recipes_to_stock(stock_id: int, limit: int) -> list[RecipeSuggestionInfo]:
-    return _receitas.match_recipes_to_stock(stock_id, limit)
+def match_recipes_to_stock(stock_id: int, limit: int, **filtros) -> list[RecipeSuggestionInfo]:
+    return _receitas.match_recipes_to_stock(stock_id, limit, **filtros)
 
 
 def listar_com_ingredientes() -> list[ReceitaComIngredientes]:

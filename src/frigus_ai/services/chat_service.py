@@ -8,10 +8,14 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import uuid4
 
+from groq import APIError as GroqAPIError
+from openai import APIError as OpenAIAPIError
+
 from frigus_ai.domain.errors import (
     ChatDeOutroUsuario,
     ChatNaoEncontrado,
     LimiteDeMensagensExcedido,
+    ProvedorIAIndisponivel,
 )
 from frigus_ai.domain.identifiers import novo_chat_id
 from frigus_ai.domain.models import ChatMessage, Fatos, Resumo, Role
@@ -152,7 +156,14 @@ class ChatService:
 
         # `imagem_b64` só vai com foto: a foto viaja pelo contexto do grafo, nunca pelo histórico.
         extras = {"imagem_b64": b64encode(imagem).decode()} if imagem else {}
-        resposta = await runner.executar(conteudo, session_id, user_id, stock_id, **extras)
+        try:
+            resposta = await runner.executar(conteudo, session_id, user_id, stock_id, **extras)
+        except (GroqAPIError, OpenAIAPIError) as erro:
+            logger.warning(
+                "Provedor de IA indisponível | tipo=%s | status=%s",
+                type(erro).__name__, getattr(erro, "status_code", None),
+            )
+            raise ProvedorIAIndisponivel from None
         if not resposta:
             return "Sem resposta."
 

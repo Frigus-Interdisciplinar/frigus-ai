@@ -8,6 +8,7 @@ class ApiKeysSettings(BaseModel):
     metrics_token: SecretStr = SecretStr("")
     spoonacular_api_key: SecretStr = SecretStr("")
     assessor_api_key: SecretStr = SecretStr("")
+    core_service_key: SecretStr = SecretStr("")
     # Validar o ID token do login só precisa do ID do projeto (`project_info.project_id` do
     # google-services.json). A service account só é necessária pra outras APIs do Admin SDK.
     firebase_project_id: str = ""
